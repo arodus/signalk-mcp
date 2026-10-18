@@ -12,11 +12,11 @@ Authorization, input/response validation, bounded selection, pagination and MCP 
 
 ## 1. Current implementation
 
-The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy notification reads, source-specific standardized history, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection.
+The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy notification reads, standard v2 history with native permission checks, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection.
 
 Only explicitly reviewed GET operations can execute, using the original Signal K bearer identity and native route permissions. Unknown operations remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 
-[PR #1](https://github.com/arodus/signalk-mcp/pull/1) is merged. Integration tests use Signal K 2.33.0 and synthetic providers; CI passed on Node 22 and 24. Production-provider compatibility, product-client connections, live vessel acceptance and publication remain unverified.
+[PR #1](https://github.com/arodus/signalk-mcp/pull/1) is merged. Integration tests use Signal K 2.33.0 and synthetic providers; CI passed on Node 22 and 24. The production History provider `signalk-to-influxdb` 1.11.0 is tested unchanged through the standard v2 adapter under Signal K 2.32.0/2.33.0; see [history provider verification](docs/history-providers.md). Product-client connections, live vessel acceptance and publication remain unverified.
 
 README.md and docs describe implemented behavior and verification. This brief defines the intended scope; it does not establish upstream API availability or live compatibility.
 
@@ -103,7 +103,7 @@ Snapshots are selections of existing values, not calculated summaries. The curre
 
 History must use the standardized Signal K API where a compatible provider exists. Do not add a direct database dependency merely to fetch history. Forward caller query parameters to the provider and preserve its returned values and provenance. Provider-supported methods such as `average`, `min` and `max` are provider query options; this gateway does not implement those calculations.
 
-Apply path/source authorization and validate response context, range, columns, sources and bounds before forwarding history. Missing provenance, unsupported identifiers and unavailable providers must produce explicit errors, not guessed results or locally calculated substitutes.
+Apply path/source authorization and validate response context, range, columns, sources and bounds before forwarding history. The v2 response `$source` field is optional. Authorize explicit source filters through native ACLs; when no filter is given, require native confirmation that no telemetry ACLs exist. Refuse contradictory or unexpected column identity, unsupported identifiers and unavailable providers. Do not invent source fields or locally calculated substitutes.
 
 ## 7. Capability discovery and plugin reads
 
@@ -129,7 +129,7 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 ### Compatibility and acceptance
 
 - Validate the authentication bridge against an explicit supported Signal K version range.
-- Test a production History API provider with isolated synthetic data; resolve or document identifier and provenance gaps.
+- Standard v2 History forwarding is exercised with unchanged `signalk-to-influxdb` 1.11.0; see [provider matrix and limits](docs/history-providers.md). Other backends use the same API adapter. Further provider versions still need integration evidence; identifiers altered by the server parser remain rejected.
 - Verify discovery and approved reads against independently maintained plugins.
 - Test native TLS and reverse-proxy hosting without weakening certificate checks or destination restrictions.
 - Test actual MCP products and document bearer/OAuth requirements.

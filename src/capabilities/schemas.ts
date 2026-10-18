@@ -59,18 +59,20 @@ export const historyInput = z
               .string()
               .min(1)
               .max(128)
-              .regex(/^[a-z0-9_.:]+$/i),
+              .regex(/^[a-z0-9_.:]+$/i)
+              .optional(),
             method: z
               .enum(["average", "min", "max", "first", "last"])
-              .default("average"),
+              .optional(),
           })
           .strict(),
       )
       .min(1)
       .max(16),
-    from: z.string().datetime({ offset: true }),
-    to: z.string().datetime({ offset: true }),
-    resolution: z.number().int().min(1).max(86400),
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
+    duration: z.number().int().min(1).max(604800).optional(),
+    resolution: z.number().int().min(1).max(86400).optional(),
     provider: pluginIdSchema.optional(),
   })
   .strict();

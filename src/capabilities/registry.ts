@@ -134,11 +134,11 @@ export class CapabilityRegistry {
       },
       "signalk.history": {
         description:
-          "Bounded standardized history queries with explicit source and ACL checks",
+          "Bounded standard v2 history reads using Signal K permissions",
         operations: {
           get_history: {
             description:
-              "Query a registered History API provider; requires source provenance on every returned column",
+              "Forward provider results unchanged; source filters are required when telemetry ACLs exist, response $source is optional",
             input: historyInput,
             run: (args) =>
               getHistory(
