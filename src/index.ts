@@ -2,7 +2,7 @@ import type { Plugin, PluginRouter } from "@signalk/server-api";
 import type { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { authenticate, GatewayError, type App } from "./auth.js";
-import { configSchema, schema, type Config } from "./config.js";
+import { configSchema, schema, uiSchema, type Config } from "./config.js";
 import { localGet } from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
 
@@ -113,6 +113,7 @@ function pluginFactory(app: App): Plugin {
     name: "Signal K MCP",
     description: "Authenticated read-only MCP vessel telemetry",
     schema,
+    uiSchema,
     start(options: unknown) {
       config = undefined;
       const parsed = configSchema.safeParse(options);

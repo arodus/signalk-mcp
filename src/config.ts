@@ -61,32 +61,37 @@ export const schema = {
   properties: {
     allowedHosts: {
       type: "array",
-      title: "Allowed incoming hosts (including port)",
+      title: "Allowed hosts",
       minItems: 1,
-      items: { type: "string" },
+      items: { type: "string", title: "Host and port" },
     },
     allowedOrigins: {
       type: "array",
-      title: "Allowed browser origins (empty rejects all Origin headers)",
+      title: "Allowed browser origins",
       default: [],
-      items: { type: "string" },
+      items: { type: "string", title: "Browser origin" },
     },
     pluginOperations: {
       type: "array",
-      title: "Reviewed read-only plugin operations",
+      title: "Approved plugin reads",
       default: [],
       maxItems: 64,
       items: {
         type: "object",
         required: ["pluginId", "operationId", "method", "path", "readOnly"],
         properties: {
-          pluginId: { type: "string" },
-          operationId: { type: "string" },
-          method: { type: "string", enum: ["GET"] },
-          path: { type: "string" },
-          readOnly: { type: "boolean", const: true },
+          pluginId: { type: "string", title: "Plugin ID" },
+          operationId: { type: "string", title: "Operation ID" },
+          method: { type: "string", title: "HTTP method", enum: ["GET"] },
+          path: { type: "string", title: "Endpoint path" },
+          readOnly: {
+            type: "boolean",
+            title: "Confirmed read-only",
+            const: true,
+          },
           permission: {
             type: "string",
+            title: "Required permission",
             enum: ["readonly", "admin"],
             default: "readonly",
           },
@@ -95,17 +100,34 @@ export const schema = {
     },
     localTlsServerName: {
       type: "string",
-      title: "Certificate DNS name for native Signal K TLS (optional)",
+      title: "Signal K certificate name (optional)",
       description:
-        "Used only for certificate verification and SNI; the network destination remains the accepted socket address.",
+        "For Signal K’s own HTTPS listener: the DNS name on its certificate. Leave blank to verify the connection’s IP address.",
       maxLength: 253,
     },
     staleAfterSeconds: {
       type: "integer",
-      title: "Age after which measurements are stale",
+      title: "Stale after (seconds)",
+      description:
+        "Mark measurements older than this as stale. Values are forwarded unchanged.",
       default: 300,
       minimum: 1,
       maximum: 86400,
     },
+  },
+};
+
+export const uiSchema = {
+  allowedHosts: {
+    "ui:help":
+      "Addresses clients use to reach this endpoint, including the port. Example: localhost:3000.",
+  },
+  allowedOrigins: {
+    "ui:help":
+      "Web origins allowed to connect, including the scheme and port. Leave empty if no browser client is used.",
+  },
+  pluginOperations: {
+    "ui:help":
+      "Add only plugin endpoints you have reviewed as read-only. Leave empty to disable plugin reads.",
   },
 };

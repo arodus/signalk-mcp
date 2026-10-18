@@ -47,7 +47,7 @@ try {
     "AGENTS.md",
     "LICENSE",
     "CHANGELOG.md",
-    "docs/images/native-plugin-config.png",
+    "docs/images/native-plugin-config.jpg",
   ])
     assert.ok(
       packed.files.some(({ path: file }) => file === required),

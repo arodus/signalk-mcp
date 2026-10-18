@@ -22,7 +22,7 @@
   "signalk": {
     "displayName": "Signal K MCP",
     "screenshots": [
-      "./docs/images/native-plugin-config.png"
+      "./docs/images/native-plugin-config.jpg"
     ]
   },
   "signalk-plugin-enabled-by-default": false,
