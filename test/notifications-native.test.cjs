@@ -14,6 +14,46 @@ test(
         fixture.remove();
       }
     });
+    // Default native CORS permits any origin. The gateway follows that policy,
+    // but browser-origin requests still need their own valid bearer identity.
+    const initialize = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: {
+        protocolVersion: "2025-11-25",
+        capabilities: {},
+        clientInfo: { name: "browser-fixture", version: "1" },
+      },
+    };
+    const browserRead = (origin, authorization) =>
+      fetch(`${fixture.baseUrl}/plugins/signalk-mcp/mcp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          Origin: origin,
+          ...(authorization ? { Authorization: authorization } : {}),
+        },
+        body: JSON.stringify(initialize),
+      });
+    const permitted = await browserRead(
+      "https://client.example",
+      `Bearer ${fixture.tokens.reader}`,
+    );
+    assert.equal(permitted.status, 200);
+    assert.equal(permitted.headers.get("access-control-allow-origin"), "*");
+    await permitted.arrayBuffer();
+    for (const [origin, authorization, expected] of [
+      ["https://client.example", undefined, 401],
+      ["https://client.example", "Bearer invalid", 401],
+      ["null", `Bearer ${fixture.tokens.reader}`, 403],
+      ["https://client.example/path", `Bearer ${fixture.tokens.reader}`, 403],
+    ]) {
+      const response = await browserRead(origin, authorization);
+      assert.equal(response.status, expected);
+      await response.arrayBuffer();
+    }
     const { server, seed } = fixture;
     server.app.securityStrategy.getConfiguration().acls[0].resources.push({
       paths: ["notifications.allowed"],
@@ -30,12 +70,9 @@ test(
       { path: "notifications.denied", value: { ...value, message: "Denied" } },
     ]);
     const get = (suffix = "") =>
-      fetch(
-        `http://${fixture.configuration.allowedHosts[0]}/signalk/v2/api/notifications${suffix}`,
-        {
-          headers: { Authorization: `Bearer ${fixture.tokens.reader}` },
-        },
-      );
+      fetch(`${fixture.baseUrl}/signalk/v2/api/notifications${suffix}`, {
+        headers: { Authorization: `Bearer ${fixture.tokens.reader}` },
+      });
     const raw = await (await get()).json();
     assert.ok(Object.hasOwn(raw, "notifications.allowed"));
     assert.ok(!Object.hasOwn(raw["notifications.allowed"].value, "id"));

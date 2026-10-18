@@ -81,8 +81,6 @@ test(
       JSON.stringify({
         enabled: true,
         configuration: {
-          allowedHosts: [host],
-          allowedOrigins: ["https://allowed.example"],
           staleAfterSeconds: 300,
           pluginOperations: [
             {
@@ -163,6 +161,13 @@ test(
         },
       ],
     };
+    fs.writeFileSync(
+      path.join(dir, "security.json"),
+      JSON.stringify({
+        allowedCorsOrigins: "https://allowed.example",
+      }),
+      { mode: 0o600 },
+    );
     const server = new Server({
       config: {
         settings: {
@@ -239,7 +244,7 @@ test(
       },
     );
     await t.test(
-      "validates Host and Origin and unsupported methods",
+      "uses native CORS policy without a plugin Host list and rejects unsupported methods",
       async () => {
         assert.equal(
           (
@@ -249,7 +254,35 @@ test(
           ).status,
           403,
         );
-        const invalidHost = await new Promise((resolve, reject) => {
+        for (const origin of [
+          "null",
+          "https://allowed.example/",
+          "https://allowed.example https://evil.example",
+        ]) {
+          assert.equal(
+            (await request(initialize, undefined, { Origin: origin })).status,
+            403,
+          );
+        }
+        assert.equal(
+          (
+            await request(initialize, undefined, {
+              Origin: "https://evil.example",
+              "Access-Control-Allow-Origin": "https://evil.example",
+            })
+          ).status,
+          403,
+        );
+        assert.equal(
+          (
+            await request(initialize, "", {
+              Origin: "https://allowed.example",
+              Host: "alternate.example",
+            })
+          ).status,
+          401,
+        );
+        const alternateHost = await new Promise((resolve, reject) => {
           const req = require("node:http").request(
             endpoint,
             {
@@ -269,7 +302,7 @@ test(
           req.on("error", reject);
           req.end(JSON.stringify(initialize));
         });
-        assert.equal(invalidHost, 403);
+        assert.equal(alternateHost, 200);
         assert.equal(
           (
             await request(initialize, undefined, {
@@ -1249,7 +1282,7 @@ test(
       const plugin = loadedPlugin(server, "signalk-mcp");
       await plugin.stop();
       assert.equal((await request(initialize)).status, 503);
-      plugin.start({ allowedHosts: [host] });
+      plugin.start({});
       assert.equal((await request(initialize)).status, 200);
     });
   },

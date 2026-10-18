@@ -11,7 +11,7 @@ const serverRequire = createRequire(
 );
 async function main() {
   const directory = process.argv[2];
-  let server, dir, tokens, configuration;
+  let server, dir, tokens;
   if (directory) {
     dir = directory;
     process.env.SIGNALK_NODE_CONFIG_DIR = dir;
@@ -25,14 +25,8 @@ async function main() {
     // Load the existing security.json through the native security loader.
     server = new Server({ config });
     await server.start();
-    configuration = JSON.parse(
-      fs.readFileSync(
-        path.join(dir, "plugin-config-data/signalk-mcp.json"),
-        "utf8",
-      ),
-    ).configuration;
   } else {
-    ({ server, dir, tokens, configuration } = await start());
+    ({ server, dir, tokens } = await start());
     fs.writeFileSync(
       path.join(dir, "security.json"),
       JSON.stringify(server.app.securityStrategy.getConfiguration()),
@@ -86,7 +80,7 @@ async function main() {
     type: "ready",
     dir,
     tokens,
-    endpoint: `http://${configuration.allowedHosts[0]}/plugins/signalk-mcp/mcp`,
+    endpoint: `http://127.0.0.1:${server.app.config.settings.port}/plugins/signalk-mcp/mcp`,
     version: serverRequire("./package.json").version,
   });
 }

@@ -40,8 +40,6 @@ async function main() {
     path.join(pki, mode === "untrusted" ? "untrusted.pem" : "trusted.pem"),
   );
   const settings = {
-    allowedHosts: [host],
-    allowedOrigins: [origin],
     ...(mode === "native-dns" || mode === "untrusted"
       ? { localTlsServerName: "localhost" }
       : mode === "configured-name-mismatch"
@@ -98,6 +96,13 @@ async function main() {
     { expiresIn: "5m" },
   );
   const Server = serverRequire("./");
+  fs.writeFileSync(
+    path.join(dir, "security.json"),
+    JSON.stringify({
+      allowedCorsOrigins: origin,
+    }),
+    { mode: 0o600 },
+  );
   const server = new Server({
     config: {
       settings: {
@@ -272,6 +277,7 @@ async function main() {
     } else {
       assert.equal(info.structuredContent.available, true);
       const result = await call("execute_capability", pluginArgs, {
+        Host: "attacker.invalid:1",
         Forwarded: "host=attacker.invalid;proto=http",
         "X-Forwarded-Host": "attacker.invalid",
         "X-Forwarded-Port": "1",
@@ -327,10 +333,10 @@ async function main() {
         await send(
           "tools/list",
           {},
-          { Host: "attacker.invalid", "X-Forwarded-Host": host },
+          { Host: "alternate.invalid", "X-Forwarded-Host": host },
         ).result
       ).status,
-      403,
+      200,
     );
     assert.equal(
       (

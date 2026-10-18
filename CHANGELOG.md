@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Clearer native settings labels and help text, with a settings-only configuration screenshot.
+- Remove plugin-local host/browser-origin settings and use Signal K’s CORS policy; preserve existing configuration on upgrade. Clarify the HTTPS certificate hostname and refresh the settings-only screenshot.
 - Stop oversized JSON request/result serialization at the byte budget; verify client reconnection and permissions across full native server process restarts.
 - Add read-only v2 notification registry list/get tools with native context/path/source permissions, unchanged record forwarding, and support for disabled core notification management. No dependency on the proposed alerts subsystem.
 

@@ -11,7 +11,7 @@ Keep this project independent. Preserve compatibility with ordinary Signal K ins
 - Keep the implemented gateway read-only. Never expose control, configuration writes, arbitrary URLs, files, shell commands or in-process JavaScript execution.
 - Reuse Signal K tokens and permissions. Do not create a second authentication system, read signing secrets, mint privileged tokens or bypass the caller's identity.
 - Authorize each invocation and every exposed telemetry path/source. Discovery is not authorization. Unknown plugin operations remain disabled unless explicitly reviewed and allowlisted.
-- Preserve Host/Origin checks, input/output limits, sanitized errors and fail-closed behavior when authentication or required adapters are unavailable.
+- Use Signal K’s CORS decision for browser-origin requests; do not reintroduce plugin-local host/origin lists. Preserve bearer authentication, input/output limits, sanitized errors and fail-closed behavior when required adapters are unavailable.
 - Prefer public Signal K interfaces. Isolate version-sensitive internals and document/test their supported versions. Verify uncertain behavior against source and real integration tests.
 - Keep transport, identity, telemetry access, discovery and capability execution separate. Dedicated tools and generic capability calls must use the same authorization/data implementation.
 - Do not add data calculations, aggregations, integrations or inferred values. Forward provider results without computing substitutes. Query validation, permission filtering and response formatting do not authorize domain transformations.

@@ -19,7 +19,6 @@ async function start(gateway = true, { manageNotifications = true } = {}) {
   const port = socket.address().port;
   await new Promise((resolve) => socket.close(resolve));
   const configuration = {
-    allowedHosts: [`127.0.0.1:${port}`],
     pluginOperations: [
       {
         pluginId: "mcp-fixture",
@@ -175,6 +174,7 @@ async function start(gateway = true, { manageNotifications = true } = {}) {
     server,
     tokens,
     configuration,
+    baseUrl: `http://127.0.0.1:${port}`,
     seed,
     request,
     version,
