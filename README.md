@@ -121,7 +121,7 @@ Each path/source is checked against the current caller's Signal K ACLs before qu
 
 Queries require explicit timezone-qualified boundaries, cover at most seven days, and allow at most 16 columns and 2,000 rows/time buckets. Supported methods are `average`, `min`, `max`, `first`, and `last`; `resolution` is in seconds. These are query methods executed by the history provider; the gateway forwards their results and performs no calculations on the values.
 
-Signal K 2.33.0's HTTP parser strips hyphens from history path/source expressions. This implementation rejects those spellings rather than querying a changed identifier. Providers that omit `$source` in response columns are unsupported. This is not broad compatibility evidence for existing production history plugins.
+Signal K 2.32.0 and 2.33.0's HTTP parser strips hyphens from history path/source expressions. This implementation rejects those spellings rather than querying a changed identifier. Providers that omit `$source` in response columns are unsupported. The independently maintained `signalk-to-influxdb` 1.11.0 was exercised with real InfluxDB 1.8.10 and synthetic data: it is **blocked**, because its columns expose `sourceRef` instead of `$source`. See the [provider matrix, reproducible tests and local upstream proposal](docs/history-providers.md).
 
 ## Compatibility and limits
 

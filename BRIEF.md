@@ -16,7 +16,7 @@ The independent plugin implements authenticated Streamable HTTP, batched telemet
 
 Only explicitly reviewed GET operations can execute, using the original Signal K bearer identity and native route permissions. Unknown operations remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 
-[PR #1](https://github.com/arodus/signalk-mcp/pull/1) is merged. Integration tests use Signal K 2.33.0 and synthetic providers; CI passed on Node 22 and 24. Production-provider compatibility, product-client connections, live vessel acceptance and publication remain unverified.
+[PR #1](https://github.com/arodus/signalk-mcp/pull/1) is merged. Integration tests use Signal K 2.33.0 and synthetic providers; CI passed on Node 22 and 24. The production History provider `signalk-to-influxdb` 1.11.0 now has a reproducible blocked compatibility result under Signal K 2.32.0/2.33.0; see [history provider verification](docs/history-providers.md). Product-client connections, live vessel acceptance and publication remain unverified.
 
 README.md and docs describe implemented behavior and verification. This brief defines the intended scope; it does not establish upstream API availability or live compatibility.
 
@@ -129,7 +129,7 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 ### Compatibility and acceptance
 
 - Validate the authentication bridge against an explicit supported Signal K version range.
-- Test a production History API provider with isolated synthetic data; resolve or document identifier and provenance gaps.
+- Production History provider compatibility has a reproducible blocked result for `signalk-to-influxdb` 1.11.0; see [provider matrix and local upstream proposal](docs/history-providers.md). Broader support requires exact identifiers and verified column provenance, without guessing or rewriting either.
 - Verify discovery and approved reads against independently maintained plugins.
 - Test native TLS and reverse-proxy hosting without weakening certificate checks or destination restrictions.
 - Test actual MCP products and document bearer/OAuth requirements.

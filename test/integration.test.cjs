@@ -11,6 +11,11 @@ const {
   StreamableHTTPClientTransport,
 } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
 
+const {
+  installHistoryProvider,
+  checkHistoryProvider,
+} = require("./history-provider.cjs");
+
 const serverPackage = process.env.MCP_TEST_SERVER_DIR
   ? path.join(path.resolve(process.env.MCP_TEST_SERVER_DIR), "package.json")
   : require.resolve("signalk-server/package.json");
@@ -111,6 +116,9 @@ test(
         },
       }),
     );
+    const historyStore = process.env.MCP_TEST_INFLUX_URL
+      ? await installHistoryProvider(dir)
+      : undefined;
     process.env.SIGNALK_NODE_CONFIG_DIR = dir;
     process.env.SIGNALK_DISABLE_SERVER_UPDATES = "true";
     process.env.HTTP_RATE_LIMITS = "api=1000,loginStatus=1000,login=1000";
@@ -158,6 +166,7 @@ test(
       config: {
         settings: {
           port,
+          historyApi: { defaultProvider: "mcp-fixture" },
           mdns: false,
           enforceDataTimeouts: false,
           pipedProviders: [],
@@ -171,8 +180,12 @@ test(
       securityConfig,
     });
     t.after(async () => {
-      await server.stop();
-      fs.rmSync(dir, { recursive: true, force: true });
+      try {
+        await server.stop();
+      } finally {
+        await historyStore?.cleanup();
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
     await server.start();
     const endpoint = new URL(`http://${host}/plugins/signalk-mcp/mcp`);
@@ -624,6 +637,7 @@ test(
         );
         const fixture = server.app.pluginsMap["mcp-fixture"];
         const query = {
+          provider: "mcp-fixture",
           from: "2026-10-17T10:00:00Z",
           to: "2026-10-17T10:01:00Z",
           resolution: 10,
@@ -699,13 +713,65 @@ test(
           name: "describe_capability",
           arguments: { id: "signalk.history" },
         });
-        assert.equal(unavailable.structuredContent.available, false);
+        assert.equal(
+          unavailable.structuredContent.available,
+          Boolean(process.env.MCP_TEST_INFLUX_URL),
+        );
         assert.equal(
           (await client.callTool({ name: "get_history", arguments: query }))
             .content[0].text,
           "HISTORY_UNAVAILABLE",
         );
         fixture.start();
+      },
+    );
+    await t.test(
+      "pinned production History provider",
+      { skip: !process.env.MCP_TEST_INFLUX_URL },
+      async (t) => {
+        await checkHistoryProvider(t, server, host, bearer, client);
+      },
+    );
+    await t.test(
+      "history provider errors and deadlines never disclose partial results",
+      async () => {
+        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const input = {
+          provider: "mcp-fixture",
+          from: "2026-10-17T10:00:00Z",
+          to: "2026-10-17T10:01:00Z",
+          resolution: 10,
+          paths: [{ path: "navigation.speedOverGround", source: "fixture.XX" }],
+        };
+        fixture.setHistoryMode("error");
+        try {
+          const error = await client.callTool({
+            name: "get_history",
+            arguments: input,
+          });
+          assert.equal(error.content[0].text, "UPSTREAM_HTTP_ERROR");
+          assert.equal(error.structuredContent, undefined);
+        } finally {
+          fixture.setHistoryMode("valid");
+        }
+        const held = fixture.holdNextRead("history");
+        const pending = client.callTool({
+          name: "get_history",
+          arguments: input,
+        });
+        try {
+          await Promise.race([
+            held.started,
+            pending.then(() => {
+              throw new Error("History ended before provider entry");
+            }),
+          ]);
+          const timeout = await pending;
+          assert.equal(timeout.content[0].text, "UPSTREAM_UNAVAILABLE");
+          assert.equal(timeout.structuredContent, undefined);
+        } finally {
+          held.release();
+        }
       },
     );
     await t.test(

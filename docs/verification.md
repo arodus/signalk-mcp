@@ -21,7 +21,7 @@ The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and ch
 
 ## Remaining acceptance
 
-All telemetry and providers are synthetic. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements with an owner's existing token and compatibility with independently maintained production plugins remain unverified.
+All telemetry and providers are synthetic. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements with an owner's existing token remains unverified. The History follow-up below exercises one independently maintained production provider using synthetic data and records its compatibility blocker.
 
 There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, TLS/reverse-proxy combinations, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. In particular, loopback TLS certificate mismatch fails closed for HTTP-backed capabilities.
 
@@ -36,3 +36,13 @@ Local Node 24.22.0 runs passed all **30 test-runner entries** with no skips agai
 The expanded suite adds native user-token visibility/removal, permission changes while a plugin read is pending, and history ACL revocation during a provider response. Focused checks reject changed/missing hook contracts, unknown security state and malformed principals; only literal ACL grants permit reads. Production changes are limited to stricter security-state/identity validation and a minimal principal snapshot. No calculation or other data-processing feature is introduced.
 
 See [authentication compatibility](authentication.md) for the supported version policy, source assessment and reproducible runtime selection. The public-interface proposal is a local draft; the private security hooks remain necessary.
+
+## History provider follow-up (issue #3)
+
+The published `signalk-to-influxdb` **1.11.0** package now loads unchanged inside the real temporary Signal K server, backed by a disposable real InfluxDB **1.8.10** container. The version and image digest are pinned; the provider is a development dependency only. Tests generate a random synthetic database and remove it afterward.
+
+On Node **24.22.0**, both Signal K/ServerAPI **2.32.0** and **2.33.0** pass **36 test-runner entries** with Python MCP **1.26.0** and the real-provider tests enabled. The primary runtime also passes strict TypeScript, ESLint and Prettier. CI runs this same backend in the four existing server/Node combinations; consult the issue #3 PR's checks for remote results.
+
+The production provider remains **unsupported**: it returns `sourceRef` instead of standard `$source` in response columns. Tests reproduce the server's hyphen stripping selecting different stored values, independently verify source filtering, preserve zero/end-boundary samples, and expose out-of-range bucket timestamps and responses exceeding 2,000 rows. Native source-denial checks, provider error/timeout tests and the existing altered-column/revocation/absence regressions pass without weakening authorization or changing gateway source code.
+
+See [provider support matrix and reproductions](history-providers.md). The upstream proposals remain local drafts. Docker is required only for this optional local integration test and CI fixture, never for the gateway runtime. No upstream message, release, deployment or live-vessel operation was performed.

@@ -86,6 +86,8 @@ module.exports = (app) => {
         async getValues(query) {
           calls.history++;
           await waitForRelease("history");
+          if (historyMode === "error")
+            throw new Error("synthetic provider error");
           const values = query.pathSpecs.map((spec) => ({
             path: spec.path,
             method: spec.aggregate,
