@@ -332,6 +332,31 @@ test(
       t.after(() => client.close());
       return client;
     }
+    const { codexClient, hermesClient } = require("./product-clients.cjs");
+    await t.test(
+      "installed Codex product client",
+      { skip: !process.env.MCP_TEST_CODEX_BIN },
+      async (subtest) => {
+        await codexClient(
+          process.env.MCP_TEST_CODEX_BIN,
+          endpoint,
+          bearer,
+          subtest,
+        );
+      },
+    );
+    await t.test(
+      "installed Hermes product client",
+      { skip: !process.env.MCP_TEST_HERMES_DIR },
+      async (subtest) => {
+        await hermesClient(
+          process.env.MCP_TEST_HERMES_DIR,
+          endpoint,
+          bearer,
+          subtest,
+        );
+      },
+    );
     const client = await clientFor("reader");
     await t.test(
       "SDK negotiates, discovers the compact tool catalog and reads live fixture deltas",
