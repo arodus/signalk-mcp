@@ -1,0 +1,77 @@
+{
+  "date": "2026-10-18T10:58:31.572Z",
+  "target": "local development baseline, not Raspberry Pi acceptance",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "osRelease": "25.6.0",
+  "cpu": "Apple M4 Max",
+  "logicalCpus": 16,
+  "totalMemory": 68719476736,
+  "node": "v24.22.0",
+  "signalk": "2.33.0",
+  "workload": {
+    "modelLeaves": 1001,
+    "pathsPerRead": 64,
+    "requestsPerSecond": 20,
+    "maxConcurrent": 4,
+    "phaseSeconds": 30,
+    "telemetryHz": 10
+  },
+  "scope": "Combined native server and local HTTP client process; synthetic data only",
+  "thresholds": {
+    "readP95Ms": 250,
+    "telemetryLoopP99Ms": 100,
+    "retainedHeapBytes": 16777216
+  },
+  "baseline": {
+    "elapsedMs": 29999.905917,
+    "requests": 0,
+    "errors": 0,
+    "skipped": 0,
+    "telemetryUpdates": 298,
+    "telemetryErrors": 0,
+    "peakRss": 340541440,
+    "cpuOneCorePercent": 0.9064928428522044,
+    "readP95Ms": 0,
+    "readP99Ms": 0,
+    "telemetryLoopP99Ms": 1.9017500000009022,
+    "telemetryProcessingP99Ms": 0.46366699999998673,
+    "eventLoopP99Ms": 11.526143,
+    "eventLoopMaxMs": 13.344767
+  },
+  "load": {
+    "elapsedMs": 29999.903625,
+    "requests": 600,
+    "errors": 0,
+    "skipped": 0,
+    "telemetryUpdates": 298,
+    "telemetryErrors": 0,
+    "peakRss": 372801536,
+    "cpuOneCorePercent": 12.686400755062426,
+    "readP95Ms": 7.828249999998661,
+    "readP99Ms": 9.833082999997714,
+    "telemetryLoopP99Ms": 2.175167000001238,
+    "telemetryProcessingP99Ms": 0.4307090000002063,
+    "eventLoopP99Ms": 13.606911,
+    "eventLoopMaxMs": 30.572543
+  },
+  "memory": {
+    "before": {
+      "heapUsed": 122509280,
+      "rss": 340262912
+    },
+    "after": {
+      "heapUsed": 112354152,
+      "rss": 370343936
+    },
+    "heapGrowth": -10155128
+  },
+  "gates": {
+    "allRequests": true,
+    "telemetry": true,
+    "readP95": true,
+    "telemetryLoopP99": true,
+    "retainedHeap": true
+  },
+  "naturalExit": false
+}

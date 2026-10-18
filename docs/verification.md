@@ -23,7 +23,7 @@ The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and ch
 
 All test data is synthetic. The unchanged published History provider and Alert Center package are exercised as described below. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements remains unverified. Compatibility evidence applies to the exact tested packages and operations.
 
-There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. TLS/proxy evidence is recorded in the issue #5 follow-up below. Certificate failures remain closed for HTTP-backed capabilities.
+There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, non-TCP hosting and whole-server restart remain open. Local resource/load evidence is recorded in the issue #7 follow-up below; Raspberry Pi and longer-duration acceptance remain open. TLS/proxy evidence is recorded in the issue #5 follow-up below. Certificate failures remain closed for HTTP-backed capabilities.
 
 The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History accepts optional response source metadata, checks explicit source filters against native ACLs, permits unfiltered reads only with confirmed absence of telemetry ACLs, and rejects identifiers the tested server's HTTP parser would alter. Read-only v2 notification registry coverage remains future work. Notification mutations, calculations, Container Manager integration and sandbox execution are outside the current scope, not deferred work.
 
@@ -72,3 +72,15 @@ On Node **24.22.0**, the complete suite passes **58 entries with no skips** agai
 The [client matrix](clients.md) separates these runtime checks from untested desktop/web UI acceptance and documentation-only Claude support. Product binaries are opt-in local dependencies; ordinary CI explicitly skips those two checks while exercising both SDK clients. Abrupt network outage recovery and interactive authorization remain untested.
 
 [ADR 002](decisions/002-client-authentication.md) retains native bearer mode and documents the blockers to OAuth: a supported Signal K audience/delegation/lifecycle contract is not established. No second identity system, signing-secret access, OAuth implementation or public submission is introduced.
+
+## Lifecycle and local ARM64 follow-up (issue #7)
+
+PRs #17 and #18 merged after all eight push/PR matrix checks passed. The combined main branch includes both hosting and product-client evidence.
+
+The lifecycle follow-up fixes pending client connections and handler cleanup when the plugin stops or a client disconnects. Native tests cover 12 alternating cancellation/stop cycles, concurrent authorized/denied principals, saturation of all eight request slots, rejection of a ninth request, recovery and two real provider timeouts. Focused tests cover oversized/deep models and oversized feature discovery. Resource tracing checks gateway timer/TCP ownership before child termination and distinguishes surviving upstream timers from gateway cleanup.
+
+On Node **24.22.0**, `npm run check` passes **69 entries without skips** against Signal K **2.33.0**, including both installed products, Python MCP and the real isolated providers. The alternate **2.32.0** runtime passes **67 entries**, with only the two opt-in product checks skipped. `npm pack --dry-run` and `git diff --check` pass. Remote results belong to the follow-up PR's own CI checks.
+
+The owner's agreed local development gate passes on this Mac's **Apple M4 Max ARM64**: **600/600** reads at 20/second for 30 seconds, p95 reads **7.83 ms**, p99 telemetry scheduling delay **2.18 ms**, post-GC heap change **−9.68 MiB**. CPU and RSS were reported only. See [the workload, raw results, boundary review, dependency triage and limitations](resource-validation.md). The test harness performs performance measurements; no domain calculation was added to the plugin.
+
+Issue #7 remains open for Raspberry Pi acceptance, whole-server restart and longer-duration/adversarial large-value work. Both server cohorts retain upstream timers after shutdown; the tests do not claim natural process exit. No release, deployment or live vessel test occurred.

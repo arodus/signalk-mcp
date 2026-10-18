@@ -181,3 +181,31 @@ test("tool calls reauthorize, apply output limits and sanitize internal failures
   running = false;
   assert.equal((await call()).content[0].text, "PLUGIN_STOPPED");
 });
+
+test("oversized and deeply nested models stop discovery and recover on a valid model", () => {
+  const { app, principal } = fixture();
+  const valid = app.getPath;
+  app.getPath = () => ({
+    navigation: Object.fromEntries(
+      Array.from({ length: 20001 }, (_, i) => [
+        `n${i}`,
+        { value: 0, $source: "fixture" },
+      ]),
+    ),
+  });
+  assert.throws(
+    () => listPaths(app, principal, "", 0, 100),
+    /MODEL_SCAN_LIMIT/,
+  );
+  let deep = { value: 0, $source: "fixture" };
+  for (let i = 0; i < 34; i++) deep = { child: deep };
+  app.getPath = () => ({ navigation: deep });
+  assert.throws(
+    () => listPaths(app, principal, "", 0, 100),
+    /MODEL_SCAN_LIMIT/,
+  );
+  app.getPath = valid;
+  assert.deepEqual(listPaths(app, principal, "", 0, 100).paths, [
+    "navigation.speed",
+  ]);
+});
