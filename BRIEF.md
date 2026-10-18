@@ -144,8 +144,8 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 
 ### Hardening and release
 
-- Native tests cover repeated plugin stop/start, cancellation, timeouts, concurrent identities and request-slot recovery. Whole-server restart remains unverified because upstream timers survive server stop; see [resource validation](docs/resource-validation.md).
-- The approved local ARM64 development benchmark passes; Raspberry Pi and longer-duration/adversarial-load acceptance remain open. Preserve Signal K's primary telemetry duties.
+- Native tests cover repeated plugin stop/start, cancellation, timeouts, concurrent identities and request-slot recovery. Full server process replacement and MCP client reconnection are tested with persisted native security. In-process shutdown still leaves upstream timers and does not invoke plugin stop hooks; see [resource validation](docs/resource-validation.md).
+- The approved local ARM64 development benchmark passes; extended load and large-value observations are recorded separately. Raspberry Pi acceptance remains open. Preserve Signal K's primary telemetry duties.
 - Security-boundary and dependency-exposure review is recorded in the resource report; reassess the host server's upstream advisories before release.
 - Validate installed packages, native configuration and user documentation.
 - Use the official Signal K plugin CI for portable platform checks alongside the native integration matrix. Verify registry scoring separately against the published artifact; custom CI success is not a registry score.

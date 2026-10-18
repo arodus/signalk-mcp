@@ -1,6 +1,6 @@
 # Lifecycle and local resource validation
 
-Issue [#7](https://github.com/arodus/signalk-mcp/issues/7) remains open for Raspberry Pi acceptance and whole-server restart validation. These tests use isolated synthetic data and native Signal K permissions. No vessel hardware is involved.
+Issue [#7](https://github.com/arodus/signalk-mcp/issues/7) remains open for Raspberry Pi acceptance and the upstream in-process shutdown gap. Full process replacement and client reconnection are now tested. These tests use isolated synthetic data and native Signal K permissions. No vessel hardware is involved.
 
 ## Shutdown regression
 
@@ -10,7 +10,7 @@ Stopping the plugin during a provider read previously aborted the upstream reque
 
 An `async_hooks` trace records timer and TCP allocation origins. After shutdown it allows 1.1 seconds for Node's verified HTTP Date-header cache timer (which expires at the next second boundary), without clearing timers. Before terminating either child, assertions require no surviving traced gateway-owned timer/TCP resource, including unreferenced ones, and no extra referenced resource origin/count relative to the server without the gateway. A 1.5-second exit observation then reports whether the server exited naturally. The parent terminates residual children only after those assertions; the lifecycle test also runs without the main suite's `--test-force-exit`.
 
-Signal K 2.33.0 leaves upstream timers after `server.stop()`: WebSocket metadata cache and Primus heartbeat/destruction timers, DeltaCache sweeps, notification-manager cleanup and the MFD webapp timer. Both cohorts fail to exit naturally within the observation window. Allocation stacks in the test diagnostic distinguish these from gateway resources. This is evidence for the traced resources and scenarios, not proof that every possible JavaScript reference is released. In-process whole-server restart remains unverified; the upstream survivors must be addressed before claiming it.
+Signal K 2.33.0 leaves upstream timers after `server.stop()`: WebSocket metadata cache and Primus heartbeat/destruction timers, DeltaCache sweeps, notification-manager cleanup and the MFD webapp timer. Both cohorts fail to exit naturally within the observation window. Allocation stacks in the test diagnostic distinguish these from gateway resources. This is evidence for the traced resources and scenarios, not proof that every possible JavaScript reference is released. In-process whole-server cleanup is not established; the upstream survivors must be addressed before claiming it. Full process replacement has separate coverage below.
 
 ## Reproduce
 
@@ -19,10 +19,13 @@ Use Node 24 for the primary run, with dependencies installed:
 ```sh
 npm run build
 node --test test/runtime.test.cjs
+node --test test/restart.test.cjs
 node test/runtime-benchmark.cjs /tmp/signalk-mcp-arm64.json
+node test/runtime-benchmark.cjs /tmp/signalk-mcp-10min.json 600
+node test/runtime-pressure.cjs /tmp/signalk-mcp-pressure.json
 ```
 
-Select the alternate server with `MCP_TEST_SERVER_DIR` and assert its version with `MCP_TEST_SERVER_VERSION`, as described in [authentication compatibility](authentication.md). Run the benchmark by itself, without simultaneous test suites or builds. The benchmark is opt-in, not a variable-speed CI performance gate. Its driver enables GC in the child, records whether shutdown exits naturally and terminates upstream survivors afterward.
+Select the alternate server with `MCP_TEST_SERVER_DIR` and assert its version with `MCP_TEST_SERVER_VERSION`, as described in [authentication compatibility](authentication.md). Run each benchmark by itself, without simultaneous test suites or builds. The optional final duration argument selects 30–1,800 seconds of load; the idle phase remains 30 seconds. Fixture tokens last one hour so longer local measurements do not measure credential expiry. The benchmark is opt-in, not a variable-speed CI performance gate. Its driver enables GC in the child, records whether shutdown exits naturally and terminates upstream survivors afterward.
 
 ## Agreed local development gate
 
@@ -50,7 +53,9 @@ Idle/load CPU was **0.91% / 12.69%** of one core; peak RSS was **324.8 / 355.5 M
 
 The review covered native identity reauthorization, per-path/source permissions, fixed socket-derived local HTTP destinations, certificate validation, GET approvals, OpenAPI schema restrictions and sanitized errors. Existing regression tests exercise permission revocation, routing spoofing/redirects, schema changes, oversized responses and internal error redaction. The confirmed shutdown defect above is fixed with native integration coverage.
 
-Response limits are not a strict process-memory ceiling: core results are serialized before their 256 KiB check, Signal K has already parsed the request body before the plugin's 64 KiB check, and model/discovery data already exists in the host. HTTP provider bodies are bounded while being received. Path scanning has node/depth limits, but native enumeration and serialization can still allocate transient memory. Retain issue #7 for adversarial large-value/long-duration evaluation and whole-server restart work; a passing short benchmark does not close those questions.
+Core results now count UTF-8 JSON bytes during serialization and stop normal oversized strings/repeated values before allocating the complete result. The final 256 KiB check remains for special non-JSON-native objects whose serializer can bypass normal child traversal. The already-parsed request body uses the same early byte-budget check with its existing 64 KiB limit. Allowed JSON spelling and values remain unchanged; this is transport validation, not domain calculation.
+
+These limits still do not impose a strict process-memory ceiling. Signal K parses requests before plugin routing, and native model/discovery data already exists in the host. Property enumeration and custom serialization can allocate memory before the gateway can reject it. HTTP provider bodies remain bounded while received. The MCP wire envelope includes both text and structured content, so its complete wire size exceeds the data-JSON budget. Do not interpret the measured RSS reduction as a global memory guarantee.
 
 ## Dependency exposure snapshot
 
@@ -58,4 +63,38 @@ On 2026-10-18, `npm audit --omit=dev --json` reported **zero production advisori
 
 The critical finding is `lodash@3.10.1` under `@signalk/signalk-schema`. High-severity nodes include `nanoid@3.1.32`, `node-forge@1.4.0`, `validator@7.2.0/10.11.0`, and their affected parent packages. Moderate findings additionally involve `sprintf-js@1.0.3`, `uuid@8.3.2` and their parent chains. For example, the audit links [lodash](https://github.com/advisories/GHSA-fvqr-27wr-82fm), [nanoid](https://github.com/advisories/GHSA-mwcw-c2x4-8c55), [node-forge](https://github.com/advisories/GHSA-86w9-cpqp-85rv) and [validator](https://github.com/advisories/GHSA-qgmg-gppg-76g5) advisories; these links identify audit findings, not demonstrated exploitability in this gateway.
 
-The audit's proposed top-level fix is `signalk-server@0.1.32`, a downgrade outside the supported 2.32.0/2.33.0 matrix. It is not a usable compatibility-preserving upgrade. No forced fix or transitive override was applied. Keep synthetic test servers isolated, reassess upstream supported releases before release, and audit the separately installed production Signal K host independently. A clean plugin production audit does not certify the host server or eliminate test-environment exposure.
+The audit's proposed top-level fix is `signalk-server@0.1.32`, a downgrade outside the supported 2.32.0/2.33.0 matrix. It is not a usable compatibility-preserving upgrade. The latest published server was rechecked as 2.33.0 for this follow-up; the advisory counts were unchanged. No forced fix or transitive override was applied. Keep synthetic test servers isolated, reassess upstream supported releases before release, and audit the separately installed production Signal K host independently. A clean plugin production audit does not certify the host server or eliminate test-environment exposure.
+
+## Full process restart and reconnection
+
+`test/restart.test.cjs` starts four native Signal K processes sequentially on the same port and configuration directory, terminating each preceding process with SIGTERM. The first fixture writes its synthetic security configuration to `security.json`; replacement servers read that file using the native security loader. The original TypeScript SDK Client, transport and bearer token are reused across all three replacements. Each generation publishes a distinct synthetic value, verifies nine-tool discovery and an allowed read, and verifies that the second identity still cannot read that path. Plugin configuration remains unchanged.
+
+Each replacement interrupts an actual pending provider read. The client observes failure while the process is down, then reads the new generation after the next server starts without manual credential refresh or reconnection. This runs without `--test-force-exit` in isolation and passes on Node 24/Signal K 2.33 and Node 22/Signal K 2.32. OS process termination closes the resources; it is not evidence that JavaScript shutdown hooks ran.
+
+The final generation also invokes native `server.stop()` with a spy around the gateway's stop hook. Both tested releases report **zero plugin stop calls**. Inspection confirms that their plugin interface implements `start()` without a corresponding interface `stop()`, while the server only stops interfaces exposing that hook. Together with the separate residual-timer trace, this leaves native in-process reload/cleanup unsupported as a verified shutdown path. Use full server process replacement for the tested restart behavior; do not patch Signal K internals or clear upstream timers inside the gateway to conceal the gap.
+
+## Large-value pressure methodology
+
+`test/runtime-pressure.cjs` uses a separate child with a 384 MiB V8 old-space limit (not an RSS cap). It measures the native HTTP endpoint with synthetic model values: 64 small strings, one 8 MiB string, 64 paths sharing a 1 MiB value, a 128 KiB string of control characters requiring JSON escaping, and an object with 30,000 keys. Each case warms once, makes 20 measured calls and checks an ordinary allowed read and denied identity after every call. Oversized cases must return `OUTPUT_LIMIT`; no rejected value is forwarded. Source data is seeded through native delta handling. Before/after heap samples use explicit GC; RSS peaks are process-wide high-water marks, so later cases inherit earlier peaks.
+
+The baseline uses production code from merged commit `35ded66` with the new measurement harness. The comparison uses the bounded serializer from this change. These are isolated local observations, not Raspberry Pi measurements or production memory limits. CPU and memory arithmetic remains solely in the test harness.
+
+### Recorded serialization comparison
+
+The [baseline](benchmarks/2026-10-18-serialization-before.json) and [bounded-serialization result](benchmarks/2026-10-18-serialization-after.json) were measured independently on the same Apple M4 Max, Node 24.22.0 and Signal K 2.33.0. The table reports each case's process high-water RSS and p95 read latency; these are observations, not acceptance thresholds.
+
+| Case                       | Previous peak RSS | Bounded peak RSS | Previous p95 | Bounded p95 |
+| -------------------------- | ----------------: | ---------------: | -----------: | ----------: |
+| 64 small strings           |        349.05 MiB |       347.81 MiB |      3.28 ms |     4.23 ms |
+| One 8 MiB string           |        415.42 MiB |       347.81 MiB |      7.74 ms |     1.58 ms |
+| 64 shared 1 MiB values     |        670.98 MiB |       347.81 MiB |     37.72 ms |     1.56 ms |
+| Escaped control characters |        670.98 MiB |       358.56 MiB |      1.89 ms |     1.69 ms |
+| 30,000-key object          |        670.98 MiB |       358.56 MiB |      4.50 ms |     6.69 ms |
+
+All expected successes/rejections and subsequent allowed/denied reads passed in both runs. In the bounded run, post-GC heap change was +2.39 MiB for the small case and at most +0.14 MiB for each oversized case. The shared-value case previously allocated a roughly 64 MiB JSON result before applying the 256 KiB check; it now rejects during traversal. Both children still required termination after the upstream shutdown observation window. The improvement does not establish natural in-process shutdown or a universal memory ceiling.
+
+## Ten-minute local load observation
+
+The [extended raw measurement](benchmarks/2026-10-18-arm64-600s.json) uses the same local hardware, Node 24.22.0, Signal K 2.33.0 and synthetic workload as the short baseline, with 30 seconds idle followed by 600 seconds of load. All **12,000/12,000 reads** succeeded at 20/second, with zero skipped requests and zero telemetry observation errors. Read p95 was **9.14 ms**, p99 **12.43 ms**, telemetry scheduling p99 **3.67 ms**, and post-GC heap change **−9.47 MiB**. The previously approved short-run thresholds are retained as reference checks and all pass; this extension does not establish new Raspberry Pi or production acceptance thresholds.
+
+Idle/load CPU was **1.17% / 15.99%** of one core, peak sampled RSS **330.83 / 361.02 MiB**, and event-loop p99 **11.58 / 14.66 ms**. Load telemetry processing p99 was **0.46 ms**. The raw artifact includes ten-second memory samples without forcing GC during the workload. No other test suite or build ran alongside this measurement. Natural exit remained false because of the upstream shutdown gap. Ten minutes of synthetic load and a negative retained-heap delta do not prove absence of long-term leaks or performance on vessel hardware.

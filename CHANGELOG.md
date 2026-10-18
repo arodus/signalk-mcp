@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stop oversized JSON request/result serialization at the byte budget; verify client reconnection and permissions across full native server process restarts.
+
 - Add read-only v2 notification registry list/get tools with native context/path/source permissions, unchanged record forwarding, and support for disabled core notification management. No dependency on the proposed alerts subsystem.
 
 Initial read-only native Signal K MCP gateway; no npm release has been published.

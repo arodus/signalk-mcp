@@ -1,0 +1,147 @@
+{
+  "date": "2026-10-18T11:54:17.239Z",
+  "node": "v24.22.0",
+  "signalk": "2.33.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "cpu": "Apple M4 Max",
+  "maxOldSpaceMiB": 384,
+  "scope": "Synthetic native model values; combined server and HTTP client",
+  "cases": [
+    {
+      "name": "small",
+      "paths": 64,
+      "iterations": 20,
+      "expected": "success",
+      "before": {
+        "rss": 347799552,
+        "heapTotal": 259260416,
+        "heapUsed": 116738096,
+        "external": 4336707,
+        "arrayBuffers": 233259,
+        "peakRss": 348995584
+      },
+      "after": {
+        "rss": 359645184,
+        "heapTotal": 261619712,
+        "heapUsed": 119249288,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 366002176
+      },
+      "heapGrowth": 2511192,
+      "maxReadMs": 6.822416999999973,
+      "readP95Ms": 3.2840830000000096,
+      "recoveryAndDenialPassed": true
+    },
+    {
+      "name": "large-string",
+      "paths": 1,
+      "iterations": 20,
+      "expected": "OUTPUT_LIMIT",
+      "before": {
+        "rss": 376537088,
+        "heapTotal": 270024704,
+        "heapUsed": 127596024,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 384942080
+      },
+      "after": {
+        "rss": 376782848,
+        "heapTotal": 270286848,
+        "heapUsed": 127606496,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 435601408
+      },
+      "heapGrowth": 10472,
+      "maxReadMs": 7.744416000000001,
+      "readP95Ms": 7.735834000000068,
+      "recoveryAndDenialPassed": true
+    },
+    {
+      "name": "repeated-large-value",
+      "paths": 64,
+      "iterations": 20,
+      "expected": "OUTPUT_LIMIT",
+      "before": {
+        "rss": 562511872,
+        "heapTotal": 271351808,
+        "heapUsed": 128651648,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 629637120
+      },
+      "after": {
+        "rss": 569344000,
+        "heapTotal": 271351808,
+        "heapUsed": 128792712,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 703578112
+      },
+      "heapGrowth": 141064,
+      "maxReadMs": 42.09191699999997,
+      "readP95Ms": 37.72441600000002,
+      "recoveryAndDenialPassed": true
+    },
+    {
+      "name": "escaped-value",
+      "paths": 1,
+      "iterations": 20,
+      "expected": "OUTPUT_LIMIT",
+      "before": {
+        "rss": 569491456,
+        "heapTotal": 271499264,
+        "heapUsed": 128949600,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 703578112
+      },
+      "after": {
+        "rss": 569638912,
+        "heapTotal": 271761408,
+        "heapUsed": 129016792,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 703578112
+      },
+      "heapGrowth": 67192,
+      "maxReadMs": 3.864875000000211,
+      "readP95Ms": 1.8926249999999527,
+      "recoveryAndDenialPassed": true
+    },
+    {
+      "name": "wide-object",
+      "paths": 1,
+      "iterations": 20,
+      "expected": "OUTPUT_LIMIT",
+      "before": {
+        "rss": 569638912,
+        "heapTotal": 271761408,
+        "heapUsed": 129009104,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 703578112
+      },
+      "after": {
+        "rss": 570048512,
+        "heapTotal": 272285696,
+        "heapUsed": 129126008,
+        "external": 4402283,
+        "arrayBuffers": 298795,
+        "peakRss": 703578112
+      },
+      "heapGrowth": 116904,
+      "maxReadMs": 5.992874999999913,
+      "readP95Ms": 4.500790999999936,
+      "recoveryAndDenialPassed": true
+    }
+  ],
+  "naturalExit": false,
+  "exit": {
+    "code": null,
+    "signal": "SIGTERM"
+  }
+}
