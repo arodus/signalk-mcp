@@ -309,3 +309,20 @@ test("local HTTP transport bounds JSON and refuses alternate routes and redirect
   );
   assert.equal(received.length, 4);
 });
+
+test("invalid approval configuration reports field guidance without leaking input", () => {
+  const errors = [];
+  const plugin = require("../dist/index.js")({
+    setPluginError: (message) => errors.push(message),
+  });
+  plugin.start({
+    allowedHosts: ["localhost:3000"],
+    pluginOperations: [
+      { ...approval, method: "POST", operationId: "synthetic-private-value" },
+    ],
+  });
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /pluginOperations/);
+  assert.match(errors[0], /reviewed GET/);
+  assert.doesNotMatch(errors[0], /synthetic-private-value/);
+});

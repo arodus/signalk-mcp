@@ -4,7 +4,7 @@ A native, read-only Signal K plugin for vessel telemetry, capability discovery a
 
 **Scope:** discover, fetch and forward authorized data. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
 
-**Development status:** authenticated telemetry and the read-only capability layer are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 with synthetic providers. There is no npm/AppStore release or vessel deployment yet.
+**Development status:** authenticated telemetry and the read-only capability layer are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 with synthetic providers and the published `signalk-alert-manager@0.1.0` package using synthetic alerts. Its reviewed read is admin-only; see the [provider compatibility example](docs/plugin-compatibility.md). There is no npm/AppStore release or vessel deployment yet.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 

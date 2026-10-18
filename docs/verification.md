@@ -21,7 +21,7 @@ The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and ch
 
 ## Remaining acceptance
 
-All telemetry and providers are synthetic. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements with an owner's existing token and compatibility with independently maintained production plugins remain unverified.
+All test data is synthetic. Providers include synthetic fixtures and the published alert-manager package described below. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements with an owner's existing token remains unverified. Production-plugin compatibility is limited to the exact package and operation below.
 
 There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, TLS/reverse-proxy combinations, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. In particular, loopback TLS certificate mismatch fails closed for HTTP-backed capabilities.
 
@@ -36,3 +36,11 @@ Local Node 24.22.0 runs passed all **30 test-runner entries** with no skips agai
 The expanded suite adds native user-token visibility/removal, permission changes while a plugin read is pending, and history ACL revocation during a provider response. Focused checks reject changed/missing hook contracts, unknown security state and malformed principals; only literal ACL grants permit reads. Production changes are limited to stricter security-state/identity validation and a minimal principal snapshot. No calculation or other data-processing feature is introduced.
 
 See [authentication compatibility](authentication.md) for the supported version policy, source assessment and reproducible runtime selection. The public-interface proposal is a local draft; the private security hooks remain necessary.
+
+## Independent plugin compatibility follow-up (issue #4)
+
+`test/production-plugin.test.cjs` installs the unchanged npm `signalk-alert-manager@0.1.0` package into a real temporary Signal K server. The test seeds one synthetic notification through the native delta interface, with audio disabled and no external services or equipment. It discovers the published OpenAPI document and forwards `listAlerts` responses unchanged. A readonly identity is refused both by the reviewed admin approval and, when a test deliberately relaxes that approval, by the native target route itself.
+
+The suite tests invalid arguments, sanitized provider errors, unapproved reads, every documented mutation, changed schemas/routes/duplicate IDs, native provider disablement and a fresh server with the provider package absent but its approval retained. Unsupported UUID/date-time input schemas stay disabled. A focused configuration test checks actionable approval guidance without echoing input.
+
+See [the reproducible approval and source review](plugin-compatibility.md). The full local Node 24.22.0 check passes **39 test-runner entries** with Python enabled and no skips on Signal K 2.33.0. All **8 real-provider test entries** also pass locally against Signal K 2.32.0 on Node 24.22.0. The suite additionally targets the inherited four-way CI matrix. Remote validation results belong to the issue #4 PR; the earlier checkpoint counts above are historical. This does not establish live alert health, hardware operation, or compatibility with arbitrary providers or future package versions.

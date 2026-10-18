@@ -16,7 +16,7 @@ The independent plugin implements authenticated Streamable HTTP, batched telemet
 
 Only explicitly reviewed GET operations can execute, using the original Signal K bearer identity and native route permissions. Unknown operations remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 
-[PR #1](https://github.com/arodus/signalk-mcp/pull/1) is merged. Integration tests use Signal K 2.33.0 and synthetic providers; CI passed on Node 22 and 24. Production-provider compatibility, product-client connections, live vessel acceptance and publication remain unverified.
+[PR #1](https://github.com/arodus/signalk-mcp/pull/1) is merged. Integration tests use Signal K 2.33.0 and synthetic providers; CI passed on Node 22 and 24. A follow-up validates the published `signalk-alert-manager@0.1.0` read API with synthetic alerts under native admin permissions; see [provider compatibility](docs/plugin-compatibility.md). Product-client connections, live vessel acceptance and publication remain unverified.
 
 README.md and docs describe implemented behavior and verification. This brief defines the intended scope; it does not establish upstream API availability or live compatibility.
 
