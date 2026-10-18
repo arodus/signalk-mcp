@@ -2,13 +2,15 @@
 
 A native, read-only Signal K plugin for vessel telemetry, capability discovery and approved plugin API calls over MCP Streamable HTTP. It runs at `/plugins/signalk-mcp/mcp`, using the existing Signal K server, bearer tokens and permissions. No extra account, key, listener or container is required.
 
+**Scope:** discover, fetch and forward authorized data. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
+
 **Development status:** authenticated telemetry and the read-only capability layer are implemented and integration-tested against Signal K 2.33.0 with synthetic providers. There is no npm/AppStore release or vessel deployment yet.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
 ## Install for evaluation
 
-Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. From the implementation branch:
+Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. From the repository:
 
 ```sh
 npm ci --ignore-scripts --omit=optional
@@ -117,7 +119,7 @@ Example `get_history` arguments, using the exact source ID from your own measure
 
 Each path/source is checked against the current caller's Signal K ACLs before querying and after receiving the result. Responses must match the requested context, time range, paths, sources and aggregation methods; missing source provenance is refused. This guards the standardized History endpoint, which does not itself apply these telemetry ACL checks in the tested server.
 
-Queries require explicit timezone-qualified boundaries, cover at most seven days, and allow at most 16 columns and 2,000 rows/time buckets. Supported methods are `average`, `min`, `max`, `first`, and `last`; `resolution` is in seconds. No energy integration, counter-reset correction or measured-consumption inference is performed.
+Queries require explicit timezone-qualified boundaries, cover at most seven days, and allow at most 16 columns and 2,000 rows/time buckets. Supported methods are `average`, `min`, `max`, `first`, and `last`; `resolution` is in seconds. These are query methods executed by the history provider; the gateway forwards their results and performs no calculations on the values.
 
 Signal K 2.33.0's HTTP parser strips hyphens from history path/source expressions. This implementation rejects those spellings rather than querying a changed identifier. Providers that omit `$source` in response columns are unsupported. This is not broad compatibility evidence for existing production history plugins.
 
@@ -129,7 +131,7 @@ The MCP endpoint is stateless: GET/DELETE return 405, each POST has an independe
 
 Provider requests derive their destination from the accepted local server socket, never client input or proxy headers. TLS certificate verification remains enabled; self-signed/name-mismatched loopback certificates and non-TCP/socket-activated hosting are currently unsupported for HTTP-backed capabilities. Core telemetry remains independent of these calls. Test reverse-proxy/TLS deployments before use.
 
-Authentication/read authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; only Signal K 2.33.0 is currently verified. Sandbox execution, Container Manager integration, writes/control, OAuth, validated energy calculations and publishing remain future work.
+Authentication/read authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; only Signal K 2.33.0 is currently verified. OAuth interoperability and publishing remain future work. Calculations, sandbox execution, Container Manager integration and writes/control are outside scope.
 
 ## Development
 
