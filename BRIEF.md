@@ -1,5 +1,11 @@
 > Original project brief. Statements about implementation status and prior art below describe the handoff, not the current release. See README.md and docs for current behavior, verification and decisions. Current direction: continue this independent plugin with read-only capability discovery and existing Signal K permissions.
 
+## Current implementation checkpoint (2026-10-18)
+
+The independent plugin implements authenticated Streamable HTTP, batched telemetry, vessel snapshots, legacy notification reads, source-specific standardized history, a compact capability registry, public feature discovery, and on-demand plugin OpenAPI inspection. Only explicitly reviewed GET operations can execute, using the original Signal K bearer identity and native route permissions. Unknown operations remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
+
+README.md, docs/capabilities.md and docs/verification.md are the authority for implemented behavior and verification. AppStore publication, live vessel acceptance, broad production-provider compatibility, OAuth, control operations and sandbox execution remain incomplete. The following original handoff is retained as the longer-term brief.
+
 # Project Handoff: Native Signal K MCP Plugin
 
 **Project name:** `signalk-mcp` (provisional)  
