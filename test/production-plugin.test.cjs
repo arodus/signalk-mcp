@@ -63,7 +63,7 @@ async function start(t, installed = true) {
       },
     }),
   );
-  const configuration = { allowedHosts: [host], pluginOperations: [approval] };
+  const configuration = { pluginOperations: [approval] };
   const providerConfig = {
     notifiers: [],
     defaults: { soundEnabled: false, speechEnabled: false, notifiers: [] },

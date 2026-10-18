@@ -95,7 +95,7 @@ Use the official MCP TypeScript SDK and stateless Streamable HTTP where supporte
 
 Avoid one tool per measurement or plugin operation. Any future MCP resources must follow the same read-only and authorization boundaries.
 
-Preserve Host/Origin validation, sanitized errors, bounded requests/results, deadlines and concurrency limits. Never log or publish tokens, signing secrets or sensitive vessel data.
+Use Signal K’s server-wide CORS policy for browser requests without separate plugin host/origin lists. Preserve bearer authentication, sanitized errors, bounded requests/results, deadlines and concurrency limits. Never log or publish tokens, signing secrets or sensitive vessel data.
 
 ## 6. Data contract
 

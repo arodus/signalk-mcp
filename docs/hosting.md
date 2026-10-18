@@ -4,7 +4,7 @@ The gateway uses the address, port and TLS state of the server socket that accep
 
 ## TLS at a reverse proxy
 
-Terminate HTTPS at a trusted proxy and forward to Signal K's private HTTP TCP listener. Preserve the Authorization header and forward a fixed, expected Host; configure that exact Host (including its port, if present) in `allowedHosts`. Configure any required browser Origin explicitly in `allowedOrigins`; native clients can omit Origin. Signal K's CORS policy still applies.
+Terminate HTTPS at a trusted proxy and forward to Signal K's private HTTP TCP listener. Preserve the Authorization header. The gateway has no separate Host allowlist. Browser access follows Signal K’s CORS response, so configure any origin restrictions in the server’s security settings. Clients without an Origin header still require bearer authentication.
 
 For example, with public `https://boat.example` and Signal K bound behind the proxy at port 3000, a proxy location can use:
 
@@ -18,7 +18,7 @@ location /plugins/signalk-mcp/mcp {
 }
 ```
 
-Set `allowedHosts` to `["boat.example"]`. Keep the backend private, serve the public site with a valid TLS certificate, and do not replace the caller's bearer with a shared proxy credential. A proxy must propagate disconnects so the gateway can cancel pending reads. This configuration illustrates the tested topology; the automated fixture uses Node HTTPS, not an installed nginx instance.
+Keep the backend private, serve the public site with a valid TLS certificate, and do not replace the caller's bearer with a shared proxy credential. A proxy must propagate disconnects so the gateway can cancel pending reads. This configuration illustrates the tested topology; the automated fixture uses Node HTTPS, not an installed nginx instance.
 
 The gateway calls the private HTTP listener directly. `localTlsServerName` is unnecessary in this topology and has no effect on an unencrypted backend socket. Forwarding `X-Forwarded-Proto: https` does not turn the internal request into HTTPS.
 
@@ -32,8 +32,6 @@ Without extra configuration, the certificate must cover the accepted socket's lo
 
 ```json
 {
-  "allowedHosts": ["boat.example:3443"],
-  "allowedOrigins": [],
   "localTlsServerName": "boat.example",
   "pluginOperations": []
 }
@@ -45,7 +43,7 @@ Without extra configuration, the certificate must cover the accepted socket's lo
 
 Untrusted issuers, name mismatches and unavailable local listeners return sanitized `UPSTREAM_UNAVAILABLE` errors for affected HTTP capabilities. Missing TCP address/port returns `LOCAL_HTTP_UNAVAILABLE`. The gateway does not retry another destination, follow redirects or disable verification. Non-TCP listeners remain unsupported; socket activation is usable only if the accepted socket provides a reachable local TCP address/port and has not been separately validated.
 
-`test/hosting.test.cjs` generates an ephemeral private PKI and starts real Signal K instances in child processes. It checks TLS termination, trusted native IP and DNS certificates, missing/wrong verification names, and an untrusted issuer. Successful topologies exercise initialization, tool listing, core telemetry, plugin discovery, plugin reads and standard History forwarding with the original Signal K identity. Tests also cover spoofed routing headers, Host/Origin rejection, unavailable listeners and upstream HTTP socket cancellation on client disconnect. Existing tests cover redirects, bounded responses and permission revocation.
+`test/hosting.test.cjs` generates an ephemeral private PKI and starts real Signal K instances in child processes. It checks TLS termination, trusted native IP and DNS certificates, missing/wrong verification names, and an untrusted issuer. Successful topologies exercise initialization, tool listing, core telemetry, plugin discovery, plugin reads and standard History forwarding with the original Signal K identity. Tests also cover spoofed routing headers, alternate Host acceptance and native CORS origin rejection, unavailable listeners and upstream HTTP socket cancellation on client disconnect. Existing tests cover redirects, bounded responses and permission revocation.
 
 The fixture is synthetic. Cancelling a provider HTTP socket does not establish cancellation of work already running in a provider's database or other backend. Test teardown explicitly exits child processes after assertions because upstream Signal K retains handles; whole-server lifecycle cleanup remains issue #7. No vessel or public endpoint is used.
 
@@ -56,3 +54,11 @@ node --test --test-force-exit test/hosting.test.cjs
 ```
 
 The test requires `openssl` on PATH. The normal CI matrix includes it for both supported Signal K versions.
+
+## Browser policy and upgrades
+
+The plugin validates that a supplied Origin is a serialized HTTP(S) origin, then uses the `Access-Control-Allow-Origin` response header set by Signal K’s CORS middleware. An exact match or `*` permits the request to continue to bearer authentication; missing or nonmatching permission returns `ORIGIN_DENIED`. Opaque `null` origins, paths, credentials and malformed origin lists are rejected even under a wildcard policy. Incoming headers cannot supply this server-side CORS decision. The plugin does not read the host’s security file or signing keys.
+
+Signal K 2.32.0/2.33.0 use wildcard CORS when no origin restriction is configured. That permits browser clients from any valid HTTP(S) origin, provided they have a valid Signal K bearer token. This change delegates browser policy to the host; it does not claim the former plugin-local Host/DNS-rebinding restriction. A reverse proxy’s response-only CORS additions cannot authorize a request inside the plugin: configure the policy in Signal K itself.
+
+Existing `allowedHosts` and `allowedOrigins` plugin fields are ignored. Existing approvals, TLS hostname and staleness settings are preserved. If the retired browser list was restricting access, transfer that restriction to Signal K’s CORS settings before upgrading. Tests cover explicit host CORS grants/denials, the host’s default wildcard policy, malformed origins, forged incoming CORS headers and authentication under permitted origins on both supported server versions.

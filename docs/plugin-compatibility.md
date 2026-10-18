@@ -24,7 +24,7 @@ The endpoint does not apply Signal K telemetry path/source ACL filtering. The ex
 
 ## Configure and call
 
-After installing and enabling the reviewed provider, add this entry to the gateway's configuration alongside the existing `allowedHosts`:
+After installing and enabling the reviewed provider, add this entry to the gateway's configuration using `pluginOperations`:
 
 ```json
 {

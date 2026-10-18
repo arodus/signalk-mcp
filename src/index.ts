@@ -2,22 +2,22 @@ import type { Plugin, PluginRouter } from "@signalk/server-api";
 import type { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { authenticate, GatewayError, type App } from "./auth.js";
-import { configSchema, schema, type Config } from "./config.js";
+import { configSchema, schema, uiSchema, type Config } from "./config.js";
 import { localGet } from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
 import { boundedJson } from "./json.js";
+import { validateOrigin } from "./origin.js";
 
 function pluginFactory(app: App): Plugin {
   let config: Config | undefined;
   const active = new Set<ReturnType<typeof createMcpServer>>();
   const pending = new Map<AbortController, Response>();
-  const guard = (req: Request) => {
+  const guard = (req: Request, res: Response) => {
     if (!config) throw new GatewayError("PLUGIN_UNAVAILABLE", 503);
-    if (!config.allowedHosts.includes(req.headers.host ?? ""))
-      throw new GatewayError("HOST_DENIED", 403);
-    const origin = req.get("origin");
-    if (origin !== undefined && !config.allowedOrigins.includes(origin))
-      throw new GatewayError("ORIGIN_DENIED", 403);
+    validateOrigin(
+      req.get("origin"),
+      res.getHeader("Access-Control-Allow-Origin"),
+    );
     authenticate(app, req.get("authorization"));
     return config;
   };
@@ -38,7 +38,7 @@ function pluginFactory(app: App): Plugin {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const settings = guard(req);
+      const settings = guard(req, res);
       if (req.method !== "POST") {
         res.setHeader("Allow", "POST");
         res.status(405).end();
@@ -111,12 +111,13 @@ function pluginFactory(app: App): Plugin {
     name: "Signal K MCP",
     description: "Authenticated read-only MCP vessel telemetry",
     schema,
+    uiSchema,
     start(options: unknown) {
       config = undefined;
       const parsed = configSchema.safeParse(options);
       if (!parsed.success) {
         app.setPluginError(
-          "Invalid MCP configuration: check allowedHosts, allowedOrigins, pluginOperations (unique reviewed GET approvals), localTlsServerName and staleAfterSeconds",
+          "Invalid MCP configuration: check pluginOperations (unique reviewed GET approvals), localTlsServerName and staleAfterSeconds",
         );
         return;
       }

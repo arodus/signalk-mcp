@@ -39,11 +39,11 @@ Official references: [registry scoring and sandbox](https://github.com/SignalK/s
 
 ## Upgrade, rollback and removal
 
-The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synthetic admin account: the staleness setting changed from 300 to 600, survived reload, and was restored to 300; disabling showed `Stopped`, and re-enabling restored the ready status. The [captured configuration](images/native-plugin-config.png) contains only loopback/fixture data. The separate UI fixture installed the optional published admin UI package and linked its hoisted directory into the location expected by the server. This verifies the form workflow, not a live-vessel configuration or the full installation layout of every host.
+The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synthetic admin account: the staleness setting changed from 300 to 600, survived reload, and was restored to 300; disabling showed `Stopped`, and re-enabling restored the ready status. The [captured configuration](images/native-plugin-config.jpg) shows only the complete settings card, including Save Configuration, with no approved plugin reads. The refreshed labels and help text were checked at 1280-pixel desktop and 390-pixel mobile widths; saving 600 seconds, reloading and restoring 300 seconds succeeded. The separate UI fixture installed the optional published admin UI package and linked its hoisted directory into the location expected by the server. This verifies the form workflow, not a live-vessel configuration or the full installation layout of every host.
 
 Before changing an existing installation, save the current package version and the plugin's configuration through the host's normal backup process. Keep provider approvals for review; a provider upgrade can change a route's behavior or permissions.
 
-Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, trusted Host/Origin settings, security-enabled state and reviewed GET approvals before enabling. Repeat one allowed read, one denied-path read and a write-refusal check. The plugin stores no historical values or private account database to migrate.
+Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, Signal K’s browser-origin policy, security-enabled state and reviewed GET approvals before enabling. Repeat one allowed read, one denied-path read and a write-refusal check. The plugin stores no historical values or private account database to migrate.
 
 For rollback, disable the plugin, reinstall the previously retained tarball/version with scripts disabled, restore its compatible configuration and restart. Recheck permissions before enabling. Do not assume a changed schema or provider approval remains compatible.
 
@@ -54,7 +54,7 @@ For removal, disable the plugin, run `npm uninstall signalk-mcp` in the Signal K
 This procedure is prepared only. Do not connect to a vessel or install the package without explicit access/deployment authorization.
 
 1. Record the approved vessel/server, exact package hash, Signal K/Node versions, client and permitted read-only time window. Confirm existing native security and a dedicated least-privilege token without exposing it in logs or screenshots.
-2. Configure exact Host/Origin rules and trusted TLS. Start with no generic plugin GET approvals.
+2. Configure Signal K’s browser-origin policy and trusted TLS. Start with no generic plugin GET approvals.
 3. Initialize MCP, list tools/capabilities and read a small allowlisted set of current values. Compare value, unit, timestamp and source with the authorized native Signal K view. Preserve zero, null/missing and inaccessible distinctions without inferring equipment health.
 4. Verify a denied path remains unavailable and malformed/missing credentials are rejected. Verify unapproved operations return a refusal; do not call a live control or notification mutation endpoint to test this.
 5. If separately approved, read a short historical interval using exact permitted paths/sources. Compare the provider response unchanged. Add a generic GET approval only after reviewing that exact provider version for authorization and side effects.

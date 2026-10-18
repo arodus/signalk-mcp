@@ -28,20 +28,20 @@ Restart Signal K, configure the plugin in Plugin Config, then enable it:
 
 ```json
 {
-  "allowedHosts": ["boat.example:3000"],
-  "allowedOrigins": [],
   "staleAfterSeconds": 300,
   "pluginOperations": []
 }
 ```
 
-`allowedHosts` contains exact incoming Host headers, including ports. Behind a proxy, configure the Host it forwards. Forwarded host headers do not determine trust. An empty `allowedOrigins` rejects present Origin headers and permits native clients that omit Origin. Browser use also depends on Signal K's CORS policy.
+The plugin needs no separate host or browser-origin lists. Browser requests follow Signal K’s server-wide CORS policy; configure browser access in Signal K’s security settings. A wildcard policy permits any valid HTTP(S) origin, while an explicit list restricts it. Every MCP request still requires its own valid bearer token; cookies alone do not grant access. Incoming Host and proxy headers never select an outbound destination.
+
+Older `allowedHosts` and `allowedOrigins` plugin settings are ignored for upgrade compatibility. Move any browser-origin restrictions you need to Signal K’s server-wide CORS configuration before upgrading; the old plugin list no longer restricts access.
 
 Enable Signal K security and supply an existing user/device token in `Authorization: Bearer <token>` on every request. Guest reads and security-disabled servers are refused. The plugin does not create tokens or read signing secrets. Use Signal K TLS or a trusted TLS reverse proxy for remote access.
 
-The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. Its loopback address and test provider are examples, not vessel settings.
+The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. It shows the default settings with no approved plugin reads.
 
-![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.png)
+![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.jpg)
 
 See [package verification, upgrade/removal and release acceptance](docs/release-readiness.md) before preparing an installation candidate.
 

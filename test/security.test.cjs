@@ -293,3 +293,63 @@ test("oversized results stop traversal before later values are serialized", () =
   assert.throws(() => boundedJson(repeated, 256 * 1024), /OUTPUT_LIMIT/);
   assert.equal(visited, false);
 });
+
+test("browser origins follow the host CORS decision and malformed origins fail closed", () => {
+  const { validateOrigin } = require("../dist/origin.js");
+  validateOrigin(undefined, undefined);
+  validateOrigin("https://client.example", "https://client.example");
+  validateOrigin("https://client.example", "*");
+  for (const allowed of [
+    undefined,
+    "https://other.example",
+    ["https://client.example"],
+  ])
+    assert.throws(
+      () => validateOrigin("https://client.example", allowed),
+      /ORIGIN_DENIED/,
+    );
+  for (const origin of [
+    "",
+    "null",
+    "file:///tmp/client",
+    "https://client.example/",
+    "https://user@client.example",
+    "https://client.example/path",
+    "https://client.example https://other.example",
+  ])
+    for (const allowed of [origin, "*"])
+      assert.throws(() => validateOrigin(origin, allowed), /ORIGIN_DENIED/);
+});
+
+test("configuration retires only the old network lists without losing existing approvals", () => {
+  const { configSchema, schema } = require("../dist/config.js");
+  const config = {
+    pluginOperations: [
+      {
+        pluginId: "fixture",
+        operationId: "read",
+        method: "GET",
+        path: "/read",
+        readOnly: true,
+      },
+    ],
+    localTlsServerName: "boat.example",
+    staleAfterSeconds: 600,
+  };
+  assert.deepEqual(
+    configSchema.parse({
+      allowedHosts: ["old:3000"],
+      allowedOrigins: ["https://old.example"],
+      ...config,
+    }),
+    configSchema.parse(config),
+  );
+  assert.equal(configSchema.safeParse({}).success, true);
+  assert.equal(configSchema.safeParse({ unrecognized: true }).success, false);
+  assert.equal(
+    configSchema.safeParse({ ...config, staleAfterSeconds: 0 }).success,
+    false,
+  );
+  assert.equal("allowedHosts" in schema.properties, false);
+  assert.equal("allowedOrigins" in schema.properties, false);
+});

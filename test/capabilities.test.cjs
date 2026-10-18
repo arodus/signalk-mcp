@@ -132,28 +132,24 @@ test("OpenAPI approval binds method, path and permission; params cannot escape r
   }
   assert.equal(
     configSchema.safeParse({
-      allowedHosts: ["localhost"],
       pluginOperations: [approval, approval],
     }).success,
     false,
   );
   assert.equal(
     configSchema.safeParse({
-      allowedHosts: ["localhost"],
       pluginOperations: [{ ...approval, method: "POST" }],
     }).success,
     false,
   );
   assert.equal(
     configSchema.safeParse({
-      allowedHosts: ["localhost"],
       pluginOperations: [{ ...approval, readOnly: false }],
     }).success,
     false,
   );
   assert.equal(
     configSchema.safeParse({
-      allowedHosts: ["localhost"],
       pluginOperations: [{ ...approval, pluginId: "signalk-mcp" }],
     }).success,
     false,
@@ -358,7 +354,6 @@ test("invalid approval configuration reports field guidance without leaking inpu
     setPluginError: (message) => errors.push(message),
   });
   plugin.start({
-    allowedHosts: ["localhost:3000"],
     pluginOperations: [
       { ...approval, method: "POST", operationId: "synthetic-private-value" },
     ],
@@ -473,7 +468,6 @@ test("TLS verification names accept DNS names and reject destination syntax", ()
   ])
     assert.equal(
       configSchema.safeParse({
-        allowedHosts: ["localhost"],
         localTlsServerName: name,
       }).success,
       false,
@@ -482,7 +476,6 @@ test("TLS verification names accept DNS names and reject destination syntax", ()
   for (const name of ["localhost", "boat.example", "Signal-K.example"])
     assert.equal(
       configSchema.safeParse({
-        allowedHosts: ["localhost"],
         localTlsServerName: name,
       }).success,
       true,
