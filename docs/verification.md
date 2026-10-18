@@ -54,3 +54,13 @@ See [provider support matrix and reproductions](history-providers.md). The serve
 The suite covers input bounds, pagination, unapproved reads, all documented mutations, disabled/absent providers, document changes and operation ID collisions. The bounded OpenAPI adapter now handles missing operation IDs and explicit strings up to 512 characters, as required by Alert Center; larger schemas still fail closed. README, brief and [provider compatibility documentation](plugin-compatibility.md) describe the exact contract.
 
 On Node 24.22.0, all **41 test entries** pass with no skips against each supported Signal K/ServerAPI version (2.32.0 and 2.33.0), including Python MCP 1.26.0. The primary run passes TypeScript, ESLint and Prettier; `npm pack --dry-run` and `git diff --check` also pass. CI checks the four server/Node combinations, including packaging; consult PR #16 for its current remote results. No live notification delivery, vessel deployment or publication is involved.
+
+## Product-client and OAuth decision follow-up (issue #6)
+
+Installed **Codex CLI 0.163.0-alpha.10.2** (through its app-server MCP runtime) and **Hermes Agent 0.22.2**, commit `d923a5eb487a17c0a68801bba9ef0f56c81040a8` (CLI discovery plus its native registered handlers), both pass the opt-in product tests. Each initializes, lists seven tools, reads synthetic zero with units, filters a denied path, reports an unapproved write as `OPERATION_DISABLED`, and reads again after explicit disconnect/reconnection. Codex uses a new ephemeral thread; Hermes shuts down and re-discovers its fixture connection. No model or live-vessel call is made.
+
+On Node **24.22.0**, the complete suite passes **58 entries with no skips** against both Signal K/ServerAPI **2.32.0** and **2.33.0**, including both products, Python MCP 1.26.0, unchanged Alert Center and real disposable InfluxDB/History provider. Strict TypeScript, ESLint and Prettier pass. These counts are for the issue #6 branch based on merged main; the separate issue #5 hosting PR adds its own tests.
+
+The [client matrix](clients.md) separates these runtime checks from untested desktop/web UI acceptance and documentation-only Claude support. Product binaries are opt-in local dependencies; ordinary CI explicitly skips those two checks while exercising both SDK clients. Abrupt network outage recovery and interactive authorization remain untested.
+
+[ADR 002](decisions/002-client-authentication.md) retains native bearer mode and documents the blockers to OAuth: a supported Signal K audience/delegation/lifecycle contract is not established. No second identity system, signing-secret access, OAuth implementation or public submission is introduced.

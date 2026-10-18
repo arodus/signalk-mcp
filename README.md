@@ -125,7 +125,7 @@ Signal K 2.32.0 and 2.33.0's HTTP parser strips hyphens from history path/source
 
 ## Compatibility and limits
 
-Validated transport: MCP TypeScript SDK 1.32.1, protocol through `2025-11-25`, plus Python MCP SDK 1.26.0. Product UI compatibility with ChatGPT, Claude, Codex or Hermes is not established. OAuth discovery is not implemented.
+Validated transport: MCP TypeScript SDK 1.32.1, protocol through `2025-11-25`, plus Python MCP SDK 1.26.0. Installed Codex CLI/app-server and Hermes CLI/registry runtimes also pass isolated product-client tests; see the [dated client matrix and setup](docs/clients.md). Desktop/web UI acceptance remains untested. OAuth discovery is not implemented; [ADR 002](docs/decisions/002-client-authentication.md) records the native identity/delegation gap.
 
 The MCP endpoint is stateless: GET/DELETE return 405, each POST has an independent server, and there is no event stream or session resumption. Limits: eight concurrent requests, 64 KiB parsed requests, 256 KiB results, 15-second HTTP request deadline, five seconds and 256 KiB per provider response, bounded discovery and model traversal. Signal K parses incoming JSON before plugin checks. Shared event-loop calls cannot be preempted by these deadlines; this is not process isolation.
 
