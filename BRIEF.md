@@ -16,7 +16,7 @@ The independent plugin implements authenticated Streamable HTTP, batched telemet
 
 Only explicitly reviewed GET operations can execute, using the original Signal K bearer identity and native route permissions. Unknown operations remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 
-[PR #1](https://github.com/arodus/signalk-mcp/pull/1) is merged. Integration tests use Signal K 2.33.0 and synthetic providers; CI passed on Node 22 and 24. The production History provider `signalk-to-influxdb` 1.11.0 is tested unchanged through the standard v2 adapter under Signal K 2.32.0/2.33.0; see [history provider verification](docs/history-providers.md). Product-client connections, live vessel acceptance and publication remain unverified.
+Authenticated reads, standard v2 history and reviewed plugin reads are verified under Signal K 2.32.0/2.33.0 on Node 22/24. The unchanged published packages `signalk-to-influxdb` 1.11.0 and `signalk-alert-center` 0.4.1 are exercised with synthetic data; see [history verification](docs/history-providers.md) and [plugin compatibility](docs/plugin-compatibility.md). Product-client connections, live vessel acceptance and publication remain unverified.
 
 README.md and docs describe implemented behavior and verification. This brief defines the intended scope; it does not establish upstream API availability or live compatibility.
 

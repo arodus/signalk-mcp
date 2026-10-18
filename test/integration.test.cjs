@@ -170,7 +170,7 @@ test(
           mdns: false,
           enforceDataTimeouts: false,
           pipedProviders: [],
-          interfaces: { plugins: true },
+          interfaces: { plugins: true, "nmea-tcp": false, tcp: false },
           security: { strategy: "./tokensecurity" },
         },
         defaults: {

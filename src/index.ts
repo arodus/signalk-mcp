@@ -103,7 +103,7 @@ function pluginFactory(app: App): Plugin {
       const parsed = configSchema.safeParse(options);
       if (!parsed.success) {
         app.setPluginError(
-          "Configure allowedHosts, allowedOrigins and staleAfterSeconds",
+          "Invalid MCP configuration: check allowedHosts, allowedOrigins, pluginOperations (unique reviewed GET approvals) and staleAfterSeconds",
         );
         return;
       }

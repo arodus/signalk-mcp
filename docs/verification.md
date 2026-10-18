@@ -21,7 +21,7 @@ The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and ch
 
 ## Remaining acceptance
 
-All telemetry and providers are synthetic. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements with an owner's existing token remains unverified. The History follow-up below exercises one independently maintained production provider using synthetic data and verifies standard v2 forwarding.
+All test data is synthetic. The unchanged published History provider and Alert Center package are exercised as described below. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements remains unverified. Compatibility evidence applies to the exact tested packages and operations.
 
 There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, TLS/reverse-proxy combinations, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. In particular, loopback TLS certificate mismatch fails closed for HTTP-backed capabilities.
 
@@ -46,3 +46,11 @@ On Node **24.22.0**, both Signal K/ServerAPI **2.32.0** and **2.33.0** pass **45
 The production provider now works through the standard adapter without requiring optional `$source`. Its extra `sourceRef` metadata is forwarded unchanged, never treated as an authorization alias. Tests cover explicit and omitted source/resolution, standard time-range alternatives, dedicated/generic tool parity, exact JSON forwarding, zero/null preservation, bucket timestamps before the start, source denial, no-ACL checks and revocation. Query/row/byte limits and malformed response checks remain enforced. The upstream hyphen-stripping bug still reproduces and those identifiers remain rejected before querying.
 
 See [provider support matrix and reproductions](history-providers.md). The server-parser upstream proposal remains a local draft. Docker is required only for this optional local integration test and CI fixture, never for the gateway runtime. No upstream message, release, deployment or live-vessel operation was performed.
+
+## Independent plugin compatibility follow-up (issue #4)
+
+`test/production-plugin.test.cjs` loads the unchanged published `signalk-alert-center@0.4.1` package in a real temporary Signal K server and seeds synthetic notification deltas with no notifiers or audio. It discovers the provider OpenAPI, uses the route-derived `get.definitions` identifier and forwards paginated JSON unchanged. The example approval requires admin because the native readonly endpoint does not apply telemetry path/source ACL filtering. Tests explicitly distinguish that gateway restriction from native readonly access and native write refusal.
+
+The suite covers input bounds, pagination, unapproved reads, all documented mutations, disabled/absent providers, document changes and operation ID collisions. The bounded OpenAPI adapter now handles missing operation IDs and explicit strings up to 512 characters, as required by Alert Center; larger schemas still fail closed. README, brief and [provider compatibility documentation](plugin-compatibility.md) describe the exact contract.
+
+On Node 24.22.0, all **41 test entries** pass with no skips against each supported Signal K/ServerAPI version (2.32.0 and 2.33.0), including Python MCP 1.26.0. The primary run passes TypeScript, ESLint and Prettier; `npm pack --dry-run` and `git diff --check` also pass. CI checks the four server/Node combinations, including packaging; consult PR #16 for its current remote results. No live notification delivery, vessel deployment or publication is involved.
