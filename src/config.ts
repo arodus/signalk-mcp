@@ -100,9 +100,9 @@ export const schema = {
     },
     localTlsServerName: {
       type: "string",
-      title: "Signal K certificate name (optional)",
+      title: "HTTPS certificate hostname (optional)",
       description:
-        "For Signal K’s own HTTPS listener: the DNS name on its certificate. Leave blank to verify the connection’s IP address.",
+        "Used to verify the plugin’s requests back to Signal K when Signal K itself serves HTTPS. Enter the hostname on its certificate, for example boat.example, if the certificate does not cover the local IP address. Leave blank for HTTP or HTTPS handled by a reverse proxy. Do not enter https://, a port or a certificate file path.",
       maxLength: 253,
     },
     staleAfterSeconds: {
