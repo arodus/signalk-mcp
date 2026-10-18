@@ -1,0 +1,8 @@
+{
+  "name": "mcp-fixture",
+  "version": "1.0.0",
+  "main": "index.cjs",
+  "keywords": [
+    "signalk-node-server-plugin"
+  ]
+}
