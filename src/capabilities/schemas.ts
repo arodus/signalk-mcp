@@ -45,6 +45,9 @@ export const notificationsInput = z
     limit: z.number().int().min(1).max(64).default(32),
   })
   .strict();
+export const notificationInput = z
+  .object({ id: z.string().min(1).max(256) })
+  .strict();
 // Signal K 2.33's HTTP parser strips hyphens from history expressions. Reject
 // unsupported spellings rather than silently querying a different path/source.
 const historyPath = pathSchema.refine((path) => /^[a-z0-9_.]+$/i.test(path));

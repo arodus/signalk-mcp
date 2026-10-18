@@ -82,13 +82,14 @@ export function canRead(
   principal: Principal,
   path: string,
   source: string,
+  context = "vessels.self",
 ): boolean {
   if (!["readonly", "readwrite", "admin"].includes(principal.permissions))
     return false;
   return (
     security(app).checkACL(
       principal.identifier,
-      "vessels.self",
+      context,
       path,
       source,
       "read",
@@ -103,11 +104,12 @@ export function canReadAllSources(
   app: App,
   principal: Principal,
   path: string,
+  context = "vessels.self",
 ): boolean {
   const strategy = security(app);
   return (
     typeof strategy.anyACLs === "function" &&
     strategy.anyACLs() === false &&
-    canRead(app, principal, path, "")
+    canRead(app, principal, path, "", context)
   );
 }

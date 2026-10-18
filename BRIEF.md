@@ -12,7 +12,7 @@ Authorization, input/response validation, bounded selection, pagination and MCP 
 
 ## 1. Current implementation
 
-The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy notification reads, standard v2 history with native permission checks, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection.
+The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy and v2 notification reads, standard v2 history with native permission checks, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection.
 
 Only explicitly reviewed GET operations can execute, using the original Signal K bearer identity and native route permissions. Unknown operations remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 
@@ -87,6 +87,8 @@ Use the official MCP TypeScript SDK and stateless Streamable HTTP where supporte
 | `get_values`          | Fetch multiple current measurements                            |
 | `get_vessel_state`    | Fetch a compact selection of current vessel measurements       |
 | `get_history`         | Fetch historical results from a compatible registered provider |
+| `list_notifications`  | Fetch authorized v2 notification registry records              |
+| `get_notification`    | Fetch one authorized v2 notification record                    |
 | `list_capabilities`   | Discover core and installed-plugin capabilities                |
 | `describe_capability` | Describe schemas, permissions, availability and approval state |
 | `execute_capability`  | Invoke a supported authorized read-only operation              |
@@ -136,7 +138,7 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 
 ### Read-only coverage
 
-- Investigate a permission-aware adapter for v2 notification registry reads.
+- V2 notification registry reads use the released `/signalk/v2/api/notifications` endpoint with native context/path/source permission checks. Forward records unchanged; omit records whose source access cannot be verified. This does not implement the proposed alerts subsystem.
 - Keep acknowledge, silence, raise, clear and other mutations outside scope.
 - Add other read adapters only where authorization and data provenance can be established.
 

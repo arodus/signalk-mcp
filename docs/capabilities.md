@@ -20,7 +20,21 @@ The standardized History route in the inspected 2.33.0 runtime selects a provide
 
 The server's expression sanitizer removes hyphens even though source IDs can contain them. We reject unsupported expressions rather than silently changing identifiers. A future upstream fix or separately verified direct-provider adapter is needed to broaden support. No direct InfluxDB queries or guessed source provenance are used. Provider work may continue after HTTP cancellation; the gateway cannot cancel an upstream implementation that does not support it.
 
-Notification reads use legacy `notifications.*` model leaves through the same path/source ACLs. No raise/acknowledge/silence/clear operations are exposed. Full v2 notification registry support is separate future work.
+## Notifications boundary
+
+The released `/signalk/v2/api/notifications` collection is distinct from the proposed `/signalk/v2/api/alerts` subsystem. The adapter uses only the collection GET with the original bearer, including for single-record lookup. It does not depend on pending upstream PRs, enable core management, or call any lifecycle action. Legacy `signalk.notifications/list` remains separate from `list_notifications` and `get_notification`; both new operations share the dedicated MCP tools' implementation.
+
+In the inspected 2.32.0 and 2.33.0 packages, collection records contain `context`, `path` and `value`. They omit the source and do not apply telemetry ACLs per record. Native integration reproduces this by showing that a denied record is present in the direct GET response but absent from the MCP result. HTTP authentication alone is insufficient.
+
+After fetching, the gateway reauthenticates and checks each record using Signal K's own `checkACL` with its context, notification path and source. Empty native context and the server's own context resolve to `vessels.self` for authorization only; the forwarded context is unchanged. Other valid contexts keep their own ACL scope. Without configured ACLs, a literal native `anyACLs() === false` plus a read grant suffices. Otherwise the adapter uses public `getPath()` to find source provenance by exact equality of the complete registry value with current/source-specific model values. Every matching source must be allowed. It does not guess a source from an ID, accept a caller-provided source assertion, or treat an empty-source grant as access to all sources. Admin identities still pass the same ACL checks.
+
+Records with no matching model value/source, unknown context, changed values or denied source matches are omitted. This can omit older records no longer represented in the model; that is an explicit limitation, not evidence of an empty native registry. Source-specific model entries are bounded to 256 per path. No omitted-record count or denied ID is returned. Absent and denied single-record lookups return the same `NOTIFICATION_UNAVAILABLE` error.
+
+Records are forwarded without field projection or mutation. Optional `value.id`, status, position, creation time and source/timestamp fields are neither required nor synthesized. With core management disabled, the server's collection can use path-based or handler-supplied keys and omit core status; single-record lookup still works through that collection even though native `GET /:id` returns 501. IDs never enter the upstream URL. The adapter bounds the collection to 20,000 entries and the existing HTTP 256 KiB/5-second limits, sorts authorized IDs and applies offset/limit pagination (up to 64 records). Pagination is not a stable snapshot.
+
+`describe_capability` probes registry reads and reports unavailable/invalid upstream responses on those two operations while leaving the legacy operation enabled. The Notifications API has an open strict-OpenAPI-validation issue; this explicit adapter does not parse that document or infer permissions from it. No raise, acknowledge, silence, clear or update action is exposed.
+
+References: [Notifications API documentation](https://demo.signalk.org/documentation/Developing/REST_APIs/Notifications_API.html), [released v2.33.0 routes](https://github.com/SignalK/signalk-server/blob/v2.33.0/src/api/notifications/index.ts), [record properties](https://github.com/SignalK/signalk-server/blob/v2.33.0/src/api/notifications/alarm.ts), [OpenAPI issue #2767](https://github.com/SignalK/signalk-server/issues/2767), and the separate [proposed alerts REST API #3011](https://github.com/SignalK/signalk-server/pull/3011).
 
 ## Sources and tests
 

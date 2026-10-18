@@ -12,7 +12,7 @@ const serverRequire = createRequire(
     ? path.join(process.env.MCP_TEST_SERVER_DIR, "package.json")
     : require.resolve("signalk-server/package.json"),
 );
-async function start(gateway = true) {
+async function start(gateway = true, { manageNotifications = true } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "signalk-mcp-runtime-"));
   const socket = net.createServer();
   await new Promise((resolve) => socket.listen(0, "127.0.0.1", resolve));
@@ -74,6 +74,7 @@ async function start(gateway = true) {
         port,
         mdns: false,
         enforceDataTimeouts: false,
+        notifications: { manageNotifications },
         pipedProviders: [],
         interfaces: { plugins: true, "nmea-tcp": false, tcp: false },
         security: { strategy: "./tokensecurity" },
@@ -172,6 +173,7 @@ async function start(gateway = true) {
   }
   return {
     server,
+    tokens,
     configuration,
     seed,
     request,

@@ -136,7 +136,7 @@ async function codexClient(binary, endpoint, bearer, t) {
         detail: "toolsAndAuthOnly",
       });
       assert.equal(inventory.data.length, 1);
-      assert.equal(Object.keys(inventory.data[0].tools).length, 7);
+      assert.equal(Object.keys(inventory.data[0].tools).length, 9);
       const call = (tool, args) =>
         rpc("mcpServer/tool/call", {
           threadId,
@@ -156,7 +156,7 @@ async function codexClient(binary, endpoint, bearer, t) {
       await rpc("thread/unsubscribe", { threadId });
     }
     t.diagnostic(
-      `${version}: initialized, seven tools, zero/unit preserved, ACL filtering, tool error, fresh-thread reconnect`,
+      `${version}: initialized, nine tools, zero/unit preserved, ACL filtering, tool error, fresh-thread reconnect`,
     );
   } finally {
     lines?.close();

@@ -47,7 +47,7 @@ See [package verification, upgrade/removal and release acceptance](docs/release-
 
 ## Connect and discover
 
-Configure a Streamable HTTP client with your endpoint, for example `https://boat.example/plugins/signalk-mcp/mcp`, and the bearer header. The seven tools keep discovery separate from execution:
+Configure a Streamable HTTP client with your endpoint, for example `https://boat.example/plugins/signalk-mcp/mcp`, and the bearer header. The nine tools keep discovery separate from execution:
 
 | Tool                  | Purpose                                                             |
 | --------------------- | ------------------------------------------------------------------- |
@@ -55,6 +55,8 @@ Configure a Streamable HTTP client with your endpoint, for example `https://boat
 | `get_values`          | Read 1–64 paths with native units, timestamps, source and freshness |
 | `get_vessel_state`    | Read a compact navigation and environment snapshot                  |
 | `get_history`         | Fetch standard v2 History results using Signal K permissions        |
+| `list_notifications`  | Fetch authorized v2 notification registry records, with pagination  |
+| `get_notification`    | Fetch one authorized v2 registry record by its listed ID            |
 | `list_capabilities`   | List core capabilities, installed plugins and advertised APIs       |
 | `describe_capability` | Inspect operation inputs, permissions, support and approval state   |
 | `execute_capability`  | Invoke a core or explicitly approved read-only plugin operation     |
@@ -75,7 +77,13 @@ The same implementation is available through `execute_capability`:
 }
 ```
 
-Core capabilities are `signalk.telemetry`, `signalk.notifications` and `signalk.history`. `signalk.notifications` provides a paginated `list` of authorized `notifications.*` measurement values; it does not expose notification lifecycle commands or the full v2 alarm registry.
+Core capabilities are `signalk.telemetry`, `signalk.notifications` and `signalk.history`. `signalk.notifications` retains `list` for legacy `notifications.*` measurements and adds `list_notifications` and `get_notification` for the released server Notifications API. The two new operations are also dedicated MCP tools. This uses `/signalk/v2/api/notifications`, not the proposed `/signalk/v2/api/alerts` subsystem.
+
+`list_notifications` accepts `offset` (default 0) and `limit` (default 32, maximum 64). It returns `{ "registry": "v2", "notifications": { "<id>": { "context": "...", "path": "...", "value": {} } }, "nextOffset": null }`. Records are sorted by ID and paginated after permission filtering; pages are not stable snapshots. Pass a listed key as `get_notification`'s `id`; it returns `{ "registry": "v2", "id": "...", "notification": { ... } }`. Non-UUID keys are supported when core management is disabled.
+
+The gateway forwards permitted records unchanged, including status, timestamps and source metadata when supplied. It neither requires nor invents optional fields. The supported server releases omit source IDs from registry records. With ACLs configured, access therefore requires an exact value match in the native data model and a native read grant for every matching source at the record's context/path. Unmatched, ambiguous-denied, expired-model and unauthorized records are omitted. An admin token does not bypass ACLs. Missing and denied IDs both report `NOTIFICATION_UNAVAILABLE`. See [the permission boundary and upstream limitations](docs/capabilities.md#notifications-boundary).
+
+Only the collection GET is used, including for single-record lookup. This also supports registry reads when core notification management is disabled. No acknowledge, silence, raise, clear or update operation is exposed.
 
 Values retain native units. Zero and false remain valid; null is `missing`, while absent or denied paths are `unavailable`. Missing units/timestamps remain null. Invalid or future timestamps produce `unknown` freshness. The staleness threshold is included; it does not establish sensor health. Current telemetry exposes selected-source measurement leaves on `vessels.self`, excluding arbitrary parent objects, other vessels, static identity fields and server configuration. Pagination is not a stable snapshot.
 
