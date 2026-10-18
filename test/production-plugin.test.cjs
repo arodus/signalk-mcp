@@ -1,3 +1,4 @@
+const { loadedPlugin } = require("./native-server.cjs");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -174,7 +175,7 @@ test(
   async (t) => {
     const { server, configuration, providerConfig, clientFor, direct } =
       await start(t);
-    const provider = server.app.pluginsMap[pluginId];
+    const provider = loadedPlugin(server, pluginId);
     assert.ok(provider, "published package must load through native discovery");
     const admin = await clientFor("admin");
     const reader = await clientFor("reader");
@@ -289,7 +290,7 @@ test(
           ).status,
           401,
         );
-        server.app.pluginsMap["signalk-mcp"].start({
+        loadedPlugin(server, "signalk-mcp").start({
           ...configuration,
           pluginOperations: [{ ...approval, permission: "readonly" }],
         });
@@ -299,7 +300,7 @@ test(
             expected,
           );
         } finally {
-          server.app.pluginsMap["signalk-mcp"].start(configuration);
+          loadedPlugin(server, "signalk-mcp").start(configuration);
         }
       },
     );
@@ -328,7 +329,7 @@ test(
           { items: [] },
         );
         // A valid, nonexistent detail ID exercises native error sanitization.
-        server.app.pluginsMap["signalk-mcp"].start({
+        loadedPlugin(server, "signalk-mcp").start({
           ...configuration,
           pluginOperations: [
             approval,
@@ -347,7 +348,7 @@ test(
             "CAPABILITY_UNAVAILABLE",
           );
         } finally {
-          server.app.pluginsMap["signalk-mcp"].start(configuration);
+          loadedPlugin(server, "signalk-mcp").start(configuration);
         }
       },
     );
@@ -355,7 +356,7 @@ test(
     await t.test(
       "unapproved reads and every documented mutation remain unreachable",
       async () => {
-        server.app.pluginsMap["signalk-mcp"].start({
+        loadedPlugin(server, "signalk-mcp").start({
           ...configuration,
           pluginOperations: [],
         });
@@ -368,7 +369,7 @@ test(
           );
           error(await execute(admin), "OPERATION_DISABLED");
         } finally {
-          server.app.pluginsMap["signalk-mcp"].start(configuration);
+          loadedPlugin(server, "signalk-mcp").start(configuration);
         }
         error(await execute(admin, "get.snooze"), "OPERATION_DISABLED");
         const routes = [

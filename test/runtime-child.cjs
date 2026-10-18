@@ -1,3 +1,4 @@
+const { loadedPlugin } = require("./native-server.cjs");
 const assert = require("node:assert/strict");
 const { createHook } = require("node:async_hooks");
 const {
@@ -42,8 +43,8 @@ async function main() {
   let cycles = 0;
   try {
     if (mode !== "baseline") {
-      const plugin = fixture.server.app.pluginsMap["signalk-mcp"];
-      const provider = fixture.server.app.pluginsMap["mcp-fixture"];
+      const plugin = loadedPlugin(fixture.server, "signalk-mcp");
+      const provider = loadedPlugin(fixture.server, "mcp-fixture");
       const read = () =>
         fixture.request("get_values", { paths: ["navigation.speedOverGround"] })
           .result;

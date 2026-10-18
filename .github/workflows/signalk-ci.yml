@@ -1,0 +1,13 @@
+name: SignalK Plugin CI
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  plugin:
+    # Official workflow, pinned to the revision inspected for this integration.
+    uses: SignalK/signalk-server/.github/workflows/plugin-ci.yml@340d5bb62c17ec58d2a3497dbbf081cd87af2a96
+    with:
+      node-versions: '["22", "24"]'
+      build-command: npm run build
+      test-command: npm test
+      format-check-command: npm run format:check

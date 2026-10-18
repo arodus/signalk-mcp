@@ -1,3 +1,4 @@
+const { loadedPlugin } = require("./native-server.cjs");
 // Opt-in synthetic development benchmark. No domain calculations enter the plugin.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -140,7 +141,7 @@ async function benchmark() {
       telemetryLoopP99: load.telemetryLoopP99Ms <= 100,
       retainedHeap: heapGrowth <= 16 * 1024 * 1024,
     };
-    await fixture.server.app.pluginsMap["signalk-mcp"].stop();
+    await loadedPlugin(fixture.server, "signalk-mcp").stop();
     await fixture.stop();
     process.send({
       date: new Date().toISOString(),

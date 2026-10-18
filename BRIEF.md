@@ -146,6 +146,7 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 - The approved local ARM64 development benchmark passes; Raspberry Pi and longer-duration/adversarial-load acceptance remain open. Preserve Signal K's primary telemetry duties.
 - Security-boundary and dependency-exposure review is recorded in the resource report; reassess the host server's upstream advisories before release.
 - Validate installed packages, native configuration and user documentation.
+- Use the official Signal K plugin CI for portable platform checks alongside the native integration matrix. Verify registry scoring separately against the published artifact; custom CI success is not a registry score.
 - Prepare a release candidate and verify current npm/AppStore requirements.
 - Conduct live read-only vessel acceptance only with explicit deployment/access authorization.
 - Publish, release or deploy only when separately authorized, and verify each result independently.
