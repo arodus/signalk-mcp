@@ -15,9 +15,9 @@
 
 ## Repository and CI
 
-The existing GitHub repository `arodus/signalk-mcp` was empty. `main` was initialized with README, original brief, repository instructions, license and ignore rules. Implementation is on `feature/capability-discovery`, intended for review through a PR. No merge, release or deployment is authorized by this work.
+The existing GitHub repository `arodus/signalk-mcp` was empty. `main` was initialized with README, original brief, repository instructions, license and ignore rules. Implementation was merged through PR #1 as `1891e56`; its Node 22 and 24 CI checks passed. No release or deployment has occurred.
 
-The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and checks packaging. Local results above do not establish remote CI results; consult the PR's checks for the current commit.
+The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and checks packaging. The CI result above applies to PR #1; consult each subsequent PR's checks for its own result.
 
 ## Remaining acceptance
 
@@ -25,4 +25,4 @@ All telemetry and providers are synthetic. No ForTuna service, live instrument, 
 
 There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, TLS/reverse-proxy combinations, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. In particular, loopback TLS certificate mismatch fails closed for HTTP-backed capabilities.
 
-The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History requires explicit source provenance and rejects identifiers the tested server's HTTP parser would alter. Full v2 notification lifecycle APIs, Container Manager, sandbox execution and energy calculations remain unimplemented.
+The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History requires explicit source provenance and rejects identifiers the tested server's HTTP parser would alter. Read-only v2 notification registry coverage remains future work. Notification mutations, calculations, Container Manager integration and sandbox execution are outside the current scope, not deferred work.
