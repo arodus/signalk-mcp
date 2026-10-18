@@ -62,7 +62,12 @@ function pluginFactory(app: App): Plugin {
         req.get("authorization")!,
         settings,
         () => config === settings && !controller.signal.aborted,
-        localGet(req, req.get("authorization")!, controller.signal),
+        localGet(
+          req,
+          req.get("authorization")!,
+          controller.signal,
+          settings.localTlsServerName,
+        ),
       );
       active.add(server);
       const transport = new StreamableHTTPServerTransport({
@@ -103,7 +108,7 @@ function pluginFactory(app: App): Plugin {
       const parsed = configSchema.safeParse(options);
       if (!parsed.success) {
         app.setPluginError(
-          "Invalid MCP configuration: check allowedHosts, allowedOrigins, pluginOperations (unique reviewed GET approvals) and staleAfterSeconds",
+          "Invalid MCP configuration: check allowedHosts, allowedOrigins, pluginOperations (unique reviewed GET approvals), localTlsServerName and staleAfterSeconds",
         );
         return;
       }

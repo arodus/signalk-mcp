@@ -11,6 +11,7 @@ export function localGet(
   req: Request,
   authorization: string,
   signal: AbortSignal,
+  tlsServerName?: string,
 ): LocalGet {
   const hostname = req.socket.localAddress;
   const port = req.socket.localPort;
@@ -33,6 +34,7 @@ export function localGet(
           port,
           method: "GET",
           path,
+          ...(encrypted && tlsServerName ? { servername: tlsServerName } : {}),
           headers: { Authorization: authorization, Accept: "application/json" },
           signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
         },
