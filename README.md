@@ -48,7 +48,7 @@ Configure a Streamable HTTP client with your endpoint, for example `https://boat
 | `list_paths`          | Discover authorized self-context measurement paths, with pagination |
 | `get_values`          | Read 1–64 paths with native units, timestamps, source and freshness |
 | `get_vessel_state`    | Read a compact navigation and environment snapshot                  |
-| `get_history`         | Query a registered History API provider with explicit source checks |
+| `get_history`         | Fetch standard v2 History results using Signal K permissions        |
 | `list_capabilities`   | List core capabilities, installed plugins and advertised APIs       |
 | `describe_capability` | Inspect operation inputs, permissions, support and approval state   |
 | `execute_capability`  | Invoke a core or explicitly approved read-only plugin operation     |
@@ -117,11 +117,11 @@ Example `get_history` arguments, using the exact source ID from your own measure
 }
 ```
 
-Each path/source is checked against the current caller's Signal K ACLs before querying and after receiving the result. Responses must match the requested context, time range, paths, sources and aggregation methods; missing source provenance is refused. This guards the standardized History endpoint, which does not itself apply these telemetry ACL checks in the tested server.
+Each explicit path/source filter is checked against the caller's Signal K ACLs before querying and after receiving the result. Response `$source` is optional in v2: if supplied it must match the requested filter. A source filter can be omitted only when native `anyACLs()` confirms that no telemetry ACLs are configured; otherwise the query returns `PERMISSION_DENIED`. An empty-source or wildcard ACL check cannot establish access to every historical source. This guards the standard History endpoint, which does not itself apply telemetry ACL checks in the tested servers.
 
-Queries require explicit timezone-qualified boundaries, cover at most seven days, and allow at most 16 columns and 2,000 rows/time buckets. Supported methods are `average`, `min`, `max`, `first`, and `last`; `resolution` is in seconds. These are query methods executed by the history provider; the gateway forwards their results and performs no calculations on the values.
+Queries cover at most seven days and allow at most 16 columns and 2,000 returned rows. Use `from` + `to`, `from` + `duration`, `to` + `duration`, `duration` alone, or `from` alone (ending now). Boundaries are timezone-qualified timestamps; `duration` is an integer number of seconds. `resolution` is optional, in seconds; when supplied the request is also limited to 2,000 time buckets. Supported explicit methods are `average`, `min`, `max`, `first`, and `last`; omitting the method uses the standard server default. The gateway forwards the original query options and provider JSON, preserving context, range, column metadata, bucket timestamps, zero and null. It adds no units, source labels or derived values. When multiple authorized sources are requested for the same path/method, missing source labels stay missing; the gateway does not guess which source belongs to each column.
 
-Signal K 2.33.0's HTTP parser strips hyphens from history path/source expressions. This implementation rejects those spellings rather than querying a changed identifier. Providers that omit `$source` in response columns are unsupported. This is not broad compatibility evidence for existing production history plugins.
+Signal K 2.32.0 and 2.33.0's HTTP parser strips hyphens from history path/source expressions. This implementation rejects those spellings rather than querying a changed identifier. The adapter uses the standard v2 API and has no database-specific runtime dependency. The unchanged `signalk-to-influxdb` 1.11.0 works in the tested cases with real InfluxDB 1.8.10 and synthetic data, including responses without `$source`. Other conforming providers use the same adapter, but have not all been individually tested. See [provider verification and remaining limits](docs/history-providers.md).
 
 ## Compatibility and limits
 

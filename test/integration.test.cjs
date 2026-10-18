@@ -11,6 +11,11 @@ const {
   StreamableHTTPClientTransport,
 } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
 
+const {
+  installHistoryProvider,
+  checkHistoryProvider,
+} = require("./history-provider.cjs");
+
 const serverPackage = process.env.MCP_TEST_SERVER_DIR
   ? path.join(path.resolve(process.env.MCP_TEST_SERVER_DIR), "package.json")
   : require.resolve("signalk-server/package.json");
@@ -111,6 +116,9 @@ test(
         },
       }),
     );
+    const historyStore = process.env.MCP_TEST_INFLUX_URL
+      ? await installHistoryProvider(dir)
+      : undefined;
     process.env.SIGNALK_NODE_CONFIG_DIR = dir;
     process.env.SIGNALK_DISABLE_SERVER_UPDATES = "true";
     process.env.HTTP_RATE_LIMITS = "api=1000,loginStatus=1000,login=1000";
@@ -158,6 +166,7 @@ test(
       config: {
         settings: {
           port,
+          historyApi: { defaultProvider: "mcp-fixture" },
           mdns: false,
           enforceDataTimeouts: false,
           pipedProviders: [],
@@ -171,8 +180,12 @@ test(
       securityConfig,
     });
     t.after(async () => {
-      await server.stop();
-      fs.rmSync(dir, { recursive: true, force: true });
+      try {
+        await server.stop();
+      } finally {
+        await historyStore?.cleanup();
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
     });
     await server.start();
     const endpoint = new URL(`http://${host}/plugins/signalk-mcp/mcp`);
@@ -611,7 +624,7 @@ test(
       },
     );
     await t.test(
-      "history uses standardized provider, honors source ACLs and rejects wrong provenance",
+      "history forwards standard responses, honors source ACLs and rejects conflicting provenance",
       async () => {
         const description = await client.callTool({
           name: "describe_capability",
@@ -624,6 +637,7 @@ test(
         );
         const fixture = server.app.pluginsMap["mcp-fixture"];
         const query = {
+          provider: "mcp-fixture",
           from: "2026-10-17T10:00:00Z",
           to: "2026-10-17T10:01:00Z",
           resolution: 10,
@@ -635,8 +649,8 @@ test(
         });
         assert.equal(result.isError, undefined, JSON.stringify(result));
         assert.equal(result.structuredContent.data[0][1], 0);
-        assert.equal(result.structuredContent.values[0].source, "fixture.XX");
-        assert.equal(result.structuredContent.values[0].unit, "m/s");
+        assert.equal(result.structuredContent.values[0].$source, "fixture.XX");
+        assert.equal(result.structuredContent.values[0].unit, undefined);
         const before = fixture.testCalls.history;
         const denied = await client.callTool({
           name: "get_history",
@@ -654,7 +668,6 @@ test(
         assert.equal(fixture.testCalls.history, before);
         for (const mode of [
           "wrong-source",
-          "missing-source",
           "wrong-path",
           "wrong-context",
           "extra-column",
@@ -667,6 +680,19 @@ test(
             mode,
           );
         }
+        fixture.setHistoryMode("missing-source");
+        const optionalSource = await client.callTool({
+          name: "get_history",
+          arguments: query,
+        });
+        assert.equal(
+          optionalSource.isError,
+          undefined,
+          JSON.stringify(optionalSource),
+        );
+        assert.deepEqual(optionalSource.structuredContent.values, [
+          { path: "navigation.speedOverGround", method: "average" },
+        ]);
         fixture.setHistoryMode("valid");
         assert.equal(
           (
@@ -699,13 +725,132 @@ test(
           name: "describe_capability",
           arguments: { id: "signalk.history" },
         });
-        assert.equal(unavailable.structuredContent.available, false);
+        assert.equal(
+          unavailable.structuredContent.available,
+          Boolean(process.env.MCP_TEST_INFLUX_URL),
+        );
         assert.equal(
           (await client.callTool({ name: "get_history", arguments: query }))
             .content[0].text,
           "HISTORY_UNAVAILABLE",
         );
         fixture.start();
+      },
+    );
+    await t.test(
+      "source and resolution are optional with native no-ACL authorization; ACL changes revoke pending reads",
+      async () => {
+        const security = server.app.securityStrategy;
+        const configuration = security.getConfiguration();
+        const original = configuration.acls;
+        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const input = {
+          provider: "mcp-fixture",
+          from: "2026-10-17T10:00:00Z",
+          to: "2026-10-17T10:01:00Z",
+          paths: [{ path: "navigation.speedOverGround" }],
+        };
+        const before = fixture.testCalls.history;
+        assert.equal(security.anyACLs(), true);
+        const denied = await client.callTool({
+          name: "get_history",
+          arguments: input,
+        });
+        assert.equal(denied.content[0].text, "PERMISSION_DENIED");
+        assert.equal(fixture.testCalls.history, before);
+        let held;
+        try {
+          configuration.acls = [];
+          assert.equal(security.anyACLs(), false);
+          const result = await client.callTool({
+            name: "get_history",
+            arguments: input,
+          });
+          assert.equal(result.isError, undefined, JSON.stringify(result));
+          assert.deepEqual(result.structuredContent, {
+            context: "vessels.self",
+            range: { from: input.from, to: input.to },
+            values: [{ path: "navigation.speedOverGround", method: "average" }],
+            data: [[input.from, 0]],
+          });
+          const position = await client.callTool({
+            name: "get_history",
+            arguments: {
+              ...input,
+              paths: [{ path: "navigation.position" }],
+            },
+          });
+          assert.equal(position.isError, undefined, JSON.stringify(position));
+          assert.equal(position.structuredContent.values[0].method, "first");
+          held = fixture.holdNextRead("history");
+          const pending = client.callTool({
+            name: "get_history",
+            arguments: input,
+          });
+          await Promise.race([
+            held.started,
+            pending.then(() => {
+              throw new Error("History ended before provider entry");
+            }),
+          ]);
+          configuration.acls = original;
+          held.release();
+          const revoked = await pending;
+          assert.equal(revoked.content[0].text, "PERMISSION_DENIED");
+          assert.equal(revoked.structuredContent, undefined);
+        } finally {
+          configuration.acls = original;
+          held?.release();
+        }
+      },
+    );
+    await t.test(
+      "pinned production History provider",
+      { skip: !process.env.MCP_TEST_INFLUX_URL },
+      async (t) => {
+        await checkHistoryProvider(t, server, host, bearer, client);
+      },
+    );
+    await t.test(
+      "history provider errors and deadlines never disclose partial results",
+      async () => {
+        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const input = {
+          provider: "mcp-fixture",
+          from: "2026-10-17T10:00:00Z",
+          to: "2026-10-17T10:01:00Z",
+          resolution: 10,
+          paths: [{ path: "navigation.speedOverGround", source: "fixture.XX" }],
+        };
+        fixture.setHistoryMode("error");
+        try {
+          const error = await client.callTool({
+            name: "get_history",
+            arguments: input,
+          });
+          assert.equal(error.content[0].text, "UPSTREAM_HTTP_ERROR");
+          assert.equal(error.structuredContent, undefined);
+        } finally {
+          fixture.setHistoryMode("valid");
+        }
+        const held = fixture.holdNextRead("history");
+        const pending = client.callTool({
+          name: "get_history",
+          arguments: input,
+        });
+        try {
+          await Promise.race([
+            held.started,
+            pending.then(() => {
+              throw new Error("History ended before provider entry");
+            }),
+          ]);
+          const timeout = await pending;
+          assert.equal(timeout.content[0].text, "UPSTREAM_UNAVAILABLE");
+          assert.equal(timeout.structuredContent, undefined);
+        } finally {
+          held.release();
+        }
       },
     );
     await t.test(

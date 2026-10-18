@@ -9,7 +9,7 @@
 - TypeScript MCP SDK **1.32.1** and Python MCP SDK **1.26.0** both initialize over HTTP, discover the seven tools and retrieve zero-valued telemetry with units. Python **3.14.8** runs separately with test credentials passed over stdin.
 - Real-server security tests cover malformed/expired/unregistered tokens; guest rejection despite `allow_readonly`; exact Host/Origin enforcement; content negotiation/version handling; request bounds; cookie/bearer identity conflicts; permissions changing and devices being removed; concurrent principals; path/source ACLs; plugin stop/start.
 - Capability tests cover dedicated/generic telemetry parity, vessel state, public feature discovery, plugin OpenAPI loading, parameter schemas, original caller identity at a native provider, stricter native admin-route rejection, unapproved/write refusal, redirects, schema changes and unsupported external references. Target write and unapproved handlers remain uncalled.
-- History tests use a registered synthetic History API provider, check path/source authorization before calls, preserve zero/units/source provenance, reject wrong/missing sources, wrong paths/context and extra columns, enforce query limits, and report unavailable providers. Focused tests additionally cover notification ACL filtering, partial discovery, recursive/duplicate approvals, ambiguous IDs, schema cycles, traversal, bounded HTTP responses and revocation while a response is pending.
+- History tests use a registered synthetic History API provider, check path/source authorization before calls, preserve zero and provider metadata, accept optional source fields, reject conflicting sources, wrong paths/context and extra columns, enforce query limits, and report unavailable providers. Focused tests additionally cover notification ACL filtering, partial discovery, recursive/duplicate approvals, ambiguous IDs, schema cycles, traversal, bounded HTTP responses and revocation while a response is pending.
 - The tarball installs in a disposable directory with **96 production packages**. All **16 real-server integration entries** pass again on Node 24 with Signal K loading the installed tarball and both MCP clients. The package includes README.md, BRIEF.md, AGENTS.md, license, compiled code and design/verification docs; test fixtures and credentials are excluded.
 - Production dependency audit (`npm audit --omit=dev`): **0 advisories** at this checkpoint. The earlier full development-tree audit found 18 upstream test-runtime advisories (12 moderate, 5 high, 1 critical), including an older transitive lodash. The new direct schema-conversion dependency was already in that locked dependency tree. No forced upstream overrides were applied. This is an audit snapshot, not a security certification.
 
@@ -21,11 +21,11 @@ The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and ch
 
 ## Remaining acceptance
 
-All test data is synthetic. Providers include synthetic fixtures and the published Alert Center package described below. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements with an owner's existing token remains unverified. Production-plugin compatibility is limited to the exact package and operation below.
+All test data is synthetic. The unchanged published History provider and Alert Center package are exercised as described below. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements remains unverified. Compatibility evidence applies to the exact tested packages and operations.
 
 There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, TLS/reverse-proxy combinations, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. In particular, loopback TLS certificate mismatch fails closed for HTTP-backed capabilities.
 
-The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History requires explicit source provenance and rejects identifiers the tested server's HTTP parser would alter. Read-only v2 notification registry coverage remains future work. Notification mutations, calculations, Container Manager integration and sandbox execution are outside the current scope, not deferred work.
+The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History accepts optional response source metadata, checks explicit source filters against native ACLs, permits unfiltered reads only with confirmed absence of telemetry ACLs, and rejects identifiers the tested server's HTTP parser would alter. Read-only v2 notification registry coverage remains future work. Notification mutations, calculations, Container Manager integration and sandbox execution are outside the current scope, not deferred work.
 
 ## Authentication compatibility follow-up (issue #2)
 
@@ -36,6 +36,16 @@ Local Node 24.22.0 runs passed all **30 test-runner entries** with no skips agai
 The expanded suite adds native user-token visibility/removal, permission changes while a plugin read is pending, and history ACL revocation during a provider response. Focused checks reject changed/missing hook contracts, unknown security state and malformed principals; only literal ACL grants permit reads. Production changes are limited to stricter security-state/identity validation and a minimal principal snapshot. No calculation or other data-processing feature is introduced.
 
 See [authentication compatibility](authentication.md) for the supported version policy, source assessment and reproducible runtime selection. The public-interface proposal is a local draft; the private security hooks remain necessary.
+
+## History provider follow-up (issue #3)
+
+The published `signalk-to-influxdb` **1.11.0** package now loads unchanged inside the real temporary Signal K server, backed by a disposable real InfluxDB **1.8.10** container. The version and image digest are pinned; the provider is a development dependency only. Tests generate a random synthetic database and remove it afterward.
+
+On Node **24.22.0**, both Signal K/ServerAPI **2.32.0** and **2.33.0** pass **45 test-runner entries** with Python MCP **1.26.0** and the real-provider tests enabled. The primary runtime also passes strict TypeScript, ESLint and Prettier. CI runs this same backend in the four existing server/Node combinations; consult the issue #3 PR's checks for remote results.
+
+The production provider now works through the standard adapter without requiring optional `$source`. Its extra `sourceRef` metadata is forwarded unchanged, never treated as an authorization alias. Tests cover explicit and omitted source/resolution, standard time-range alternatives, dedicated/generic tool parity, exact JSON forwarding, zero/null preservation, bucket timestamps before the start, source denial, no-ACL checks and revocation. Query/row/byte limits and malformed response checks remain enforced. The upstream hyphen-stripping bug still reproduces and those identifiers remain rejected before querying.
+
+See [provider support matrix and reproductions](history-providers.md). The server-parser upstream proposal remains a local draft. Docker is required only for this optional local integration test and CI fixture, never for the gateway runtime. No upstream message, release, deployment or live-vessel operation was performed.
 
 ## Independent plugin compatibility follow-up (issue #4)
 

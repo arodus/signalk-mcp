@@ -11,6 +11,7 @@ interface Connection {
 }
 interface Security {
   isDummy(): boolean;
+  anyACLs?(): boolean;
   authorizeWS(connection: Connection): void;
   checkACL(
     id: string,
@@ -92,5 +93,21 @@ export function canRead(
       source,
       "read",
     ) === true
+  );
+}
+
+// Checking an empty/wildcard source does not prove access to all sources: a
+// source-specific rule may precede a path grant. Only a literal native no-ACL
+// result authorizes an unfiltered history query. Never inspect security config.
+export function canReadAllSources(
+  app: App,
+  principal: Principal,
+  path: string,
+): boolean {
+  const strategy = security(app);
+  return (
+    typeof strategy.anyACLs === "function" &&
+    strategy.anyACLs() === false &&
+    canRead(app, principal, path, "")
   );
 }
