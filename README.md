@@ -4,7 +4,7 @@ A native, read-only Signal K plugin for vessel telemetry, capability discovery a
 
 **Scope:** discover, fetch and forward authorized data. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
 
-**Development status:** authenticated telemetry and the read-only capability layer are implemented and integration-tested against Signal K 2.33.0 with synthetic providers. There is no npm/AppStore release or vessel deployment yet.
+**Development status:** authenticated telemetry and the read-only capability layer are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 with synthetic providers. There is no npm/AppStore release or vessel deployment yet.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
@@ -18,7 +18,7 @@ npm run check
 npm pack
 ```
 
-Install the tarball in a **test** Signal K 2.33.0 configuration directory, using its service account:
+Install the tarball in a **test** Signal K 2.32.0 or 2.33.0 configuration directory, using its service account:
 
 ```sh
 npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0.tgz
@@ -131,7 +131,7 @@ The MCP endpoint is stateless: GET/DELETE return 405, each POST has an independe
 
 Provider requests derive their destination from the accepted local server socket, never client input or proxy headers. TLS certificate verification remains enabled; self-signed/name-mismatched loopback certificates and non-TCP/socket-activated hosting are currently unsupported for HTTP-backed capabilities. Core telemetry remains independent of these calls. Test reverse-proxy/TLS deployments before use.
 
-Authentication/read authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; only Signal K 2.33.0 is currently verified. OAuth interoperability and publishing remain future work. Calculations, sandbox execution, Container Manager integration and writes/control are outside scope.
+Authentication/read authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; the supported release set is Signal K 2.32.0 and 2.33.0 on Node 22 and 24; see the [authentication compatibility record](docs/authentication.md). OAuth interoperability and publishing remain future work. Calculations, sandbox execution, Container Manager integration and writes/control are outside scope.
 
 ## Development
 
@@ -151,4 +151,4 @@ MCP_TEST_PYTHON=/tmp/signalk-mcp-python/bin/python npm test
 
 Without `MCP_TEST_PYTHON`, that test is explicitly skipped. Credentials reach Python over stdin. The test runner uses `--test-force-exit` after tests/cleanup because the upstream test server leaves background handles after stopping; the plugin does not force process exit.
 
-To verify an installed tarball, set `MCP_TEST_PLUGIN_DIR` to the installed package directory while running the integration test. CI covers Node 22 and 24 with both clients. See the verification report for actual results and outstanding acceptance work.
+To verify an installed tarball, set `MCP_TEST_PLUGIN_DIR` to the installed package directory while running the integration test. CI covers Signal K 2.32.0 and 2.33.0 on Node 22 and 24 with both clients. See the verification report for actual results and outstanding acceptance work.
