@@ -63,7 +63,7 @@ async function start(gateway = true, { manageNotifications = true } = {}) {
     ["reader", "other"].map((id) => [
       id,
       serverRequire("jsonwebtoken").sign({ device: id }, secret, {
-        expiresIn: "10m",
+        expiresIn: "1h",
       }),
     ]),
   );

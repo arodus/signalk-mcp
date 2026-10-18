@@ -5,6 +5,7 @@ import { authenticate, GatewayError, type App } from "./auth.js";
 import { configSchema, schema, type Config } from "./config.js";
 import { localGet } from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
+import { boundedJson } from "./json.js";
 
 function pluginFactory(app: App): Plugin {
   let config: Config | undefined;
@@ -46,11 +47,8 @@ function pluginFactory(app: App): Plugin {
       if (active.size >= 8) throw new GatewayError("BUSY", 429);
       // Signal K parses JSON before plugin routes. Bound the already-parsed body
       // too; the host server owns the wire/body-parser limit.
-      if (
-        req.body !== undefined &&
-        Buffer.byteLength(JSON.stringify(req.body)) > 64 * 1024
-      )
-        throw new GatewayError("REQUEST_TOO_LARGE", 413);
+      if (req.body !== undefined)
+        boundedJson(req.body, 64 * 1024, "REQUEST_TOO_LARGE", 413);
       pending.set(controller, res);
       timer = setTimeout(() => {
         controller.abort();
