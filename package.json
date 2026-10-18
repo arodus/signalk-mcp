@@ -9,6 +9,7 @@
     "dist",
     "README.md",
     "LICENSE",
+    "CHANGELOG.md",
     "docs",
     "BRIEF.md",
     "AGENTS.md"
@@ -19,7 +20,10 @@
     "mcp"
   ],
   "signalk": {
-    "displayName": "Signal K MCP"
+    "displayName": "Signal K MCP",
+    "screenshots": [
+      "./docs/images/native-plugin-config.png"
+    ]
   },
   "signalk-plugin-enabled-by-default": false,
   "engines": {
@@ -34,6 +38,7 @@
     "test": "npm run build && node --test test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs",
     "test:integration": "npm run build && node --test --test-force-exit test/integration.test.cjs test/hosting.test.cjs test/production-plugin.test.cjs test/runtime.test.cjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
+    "verify:package": "node test/package-smoke.cjs",
     "prepack": "npm run build"
   },
   "dependencies": {

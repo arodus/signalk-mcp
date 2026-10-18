@@ -148,6 +148,7 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 - Validate installed packages, native configuration and user documentation.
 - Use the official Signal K plugin CI for portable platform checks alongside the native integration matrix. Verify registry scoring separately against the published artifact; custom CI success is not a registry score.
 - Prepare a release candidate and verify current npm/AppStore requirements.
+- Reproducible installed-tarball checks, native Plugin Config evidence, changelog and the owner-reviewed vessel procedure are described in [release readiness](docs/release-readiness.md). Preparation does not authorize publication or vessel access.
 - Conduct live read-only vessel acceptance only with explicit deployment/access authorization.
 - Publish, release or deploy only when separately authorized, and verify each result independently.
 
