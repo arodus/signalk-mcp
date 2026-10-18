@@ -41,4 +41,15 @@ jobs:
           MCP_TEST_INFLUX_URL: http://127.0.0.1:8086
           MCP_TEST_PYTHON: /tmp/signalk-mcp-python/bin/python
           MCP_TEST_SERVER_VERSION: ${{ matrix.signalk }}
-      - run: npm pack --dry-run
+      - name: Verify installed release artifact
+        run: npm run verify:package -- "$RUNNER_TEMP/package-smoke"
+        env:
+          MCP_TEST_INFLUX_URL: http://127.0.0.1:8086
+          MCP_TEST_PYTHON: /tmp/signalk-mcp-python/bin/python
+          MCP_TEST_SERVER_VERSION: ${{ matrix.signalk }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-node-${{ matrix.node }}-signalk-${{ matrix.signalk }}
+          path: |
+            ${{ runner.temp }}/package-smoke/*.tgz
+            ${{ runner.temp }}/package-smoke/receipt.json

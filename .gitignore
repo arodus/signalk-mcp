@@ -2,4 +2,5 @@ node_modules/
 dist/
 *.tgz
 coverage/
+package-verification/
 .DS_Store

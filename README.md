@@ -39,6 +39,12 @@ Restart Signal K, configure the plugin in Plugin Config, then enable it:
 
 Enable Signal K security and supply an existing user/device token in `Authorization: Bearer <token>` on every request. Guest reads and security-disabled servers are refused. The plugin does not create tokens or read signing secrets. Use Signal K TLS or a trusted TLS reverse proxy for remote access.
 
+The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. Its loopback address and test provider are examples, not vessel settings.
+
+![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.png)
+
+See [package verification, upgrade/removal and release acceptance](docs/release-readiness.md) before preparing an installation candidate.
+
 ## Connect and discover
 
 Configure a Streamable HTTP client with your endpoint, for example `https://boat.example/plugins/signalk-mcp/mcp`, and the bearer header. The seven tools keep discovery separate from execution:
