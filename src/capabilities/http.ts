@@ -27,9 +27,10 @@ export function localGet(
     if (!hostname || !port)
       throw new GatewayError("LOCAL_HTTP_UNAVAILABLE", 503);
     if (
-      !/^\/(?:skServer\/openapi\/plugins\/|plugins\/|signalk\/v2\/api\/history\/)/.test(
+      (!/^\/(?:skServer\/openapi\/plugins\/|plugins\/|signalk\/v2\/api\/history\/)/.test(
         path,
-      ) ||
+      ) &&
+        path !== "/signalk/v2/api/notifications") ||
       /[\r\n\\#]/.test(path)
     ) {
       throw new GatewayError("INVALID_LOCAL_ROUTE");

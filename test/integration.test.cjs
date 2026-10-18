@@ -368,9 +368,11 @@ test(
             "describe_capability",
             "execute_capability",
             "get_history",
+            "get_notification",
             "get_values",
             "get_vessel_state",
             "list_capabilities",
+            "list_notifications",
             "list_paths",
           ],
         );
@@ -543,6 +545,155 @@ test(
             (value) => value.path === "navigation.speedOverGround",
           ).value,
           0,
+        );
+      },
+    );
+    await t.test(
+      "v2 notifications preserve records and enforce native path/source permissions for readers and admins",
+      async (subtest) => {
+        const resources =
+          server.app.securityStrategy.getConfiguration().acls[0].resources;
+        subtest.after(() => resources.splice(0, 2));
+        resources.unshift(
+          {
+            sources: ["notification-private.*"],
+            permissions: [{ subject: "other", permission: "read" }],
+          },
+          {
+            paths: ["notifications.allowed.*"],
+            permissions: ["reader", "admin"].map((subject) => ({
+              subject,
+              permission: "read",
+            })),
+          },
+        );
+        const seed = (label, path) =>
+          server.app.handleMessage(label, {
+            context: "vessels.self",
+            updates: [
+              {
+                source: { label },
+                timestamp: "2026-10-18T10:00:00Z",
+                values: [
+                  {
+                    path,
+                    value: {
+                      state: "alarm",
+                      method: ["visual"],
+                      message: path,
+                      data: { zero: 0, missing: null },
+                    },
+                  },
+                ],
+              },
+            ],
+          });
+        seed("notification-public", "notifications.allowed.first");
+        seed("notification-public", "notifications.allowed.second");
+        seed("notification-private", "notifications.allowed.private");
+        seed("notification-public", "notifications.denied");
+        const readRaw = async () => {
+          const response = await fetch(
+            `http://${host}/signalk/v2/api/notifications`,
+            {
+              headers: { Authorization: `Bearer ${bearer}` },
+            },
+          );
+          assert.equal(response.status, 200);
+          return response.json();
+        };
+        const raw = await readRaw();
+        assert.ok(
+          Object.values(raw).some(
+            (entry) => entry.path === "notifications.denied",
+          ),
+          "native GET does not apply telemetry ACLs",
+        );
+        const expected = Object.fromEntries(
+          Object.entries(raw).filter(([, entry]) =>
+            [
+              "notifications.allowed.first",
+              "notifications.allowed.second",
+            ].includes(entry.path),
+          ),
+        );
+        assert.equal(Object.keys(expected).length, 2);
+        const dedicated = await client.callTool({
+          name: "list_notifications",
+          arguments: {},
+        });
+        assert.equal(dedicated.isError, undefined, JSON.stringify(dedicated));
+        assert.deepEqual(dedicated.structuredContent.notifications, expected);
+        assert.deepEqual(
+          (await cap("list_notifications", {}, "signalk.notifications"))
+            .structuredContent,
+          dedicated.structuredContent,
+        );
+        const admin = await clientFor("admin");
+        assert.deepEqual(
+          (await cap("list_notifications", {}, "signalk.notifications", admin))
+            .structuredContent,
+          dedicated.structuredContent,
+        );
+        const ids = Object.keys(expected).sort();
+        const page = await client.callTool({
+          name: "list_notifications",
+          arguments: { limit: 1 },
+        });
+        assert.deepEqual(Object.keys(page.structuredContent.notifications), [
+          ids[0],
+        ]);
+        assert.equal(page.structuredContent.nextOffset, 1);
+        const second = await client.callTool({
+          name: "list_notifications",
+          arguments: { offset: 1, limit: 1 },
+        });
+        assert.deepEqual(Object.keys(second.structuredContent.notifications), [
+          ids[1],
+        ]);
+        assert.equal(second.structuredContent.nextOffset, null);
+        const one = await client.callTool({
+          name: "get_notification",
+          arguments: { id: ids[0] },
+        });
+        assert.deepEqual(one.structuredContent.notification, raw[ids[0]]);
+        assert.deepEqual(
+          (
+            await cap(
+              "get_notification",
+              { id: ids[0] },
+              "signalk.notifications",
+            )
+          ).structuredContent,
+          one.structuredContent,
+        );
+        const deniedId = Object.entries(raw).find(
+          ([, entry]) => entry.path === "notifications.denied",
+        )[0];
+        const errors = await Promise.all(
+          [deniedId, "unknown"].map((id) =>
+            client.callTool({ name: "get_notification", arguments: { id } }),
+          ),
+        );
+        assert.deepEqual(errors[0].content, errors[1].content);
+        assert.equal(errors[0].content[0].text, "NOTIFICATION_UNAVAILABLE");
+        for (const operation of [
+          "raise",
+          "silence",
+          "acknowledge",
+          "clear",
+          "update",
+          "silenceAll",
+          "acknowledgeAll",
+        ])
+          assert.equal(
+            (await cap(operation, {}, "signalk.notifications")).content[0].text,
+            "OPERATION_NOT_FOUND",
+          );
+        assert.deepEqual(
+          await readRaw(),
+          raw,
+          "all MCP reads leave registry state unchanged",
         );
       },
     );

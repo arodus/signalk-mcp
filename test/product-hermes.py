@@ -28,7 +28,7 @@ probe = subprocess.run(
     capture_output=True, text=True, timeout=20,
 )
 assert probe.returncode == 0, "Hermes CLI connection test failed"
-assert "Tools discovered: 7" in probe.stdout, "Hermes CLI did not discover seven tools"
+assert "Tools discovered: 9" in probe.stdout, "Hermes CLI did not discover nine tools"
 
 from tools.mcp_tool_discovery import discover_mcp_tools
 from tools.mcp_tool_lifecycle import shutdown_mcp_servers

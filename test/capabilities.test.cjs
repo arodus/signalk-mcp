@@ -342,7 +342,14 @@ test("local HTTP transport bounds JSON and refuses alternate routes and redirect
     get("/plugins/example/invalid"),
     /UPSTREAM_INVALID_JSON/,
   );
-  assert.equal(received.length, 4);
+  assert.equal((await get("/signalk/v2/api/notifications")).method, "GET");
+  for (const route of [
+    "/signalk/v2/api/notifications/silenceAll",
+    "/signalk/v2/api/notifications/id/acknowledge",
+    "/signalk/v2/api/notifications?url=other",
+  ])
+    await assert.rejects(get(route), /INVALID_LOCAL_ROUTE/);
+  assert.equal(received.length, 5);
 });
 
 test("invalid approval configuration reports field guidance without leaking input", () => {

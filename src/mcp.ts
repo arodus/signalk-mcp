@@ -5,6 +5,8 @@ import type { Config } from "./config.js";
 import { CapabilityRegistry } from "./capabilities/registry.js";
 import {
   historyInput,
+  notificationInput,
+  notificationsInput,
   pathsInput,
   stateInput,
   valuesInput,
@@ -93,6 +95,18 @@ export function createMcpServer(
     "signalk.history",
     "Fetch and forward standard v2 History results. Source filters are optional only when Signal K confirms no telemetry ACLs; response $source is optional.",
     historyInput,
+  );
+  registerCore(
+    "list_notifications",
+    "signalk.notifications",
+    "Fetch and forward authorized v2 notification registry records. Pagination reflects the current registry; records without verifiable permission are omitted.",
+    notificationsInput,
+  );
+  registerCore(
+    "get_notification",
+    "signalk.notifications",
+    "Fetch and forward one authorized v2 notification registry record by its listed ID. No notification lifecycle actions.",
+    notificationInput,
   );
   server.registerTool(
     "list_capabilities",

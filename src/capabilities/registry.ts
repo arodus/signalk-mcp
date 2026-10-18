@@ -10,6 +10,7 @@ import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
 import type { LocalGet } from "./http.js";
 import { getHistory, historyProviders } from "./history.js";
+import { getNotification, listNotifications } from "./notifications.js";
 import {
   discoverOperations,
   operationDescription,
@@ -17,6 +18,7 @@ import {
 } from "./openapi.js";
 import {
   historyInput,
+  notificationInput,
   notificationsInput,
   pathsInput,
   pluginIdSchema,
@@ -103,8 +105,32 @@ export class CapabilityRegistry {
       },
       "signalk.notifications": {
         description:
-          "Read legacy Signal K notification measurements; no lifecycle commands",
+          "Read permission-filtered legacy measurements and v2 notification records; no lifecycle commands",
         operations: {
+          list_notifications: {
+            description:
+              "Fetch v2 registry records unchanged, filtered by native context/path/source permissions. Pagination covers authorized records, not a stable snapshot.",
+            input: notificationsInput,
+            run: (args) =>
+              listNotifications(
+                app,
+                () => this.authorize(),
+                this.get,
+                notificationsInput.parse(args),
+              ),
+          },
+          get_notification: {
+            description:
+              "Fetch one authorized v2 registry record unchanged. Missing, denied and unresolved-source records are indistinguishable.",
+            input: notificationInput,
+            run: (args) =>
+              getNotification(
+                app,
+                () => this.authorize(),
+                this.get,
+                notificationInput.parse(args).id,
+              ),
+          },
           list: {
             description:
               "List authorized notification values from the self data model",
@@ -242,6 +268,21 @@ export class CapabilityRegistry {
       const capability = this.core[id]!;
       let providers: { id: string; isDefault: boolean }[] | undefined;
       let reason: string | null = null;
+      let notificationsReason: string | null = null;
+      if (id === "signalk.notifications") {
+        try {
+          await listNotifications(this.app, () => this.authorize(), this.get, {
+            offset: 0,
+            limit: 1,
+          });
+        } catch (error) {
+          notificationsReason =
+            error instanceof GatewayError
+              ? error.code
+              : "NOTIFICATIONS_UNAVAILABLE";
+        }
+        this.authorize();
+      }
       if (id === "signalk.history") {
         try {
           providers = await historyProviders(this.get);
@@ -264,7 +305,14 @@ export class CapabilityRegistry {
           ([name, operation]) => ({
             id: name,
             permission: "readonly",
-            enabled: reason === null,
+            enabled:
+              reason === null &&
+              (id !== "signalk.notifications" ||
+                name === "list" ||
+                notificationsReason === null),
+            ...(id === "signalk.notifications" && name !== "list"
+              ? { reason: notificationsReason }
+              : {}),
             description: operation.description,
             inputSchema: zodToJsonSchema(operation.input, {
               $refStrategy: "none",

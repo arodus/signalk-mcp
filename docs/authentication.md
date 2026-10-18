@@ -20,7 +20,9 @@ Older releases, prereleases and untested future releases are not declared suppor
 - Principal snapshots contain only identifier and permission; they do not copy arbitrary private fields from the native object.
 - `checkACL(identifier, context, path, source, 'read')` must return the boolean `true` to expose a measurement. Truthy objects, strings and promises do not grant access.
 
-`anyACLs()` is an additional version-sensitive hook used only for history queries without a source filter. It must return literal `false`, alongside a native read grant, to allow such a query. Missing hooks, unknown results and configured ACLs fail closed for unfiltered reads. The gateway never reads security configuration or assumes that an admin or wildcard-source check bypasses source rules. Both tested releases exercise this hook and ACL insertion while a request is pending.
+`anyACLs()` is an additional version-sensitive hook used for history queries without a source filter and notification records without model-resolved source provenance. It must return literal `false`, alongside a native read grant, to allow such a query. Missing hooks, unknown results and configured ACLs fail closed for unfiltered reads. The gateway never reads security configuration or assumes that an admin or wildcard-source check bypasses source rules. Both tested releases exercise this hook and ACL insertion while a request is pending.
+
+Notification registry reads reauthenticate after HTTP and use native context/path/source ACLs, with exact native-model value matching where the registry omits source metadata; see [the notification boundary](capabilities.md#notifications-boundary). No admin bypass is introduced.
 
 Every invocation resolves identity again. History rechecks the requested paths/sources after the provider responds. Generic provider responses revalidate the native principal and any gateway admin requirement before return; arbitrary provider JSON still depends on the provider's own data-level authorization, as described in the capability design.
 
