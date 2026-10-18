@@ -131,7 +131,7 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 - Validate the authentication bridge against an explicit supported Signal K version range.
 - Standard v2 History forwarding is exercised with unchanged `signalk-to-influxdb` 1.11.0; see [provider matrix and limits](docs/history-providers.md). Other backends use the same API adapter. Further provider versions still need integration evidence; identifiers altered by the server parser remain rejected.
 - Verify discovery and approved reads against independently maintained plugins.
-- Test native TLS and reverse-proxy hosting without weakening certificate checks or destination restrictions.
+- Native TLS and reverse-proxy hosting are covered by isolated real-server tests; see [hosting configuration and limits](docs/hosting.md). Certificate verification and fixed local destinations remain enforced.
 - Test actual MCP products and document bearer/OAuth requirements.
 
 ### Read-only coverage

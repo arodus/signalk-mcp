@@ -416,3 +416,34 @@ test("explicit 512-character string bounds remain enforced and larger schemas fa
     "UNSUPPORTED_SCHEMA",
   );
 });
+
+test("TLS verification names accept DNS names and reject destination syntax", () => {
+  for (const name of [
+    "",
+    "https://boat.example",
+    "boat.example:3443",
+    "*.example",
+    "127.0.0.1",
+    "::1",
+    "-boat.example",
+    "boat..example",
+    "a".repeat(64) + ".example",
+  ])
+    assert.equal(
+      configSchema.safeParse({
+        allowedHosts: ["localhost"],
+        localTlsServerName: name,
+      }).success,
+      false,
+      name,
+    );
+  for (const name of ["localhost", "boat.example", "Signal-K.example"])
+    assert.equal(
+      configSchema.safeParse({
+        allowedHosts: ["localhost"],
+        localTlsServerName: name,
+      }).success,
+      true,
+      name,
+    );
+});
