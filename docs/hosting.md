@@ -28,7 +28,7 @@ Signal K 2.32.0/2.33.0 use `ssl: true`, `sslport` for HTTPS and `port` for the s
 
 Node must trust the certificate issuer. For a private CA, configure the Signal K process with `NODE_EXTRA_CA_CERTS=/absolute/path/to/ca.pem` **before starting it**. The file contains CA certificates, not a server private key. Certificate verification remains enabled.
 
-Without extra configuration, the certificate must cover the accepted socket's local IP address. A dual-stack listener can expose an IPv4-mapped IPv6 address such as `::ffff:127.0.0.1`; that address also needs a matching IP subject alternative name. For ordinary DNS certificates, add the certificate's DNS name to the gateway configuration:
+Without extra configuration, the certificate must cover the accepted socket's local IP address. A dual-stack listener can expose an IPv4-mapped IPv6 address such as `::ffff:127.0.0.1`; the gateway uses its equivalent IPv4 literal (`127.0.0.1`) for consistent certificate matching across Node/OpenSSL versions. For ordinary DNS certificates, add the certificate's DNS name to the gateway configuration:
 
 ```json
 {

@@ -31,7 +31,7 @@ function certificates(dir) {
     );
   }
   for (const [name, ca, san] of [
-    ["ip", "trusted", "DNS:localhost,IP:127.0.0.1,IP:::ffff:127.0.0.1"],
+    ["ip", "trusted", "DNS:localhost,IP:127.0.0.1"],
     ["dns", "trusted", "DNS:localhost"],
     ["untrusted-server", "untrusted", "DNS:localhost"],
   ]) {

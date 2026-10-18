@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import { isIP } from "node:net";
 import type { Request } from "express";
 import { GatewayError } from "../auth.js";
 
@@ -13,7 +14,13 @@ export function localGet(
   signal: AbortSignal,
   tlsServerName?: string,
 ): LocalGet {
-  const hostname = req.socket.localAddress;
+  const localAddress = req.socket.localAddress;
+  // Node/OpenSSL versions disagree on matching mapped IPv6 certificate SANs.
+  // Use the equivalent IPv4 literal, still derived only from the same socket.
+  const mappedV4 = localAddress?.startsWith("::ffff:")
+    ? localAddress.slice(7)
+    : undefined;
+  const hostname = mappedV4 && isIP(mappedV4) === 4 ? mappedV4 : localAddress;
   const port = req.socket.localPort;
   const encrypted = "encrypted" in req.socket && req.socket.encrypted === true;
   return async (path) => {
