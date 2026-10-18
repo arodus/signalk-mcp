@@ -1,14 +1,14 @@
 # History provider compatibility
 
-The gateway discovers, fetches and forwards. It does not calculate history values, repair identifiers, infer sources or replace provider results. A registered provider is discoverable without being compatible with the gateway's response contract.
+The gateway uses the standard `/signalk/v2/api/history` API for any registered provider. It has no database-specific runtime adapter or database client. It validates authorization and response structure, then forwards the provider JSON unchanged. It performs no calculations on data and adds no units or inferred source labels.
 
 ## Verified matrix
 
-| Provider                         | Server/API      | Backend                                      | Gateway status                                                                                                           |
-| -------------------------------- | --------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Synthetic `mcp-fixture`          | 2.32.0 / 2.33.0 | In-memory test data                          | Contract and permission regression fixture only; not a production provider                                               |
-| `signalk-to-influxdb` **1.11.0** | 2.32.0 / 2.33.0 | Real InfluxDB **1.8.10** with synthetic rows | **Blocked**: response columns contain `sourceRef`, not required `$source`; the server also alters hyphenated identifiers |
-| Other provider versions/products | Not tested      | Not tested                                   | Unknown; discovery alone does not establish support                                                                      |
+| Provider                         | Server/API              | Backend                             | Gateway status                                                                                                   |
+| -------------------------------- | ----------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Synthetic `mcp-fixture`          | 2.32.0 / 2.33.0         | In-memory fixtures                  | Standard contract, omitted optional fields, permission and revocation coverage                                   |
+| `signalk-to-influxdb` **1.11.0** | 2.32.0 / 2.33.0         | InfluxDB **1.8.10**, synthetic rows | Works unchanged for the tested standard v2 queries; hyphenated identifiers are rejected due to the server parser |
+| Other registered v2 providers    | Not individually tested | Provider-defined                    | Same standard adapter; compatibility depends on honoring the v2 query contract and gateway limits                |
 
 The test dependency is pinned in `package-lock.json`; it is not a gateway runtime dependency. Its published npm package records upstream commit [`c1a48cc07aa106ea0ccbe5ae358cb9fe67322c10`](https://github.com/tkurki/signalk-to-influxdb/tree/c1a48cc07aa106ea0ccbe5ae358cb9fe67322c10). The Docker fixture uses image digest `sha256:299ebda2c7e308dbef42e26ac9b8fd1d9b3bcb8a0aee80c6509aa0219c1d0290` rather than an unpinned latest image.
 
@@ -37,9 +37,9 @@ For the aligned test range, the raw result includes:
 }
 ```
 
-The provider includes `range.from` and `range.to` as ISO strings representing the requested boundaries. Both endpoints are inclusive, including the sample exactly at `to`. Columns carry path/method/requested source; they do not include units. The gateway's existing metadata path would obtain standard units from Signal K, but this provider fails provenance validation first and no result is forwarded.
+The provider includes `range.from` and `range.to` as ISO strings representing the requested boundaries. Both endpoints are inclusive, including the sample exactly at `to`. The gateway forwards the complete response unchanged. This includes the provider's extra `sourceRef` field; it is not converted to `$source` or used as an authorization alias. Missing units stay missing. Dedicated `get_history` and generic capability execution produce identical provider JSON.
 
-The provider groups samples into backend time buckets. For `from=10:00:01Z`, a sample at `10:00:02Z` produces a row timestamp of `10:00:00Z`, outside the requested range. The gateway refuses out-of-range rows; it does not shift their timestamps or widen the query. Aligned ranges avoid that particular condition but do not resolve the provenance blocker.
+The provider groups samples into backend time buckets. For `from=10:00:01Z`, a sample at `10:00:02Z` produces a row timestamp of `10:00:00Z`, outside the requested range. The gateway accepts and forwards this bucket timestamp unchanged. It checks the response range against the query and validates timestamp syntax and row dimensions without shifting timestamps or recomputing values.
 
 A 2,002-sample fixture produces 2,002 rows in the raw API: the provider has no implicit gateway-sized 2,000-row cap. The gateway retains its separate query, row and byte bounds. It does not truncate a result and present it as complete.
 
@@ -51,9 +51,17 @@ The published provider calls `influx.query(...)` without an AbortSignal or cance
 
 1. Store `fixture-XX=31` and `fixtureXX=47` under the same path. Query the raw History HTTP endpoint for `fixture-XX`; Signal K 2.32.0/2.33.0 selects `fixtureXX` and returns 47. Calling the unchanged provider directly with `sourceRef: "fixture-XX"` returns 31. The mutation is in the server's HTTP parser.
 2. Store `navigation.test-path=53` and `navigation.testpath=61`. Query the former through HTTP; the response names the latter and returns 61. The gateway rejects the original hyphenated spellings before requesting data.
-3. Query an unchanged non-hyphenated path/source. The native provider returns `values[0].sourceRef`, but `$source` is absent. Calling `get_history` returns `HISTORY_PROVENANCE_MISMATCH` with no structured data.
+3. Query an unchanged non-hyphenated path/source. The native provider returns `values[0].sourceRef`, but `$source` is absent. Both MCP invocation forms return the same JSON as the native API, including zero, metadata and exact range/timestamps.
 
-The server API's request type uses `sourceRef`; its response `ValueList` uses `$source`. These fields are not interchangeable merely because their names refer to sources. See the installed `@signalk/server-api/history` types and the pinned provider's `valuesForSpecs` and `querySourceGroup` implementations. No compatibility alias is added here.
+## Optional fields and authorization
+
+The [standard History API](https://demo.signalk.org/documentation/Developing/REST_APIs/History_API.html) and installed `@signalk/server-api/history` types make response `$source` optional. Authorization is established by the explicit source filter sent to the conforming provider, with native path/source ACL checks before and after asynchronous calls. If `$source` is present, it must match the requested source. An omitted field is valid and stays omitted. No provider-specific aliases or fabricated provenance are needed. Providers, like native telemetry producers, are trusted to honor their declared query contract; response metadata alone could never prove that a provider did so.
+
+Query `source`, `method`, `resolution`, `provider`, `from` and `to` are optional. Queries must still describe a bounded range: `from` plus `to`, `from` plus `duration`, `to` plus `duration`, `duration` alone, or `from` alone. The gateway accepts duration as integer seconds, forwards it unchanged and leaves relative-time resolution to the provider. Method defaults come from Signal K. The supported explicit methods and numeric resolution bounds are documented in the README.
+
+An unfiltered history response can combine sources without labelling them. Therefore omitting the source filter requires native `anyACLs()` to confirm no telemetry ACLs exist, plus a native read grant. With configured or unknown ACL state, it returns `PERMISSION_DENIED` before querying; supply an authorized source filter instead. An admin identity or a read grant for an empty/wildcard source cannot establish universal source access. This state is rechecked after each asynchronous read, including ACL insertion while the provider is responding. No signing secrets or security configuration are read by production code.
+
+Columns must match the requested path/method counts. Supplied source labels must fit the requested filters, including when a provider reorders columns; missing labels remain absent even when several authorized sources share a path/method. The gateway never assigns source labels to those columns. Unexpected or contradictory columns, malformed rows, wrong contexts/ranges and oversized results fail closed with no partial output.
 
 Run against a disposable local backend:
 
@@ -74,6 +82,4 @@ Use Node 24 for the primary check and install Python dependencies from `test/pyt
 
 For Signal K server: validate history expressions without silently deleting valid identifier characters. Preserve supported path/source bytes exactly and reject unsupported syntax with a client error. Add collision regressions covering hyphenated and non-hyphenated stored identifiers, including both path and source. Do not remove input validation or interpolate unchecked expressions into database queries.
 
-For `signalk-to-influxdb`: return the standardized `$source` for each explicitly source-filtered column, backed by the actual source restriction used for the query. Do not invent provenance for unfiltered/mixed-source results. Add tests against the server's `ValueList` response contract. Clarify bucket timestamp/range semantics and cancellation/row-limit behavior before claiming end-to-end bounded support.
-
-An MCP compatibility adapter would require a separately reviewed, version-bound provider contract that proves every returned column is source-restricted and preserves path, method, range and values. This change deliberately does not ship such an adapter. Existing pre/post-query authorization and exact provenance checks remain unchanged. Any future proposal needs explicit review; no upstream issue or message was sent as part of this work.
+No provider change is required merely to add optional `$source`. The adapter accepts its absence and preserves any supplied metadata. No upstream issue or message has been sent.

@@ -116,6 +116,8 @@ async function checkHistoryProvider(t, server, host, bearer, client) {
       paths,
       ...extras,
     });
+    for (const [key, value] of Object.entries(extras))
+      if (value === undefined) params.delete(key);
     const response = await fetch(`${base}/values?${params}`, {
       headers: { Authorization: `Bearer ${bearer}` },
       signal: AbortSignal.timeout(5000),
@@ -124,7 +126,7 @@ async function checkHistoryProvider(t, server, host, bearer, client) {
     return response.json();
   }
   await t.test(
-    "real Influx provider filters stored sources but uses nonstandard column provenance",
+    "real Influx provider source filters work without optional response $source",
     async () => {
       const raw = await read("navigation.speedOverGround:first|fixture.XX");
       assert.equal(raw.context, context);
@@ -150,10 +152,97 @@ async function checkHistoryProvider(t, server, host, bearer, client) {
         name: "get_history",
         arguments: input,
       });
-      assert.equal(result.content[0].text, "HISTORY_PROVENANCE_MISMATCH");
-      assert.equal(result.structuredContent, undefined);
+      assert.equal(result.isError, undefined, JSON.stringify(result));
+      assert.deepEqual(result.structuredContent, raw);
+      const generic = await client.callTool({
+        name: "execute_capability",
+        arguments: {
+          id: "signalk.history",
+          operation: "get_history",
+          arguments: input,
+        },
+      });
+      assert.deepEqual(generic.structuredContent, raw);
       const absent = await read("navigation.speedOverGround:first|absent.XX");
       assert.deepEqual(absent.data, []);
+      const empty = await client.callTool({
+        name: "get_history",
+        arguments: {
+          ...input,
+          paths: [{ ...input.paths[0], source: "absent.XX" }],
+        },
+      });
+      assert.equal(empty.isError, undefined, JSON.stringify(empty));
+      assert.deepEqual(empty.structuredContent, absent);
+    },
+  );
+  await t.test(
+    "standard time-range alternatives are forwarded to the production provider",
+    async () => {
+      const raw = await read("navigation.speedOverGround:first|fixture.XX");
+      for (const time of [
+        { from, duration: 60 },
+        { to, duration: 60 },
+      ]) {
+        const result = await client.callTool({
+          name: "get_history",
+          arguments: {
+            provider: providerId,
+            paths: input.paths,
+            resolution: 10,
+            ...time,
+          },
+        });
+        assert.equal(result.isError, undefined, JSON.stringify(result));
+        assert.deepEqual(result.structuredContent, raw);
+      }
+      for (const time of [
+        { duration: 60 },
+        { from: new Date(Date.now() - 60000).toISOString() },
+      ]) {
+        const result = await client.callTool({
+          name: "get_history",
+          arguments: {
+            provider: providerId,
+            paths: [{ ...input.paths[0], source: "absent.XX" }],
+            ...time,
+          },
+        });
+        assert.equal(result.isError, undefined, JSON.stringify(result));
+        assert.deepEqual(result.structuredContent.data, []);
+        if (time.duration)
+          assert.equal(
+            Date.parse(result.structuredContent.range.to) -
+              Date.parse(result.structuredContent.range.from),
+            60000,
+          );
+      }
+    },
+  );
+  await t.test(
+    "unfiltered production reads omit optional source and resolution only without native ACLs",
+    async () => {
+      const configuration = server.app.securityStrategy.getConfiguration();
+      const original = configuration.acls;
+      try {
+        configuration.acls = [];
+        const raw = await read("navigation.speedOverGround:first", {
+          resolution: undefined,
+        });
+        const result = await client.callTool({
+          name: "get_history",
+          arguments: {
+            provider: providerId,
+            from,
+            to,
+            paths: [{ path: "navigation.speedOverGround", method: "first" }],
+          },
+        });
+        assert.equal(result.isError, undefined, JSON.stringify(result));
+        assert.deepEqual(result.structuredContent, raw);
+      } finally {
+        configuration.acls = original;
+      }
     },
   );
   await t.test(
@@ -243,6 +332,15 @@ async function checkHistoryProvider(t, server, host, bearer, client) {
         from: "2026-10-17T10:00:01Z",
       });
       assert.deepEqual(raw.data[0], ["2026-10-17T10:00:00.000Z", 5]);
+      const forwarded = await client.callTool({
+        name: "get_history",
+        arguments: {
+          ...input,
+          from: "2026-10-17T10:00:01Z",
+        },
+      });
+      assert.equal(forwarded.isError, undefined, JSON.stringify(forwarded));
+      assert.deepEqual(forwarded.structuredContent, raw);
       const many = await read("navigation.many:first|fixture.XX", {
         to: "2026-10-17T10:33:21Z",
         resolution: "1",

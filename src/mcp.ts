@@ -91,7 +91,7 @@ export function createMcpServer(
   registerCore(
     "get_history",
     "signalk.history",
-    "Query a registered Signal K History API provider with explicit path/source ACL checks. Requires verified source provenance.",
+    "Fetch and forward standard v2 History results. Source filters are optional only when Signal K confirms no telemetry ACLs; response $source is optional.",
     historyInput,
   );
   server.registerTool(

@@ -624,7 +624,7 @@ test(
       },
     );
     await t.test(
-      "history uses standardized provider, honors source ACLs and rejects wrong provenance",
+      "history forwards standard responses, honors source ACLs and rejects conflicting provenance",
       async () => {
         const description = await client.callTool({
           name: "describe_capability",
@@ -649,8 +649,8 @@ test(
         });
         assert.equal(result.isError, undefined, JSON.stringify(result));
         assert.equal(result.structuredContent.data[0][1], 0);
-        assert.equal(result.structuredContent.values[0].source, "fixture.XX");
-        assert.equal(result.structuredContent.values[0].unit, "m/s");
+        assert.equal(result.structuredContent.values[0].$source, "fixture.XX");
+        assert.equal(result.structuredContent.values[0].unit, undefined);
         const before = fixture.testCalls.history;
         const denied = await client.callTool({
           name: "get_history",
@@ -668,7 +668,6 @@ test(
         assert.equal(fixture.testCalls.history, before);
         for (const mode of [
           "wrong-source",
-          "missing-source",
           "wrong-path",
           "wrong-context",
           "extra-column",
@@ -681,6 +680,19 @@ test(
             mode,
           );
         }
+        fixture.setHistoryMode("missing-source");
+        const optionalSource = await client.callTool({
+          name: "get_history",
+          arguments: query,
+        });
+        assert.equal(
+          optionalSource.isError,
+          undefined,
+          JSON.stringify(optionalSource),
+        );
+        assert.deepEqual(optionalSource.structuredContent.values, [
+          { path: "navigation.speedOverGround", method: "average" },
+        ]);
         fixture.setHistoryMode("valid");
         assert.equal(
           (
@@ -723,6 +735,73 @@ test(
           "HISTORY_UNAVAILABLE",
         );
         fixture.start();
+      },
+    );
+    await t.test(
+      "source and resolution are optional with native no-ACL authorization; ACL changes revoke pending reads",
+      async () => {
+        const security = server.app.securityStrategy;
+        const configuration = security.getConfiguration();
+        const original = configuration.acls;
+        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const input = {
+          provider: "mcp-fixture",
+          from: "2026-10-17T10:00:00Z",
+          to: "2026-10-17T10:01:00Z",
+          paths: [{ path: "navigation.speedOverGround" }],
+        };
+        const before = fixture.testCalls.history;
+        assert.equal(security.anyACLs(), true);
+        const denied = await client.callTool({
+          name: "get_history",
+          arguments: input,
+        });
+        assert.equal(denied.content[0].text, "PERMISSION_DENIED");
+        assert.equal(fixture.testCalls.history, before);
+        let held;
+        try {
+          configuration.acls = [];
+          assert.equal(security.anyACLs(), false);
+          const result = await client.callTool({
+            name: "get_history",
+            arguments: input,
+          });
+          assert.equal(result.isError, undefined, JSON.stringify(result));
+          assert.deepEqual(result.structuredContent, {
+            context: "vessels.self",
+            range: { from: input.from, to: input.to },
+            values: [{ path: "navigation.speedOverGround", method: "average" }],
+            data: [[input.from, 0]],
+          });
+          const position = await client.callTool({
+            name: "get_history",
+            arguments: {
+              ...input,
+              paths: [{ path: "navigation.position" }],
+            },
+          });
+          assert.equal(position.isError, undefined, JSON.stringify(position));
+          assert.equal(position.structuredContent.values[0].method, "first");
+          held = fixture.holdNextRead("history");
+          const pending = client.callTool({
+            name: "get_history",
+            arguments: input,
+          });
+          await Promise.race([
+            held.started,
+            pending.then(() => {
+              throw new Error("History ended before provider entry");
+            }),
+          ]);
+          configuration.acls = original;
+          held.release();
+          const revoked = await pending;
+          assert.equal(revoked.content[0].text, "PERMISSION_DENIED");
+          assert.equal(revoked.structuredContent, undefined);
+        } finally {
+          configuration.acls = original;
+          held?.release();
+        }
       },
     );
     await t.test(
