@@ -23,7 +23,7 @@ The workflow runs the full suite on Linux Node 22 and 24 with Python 3.12 and ch
 
 All test data is synthetic. The unchanged published History provider and Alert Center package are exercised as described below. No ForTuna service, live instrument, notification service or vessel-control hardware was accessed. Retrieval of real vessel measurements remains unverified. Compatibility evidence applies to the exact tested packages and operations.
 
-There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, TLS/reverse-proxy combinations, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. In particular, loopback TLS certificate mismatch fails closed for HTTP-backed capabilities.
+There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, non-TCP hosting, whole-server restart and resource/load benchmarking remain open. TLS/proxy evidence is recorded in the issue #5 follow-up below. Certificate failures remain closed for HTTP-backed capabilities.
 
 The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History accepts optional response source metadata, checks explicit source filters against native ACLs, permits unfiltered reads only with confirmed absence of telemetry ACLs, and rejects identifiers the tested server's HTTP parser would alter. Read-only v2 notification registry coverage remains future work. Notification mutations, calculations, Container Manager integration and sandbox execution are outside the current scope, not deferred work.
 
@@ -54,6 +54,14 @@ See [provider support matrix and reproductions](history-providers.md). The serve
 The suite covers input bounds, pagination, unapproved reads, all documented mutations, disabled/absent providers, document changes and operation ID collisions. The bounded OpenAPI adapter now handles missing operation IDs and explicit strings up to 512 characters, as required by Alert Center; larger schemas still fail closed. README, brief and [provider compatibility documentation](plugin-compatibility.md) describe the exact contract.
 
 On Node 24.22.0, all **41 test entries** pass with no skips against each supported Signal K/ServerAPI version (2.32.0 and 2.33.0), including Python MCP 1.26.0. The primary run passes TypeScript, ESLint and Prettier; `npm pack --dry-run` and `git diff --check` also pass. CI checks the four server/Node combinations, including packaging; consult PR #16 for its current remote results. No live notification delivery, vessel deployment or publication is involved.
+
+## TLS/proxy hosting follow-up (issue #5)
+
+On Node **24.22.0**, the combined suite passes **64 test-runner entries**, with no skips, against both Signal K/ServerAPI **2.32.0** and **2.33.0**, including Python MCP 1.26.0, real InfluxDB/provider and unchanged Alert Center. The primary runtime also passes TypeScript, ESLint and Prettier. `npm pack --dry-run` and `git diff --check` pass.
+
+The new six-scenario real-server matrix covers a TLS proxy, native HTTPS with IP or configured DNS verification names, and three certificate failures. It checks discovery, original-identity plugin/history reads, spoofed routing headers, Host/Origin rejection and disconnect cancellation. Ephemeral certificates and synthetic identities are generated at runtime. The production change adds only a validated optional certificate DNS name for SNI/verification; socket routing and normal certificate trust stay intact. See [hosting recipes and precise limits](hosting.md). CI runs these tests in the existing four-combination matrix; consult the follow-up PR for remote results.
+
+The first hosting CI run exposed a Node/OpenSSL mismatch when verifying IPv4-mapped IPv6 SANs on Linux. A disposable Linux Node 22 container reproduced it. The gateway now uses the equivalent socket-derived IPv4 literal, and all seven hosting entries pass in that Linux reproduction; the full 64-entry primary suite passes again. No certificate bypass or alternate destination was added.
 
 ## Product-client and OAuth decision follow-up (issue #6)
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isIP } from "node:net";
 import { approvalSchema } from "./capabilities/schemas.js";
 export { pathSchema } from "./paths.js";
 export const configSchema = z
@@ -26,6 +27,19 @@ export const configSchema = z
       .max(32)
       .default([]),
     pluginOperations: z.array(approvalSchema).max(64).default([]),
+    localTlsServerName: z
+      .string()
+      .max(253)
+      .refine(
+        (name) =>
+          isIP(name) === 0 &&
+          name
+            .split(".")
+            .every((label) =>
+              /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i.test(label),
+            ),
+      )
+      .optional(),
     staleAfterSeconds: z.number().int().min(1).max(86400).default(300),
   })
   .strict()
@@ -78,6 +92,13 @@ export const schema = {
           },
         },
       },
+    },
+    localTlsServerName: {
+      type: "string",
+      title: "Certificate DNS name for native Signal K TLS (optional)",
+      description:
+        "Used only for certificate verification and SNI; the network destination remains the accepted socket address.",
+      maxLength: 253,
     },
     staleAfterSeconds: {
       type: "integer",

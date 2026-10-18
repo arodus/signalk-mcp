@@ -1,6 +1,12 @@
 // Synthetic provider used only by the isolated real-server integration tests.
 module.exports = (app) => {
-  const calls = { reads: 0, writes: 0, unapproved: 0, history: 0 };
+  const calls = {
+    reads: 0,
+    writes: 0,
+    unapproved: 0,
+    history: 0,
+    disconnected: 0,
+  };
   let historyMode = "valid";
   let heldRead;
   async function waitForRelease(kind) {
@@ -117,6 +123,9 @@ module.exports = (app) => {
     getOpenApi: () => document,
     registerWithRouter(router) {
       router.access("readonly").get("/reading/:name", async (req, res) => {
+        res.once("close", () => {
+          if (!res.writableFinished) calls.disconnected++;
+        });
         if (
           !app.securityStrategy.checkACL(
             req.skPrincipal.identifier,
