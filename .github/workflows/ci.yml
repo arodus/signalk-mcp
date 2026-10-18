@@ -1,8 +1,23 @@
 name: CI
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --omit=optional
+      # Upstream lint is advisory; keep one blocking lint/type check here.
+      - run: npm run typecheck && npm run lint
   check:
     runs-on: ubuntu-latest
     strategy:
@@ -36,7 +51,8 @@ jobs:
       - run: |
           python -m venv /tmp/signalk-mcp-python
           /tmp/signalk-mcp-python/bin/pip install -r test/python-requirements.txt
-      - run: npm run check
+      # Portable tests and formatting run in the official platform workflow.
+      - run: npm run test:integration
         env:
           MCP_TEST_INFLUX_URL: http://127.0.0.1:8086
           MCP_TEST_PYTHON: /tmp/signalk-mcp-python/bin/python

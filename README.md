@@ -159,6 +159,8 @@ Tests use a real temporary Signal K instance, a synthetic installed provider, di
 
 The official [Signal K plugin CI](https://github.com/SignalK/signalk-server/blob/master/.github/workflows/plugin-ci.yml) runs the portable suite and upstream package/schema/lifecycle checks on Linux x64, Linux ARM64, macOS and Windows with Node 22/24. Our separate native integration CI retains the Signal K 2.32.0/2.33.0 matrix, Python MCP and real disposable InfluxDB. Generic upstream checks do not establish native permission compatibility, hardware acceptance or a registry score.
 
+Both workflows run on pull requests, pushes to `main` and manual dispatch, avoiding duplicate feature-branch push runs. The official workflow owns portable tests and formatting; one local-workflow job enforces type checking and lint because upstream lint is advisory. The native matrix runs integration tests against the checkout and again against the installed tarball to verify packaging. `npm run check` remains the complete local check.
+
 To include the second client (Python 3.10+):
 
 ```sh

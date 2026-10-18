@@ -130,3 +130,9 @@ The host and browser-origin fields have been removed at the owner’s request. T
 The native settings card has been recaptured without those two fields. The optional HTTPS certificate hostname now explains its purpose, a hostname example, when to leave it empty and why URLs, ports and certificate file paths do not belong there.
 
 Final full checks pass on Node 24.22.0 / Signal K 2.33.0 and Node 22.23.3 / Signal K 2.32.0: 34 portable tests and 47 native entries pass per pair, with two optional product-client checks skipped. Python MCP and the real isolated History provider are enabled. The final UI was inspected at desktop and mobile widths, and saving/reloading/restoring the staleness setting succeeded without either retired field.
+
+## CI deduplication
+
+Both workflows now run on PRs, pushes to `main` and manual dispatch, without a second feature-branch push run. Portable tests and formatting belong to the official platform workflow. One blocking type/lint job remains in our workflow because the pinned upstream lint step uses `continue-on-error`. The four native runtime combinations retain checkout integration tests and installed-tarball integration tests, which validate different installation layouts. No test cases or supported runtime combinations were removed; `npm run check` still runs every local check.
+
+The full local check passes on Node 24.22.0 / Signal K 2.33.0: 34 portable tests and 47 native entries, with only the two opt-in product clients skipped. Python MCP and isolated real InfluxDB/History are enabled. Type checking, lint, formatting and `git diff --check` pass. Remote workflow validation is recorded on the CI deduplication PR.
