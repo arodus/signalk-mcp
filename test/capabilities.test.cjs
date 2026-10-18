@@ -190,6 +190,41 @@ function registryFixture() {
   const config = { staleAfterSeconds: 300, pluginOperations: [approval] };
   return { user, app, config };
 }
+test("oversized feature discovery fails closed and recovers with bounded input", async () => {
+  const { app, config } = registryFixture();
+  const valid = app.getFeatures;
+  const registry = new CapabilityRegistry(
+    app,
+    "Bearer token",
+    config,
+    () => true,
+  );
+  for (const features of [
+    {
+      apis: [],
+      plugins: Array.from({ length: 257 }, (_, i) => ({
+        id: `p${i}`,
+        enabled: true,
+      })),
+    },
+    { apis: Array.from({ length: 65 }, (_, i) => `api${i}`), plugins: [] },
+  ]) {
+    app.getFeatures = async () => features;
+    const result = await registry.list();
+    assert.equal(result.discovery, "INVALID_FEATURES");
+    assert.equal(result.capabilities.length, 3);
+    await assert.rejects(
+      registry.describe("plugin.example"),
+      /INVALID_FEATURES/,
+    );
+  }
+  app.getFeatures = valid;
+  assert.ok(
+    (await registry.list()).capabilities.some(
+      (entry) => entry.id === "plugin.example",
+    ),
+  );
+});
 test("partial discovery stays truthful and does not break core capabilities", async () => {
   const { app, config } = registryFixture();
   let gets = 0;

@@ -151,4 +151,6 @@ MCP_TEST_PYTHON=/tmp/signalk-mcp-python/bin/python npm test
 
 Without `MCP_TEST_PYTHON`, that test is explicitly skipped. Credentials reach Python over stdin. The test runner uses `--test-force-exit` after tests/cleanup because the upstream test server leaves background handles after stopping; the plugin does not force process exit.
 
+The separate lifecycle test checks gateway-owned timer/TCP cleanup before terminating residual server processes and also runs without forced test exit. The opt-in local ARM64 benchmark passed the agreed development gates; Raspberry Pi and whole-server restart acceptance remain open. See [resource results, reproduction commands and limits](docs/resource-validation.md).
+
 To verify an installed tarball, set `MCP_TEST_PLUGIN_DIR` to the installed package directory while running the integration test. CI covers Signal K 2.32.0 and 2.33.0 on Node 22 and 24 with both clients. See the verification report for actual results and outstanding acceptance work.

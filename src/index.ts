@@ -9,7 +9,7 @@ import { createMcpServer } from "./mcp.js";
 function pluginFactory(app: App): Plugin {
   let config: Config | undefined;
   const active = new Set<ReturnType<typeof createMcpServer>>();
-  const pending = new Set<AbortController>();
+  const pending = new Map<AbortController, Response>();
   const guard = (req: Request) => {
     if (!config) throw new GatewayError("PLUGIN_UNAVAILABLE", 503);
     if (!config.allowedHosts.includes(req.headers.host ?? ""))
@@ -51,7 +51,7 @@ function pluginFactory(app: App): Plugin {
         Buffer.byteLength(JSON.stringify(req.body)) > 64 * 1024
       )
         throw new GatewayError("REQUEST_TOO_LARGE", 413);
-      pending.add(controller);
+      pending.set(controller, res);
       timer = setTimeout(() => {
         controller.abort();
         res.destroy();
@@ -75,14 +75,24 @@ function pluginFactory(app: App): Plugin {
         enableJsonResponse: true,
       });
       const current = server;
+      let finishClosed!: () => void;
+      const disconnected = new Promise<void>((resolve) => {
+        finishClosed = resolve;
+      });
       const closed = () => {
+        finishClosed();
         controller.abort();
         void current.close().catch(() => {});
       };
       res.once("close", closed);
       try {
         await server.connect(transport);
-        await transport.handleRequest(req, res, req.body);
+        // SDK JSON-response promises can remain pending after transport.close().
+        // A disconnected client must still reach our resource cleanup.
+        await Promise.race([
+          transport.handleRequest(req, res, req.body),
+          disconnected,
+        ]);
       } finally {
         res.off("close", closed);
       }
@@ -119,7 +129,12 @@ function pluginFactory(app: App): Plugin {
     },
     async stop() {
       config = undefined;
-      for (const controller of pending) controller.abort();
+      for (const [controller, response] of pending) {
+        controller.abort();
+        // Closing the MCP transport alone can leave its HTTP response pending.
+        // End the client connection too instead of retaining it until deadline.
+        response.destroy();
+      }
       await Promise.allSettled([...active].map((server) => server.close()));
       active.clear();
     },
