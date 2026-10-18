@@ -43,7 +43,7 @@ The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synt
 
 Before changing an existing installation, save the current package version and the plugin's configuration through the host's normal backup process. Keep provider approvals for review; a provider upgrade can change a route's behavior or permissions.
 
-Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server. Confirm the loaded version, trusted Host/Origin settings, security-enabled state and reviewed GET approvals before enabling. Repeat one allowed read, one denied-path read and a write-refusal check. The plugin stores no historical values or private account database to migrate.
+Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, trusted Host/Origin settings, security-enabled state and reviewed GET approvals before enabling. Repeat one allowed read, one denied-path read and a write-refusal check. The plugin stores no historical values or private account database to migrate.
 
 For rollback, disable the plugin, reinstall the previously retained tarball/version with scripts disabled, restore its compatible configuration and restart. Recheck permissions before enabling. Do not assume a changed schema or provider approval remains compatible.
 
@@ -63,4 +63,4 @@ This procedure is prepared only. Do not connect to a vessel or install the packa
 
 ## Remaining release gates
 
-Raspberry Pi hardware acceptance, in-process whole-server restart, longer-duration/adversarial large-value behavior, host dependency advisories, full registry scoring and explicitly authorized vessel acceptance remain open. No publication or deployment is implied by the package checks or this procedure.
+Raspberry Pi hardware acceptance, upstream in-process shutdown/reload gaps, host dependency advisories, full registry scoring and explicitly authorized vessel acceptance remain open. Full process replacement and synthetic large-value recovery are covered by local native tests; see the resource report for workload-specific limits. No publication or deployment is implied by the package checks or this procedure.

@@ -12,6 +12,7 @@ import {
   valuesInput,
 } from "./capabilities/schemas.js";
 import type { LocalGet } from "./capabilities/http.js";
+import { boundedJson } from "./json.js";
 
 export function createMcpServer(
   app: App,
@@ -33,9 +34,7 @@ export function createMcpServer(
       registry.authorize();
       const data = await operation();
       registry.authorize();
-      const text = JSON.stringify(data);
-      if (Buffer.byteLength(text) > 256 * 1024)
-        throw new GatewayError("OUTPUT_LIMIT");
+      const text = boundedJson(data, 256 * 1024);
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: data as Record<string, unknown>,

@@ -16,7 +16,8 @@ const memory = () => {
   const { heapUsed, rss } = process.memoryUsage();
   return { heapUsed, rss };
 };
-async function measure(fixture, paths, load) {
+async function measure(fixture, paths, load, seconds = 30) {
+  const memorySamples = [];
   const latency = [],
     telemetryDelay = [],
     telemetryProcessing = [];
@@ -47,11 +48,21 @@ async function measure(fixture, paths, load) {
     }
     telemetryProcessing.push(performance.now() - now);
     peakRss = Math.max(peakRss, process.memoryUsage().rss);
+    if (tickValue % 100 === 0)
+      memorySamples.push({ elapsedMs: now - began, ...memory() });
+    if (tickValue % 600 === 0)
+      process.send({
+        type: "progress",
+        phase: load ? "load" : "idle",
+        seconds: Math.round((now - began) / 1000),
+        requests,
+        errors,
+      });
   }, 100);
   const before = process.cpuUsage();
   const began = performance.now();
   try {
-    for (let i = 0; i < 600; i++) {
+    for (let i = 0; i < seconds * 20; i++) {
       await delay(Math.max(0, began + i * 50 - performance.now()));
       if (!load) continue;
       if (active.size >= 4) {
@@ -77,7 +88,7 @@ async function measure(fixture, paths, load) {
         .finally(() => active.delete(pending));
       active.add(pending);
     }
-    await delay(Math.max(0, began + 30000 - performance.now()));
+    await delay(Math.max(0, began + seconds * 1000 - performance.now()));
     await Promise.all(active);
   } finally {
     clearInterval(tick);
@@ -87,6 +98,7 @@ async function measure(fixture, paths, load) {
   const cpu = process.cpuUsage(before);
   return {
     elapsedMs,
+    memorySamples,
     requests,
     errors,
     skipped,
@@ -102,7 +114,7 @@ async function measure(fixture, paths, load) {
     eventLoopMaxMs: histogram.max / 1e6,
   };
 }
-async function benchmark() {
+async function benchmark(seconds) {
   assert.equal(
     typeof globalThis.gc,
     "function",
@@ -123,7 +135,7 @@ async function benchmark() {
     globalThis.gc();
     const before = memory();
     const baseline = await measure(fixture, paths, false);
-    const load = await measure(fixture, paths, true);
+    const load = await measure(fixture, paths, true, seconds);
     await delay(1000);
     globalThis.gc();
     globalThis.gc();
@@ -131,7 +143,9 @@ async function benchmark() {
     const heapGrowth = after.heapUsed - before.heapUsed;
     const gates = {
       allRequests:
-        load.requests === 600 && load.errors === 0 && load.skipped === 0,
+        load.requests === seconds * 20 &&
+        load.errors === 0 &&
+        load.skipped === 0,
       telemetry:
         baseline.telemetryErrors === 0 &&
         load.telemetryErrors === 0 &&
@@ -159,7 +173,8 @@ async function benchmark() {
         pathsPerRead: 64,
         requestsPerSecond: 20,
         maxConcurrent: 4,
-        phaseSeconds: 30,
+        baselineSeconds: 30,
+        loadSeconds: seconds,
         telemetryHz: 10,
       },
       scope:
@@ -180,28 +195,40 @@ async function benchmark() {
   }
 }
 if (process.argv[2] === "--child") {
-  benchmark().catch((error) => {
+  benchmark(Number(process.argv[3])).catch((error) => {
     process.send?.({ error: error.stack });
     process.disconnect?.();
     process.exitCode = 1;
   });
 } else {
   const output = process.argv[2];
+  const seconds = Number(process.argv[3] ?? 30);
+  assert.ok(
+    Number.isInteger(seconds) && seconds >= 30 && seconds <= 1800,
+    "Load duration must be 30..1800 seconds",
+  );
   assert.ok(output, "Pass an output JSON path");
   let report, grace;
   const child = fork(
     require("node:path").join(__dirname, "runtime-benchmark.cjs"),
-    ["--child"],
+    ["--child", String(seconds)],
     {
       execArgv: ["--expose-gc"],
       stdio: ["ignore", "inherit", "inherit", "ipc"],
     },
   );
-  const watchdog = setTimeout(() => {
-    child.kill("SIGKILL");
-    process.exitCode = 1;
-  }, 85000);
+  const watchdog = setTimeout(
+    () => {
+      child.kill("SIGKILL");
+      process.exitCode = 1;
+    },
+    (seconds + 55) * 1000,
+  );
   child.on("message", (value) => {
+    if (value.type === "progress") {
+      process.stdout.write(JSON.stringify(value) + "\n");
+      return;
+    }
     report = value;
     grace = setTimeout(() => child.kill(), 1500);
   });

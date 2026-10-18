@@ -209,3 +209,87 @@ test("oversized and deeply nested models stop discovery and recover on a valid m
     "navigation.speed",
   ]);
 });
+
+test("bounded serialization preserves JSON spelling and exact UTF-8 byte boundaries", () => {
+  const { boundedJson } = require("../dist/json.js");
+  const { Buffer } = require("node:buffer");
+  const shared = { value: "shared" };
+  const sparse = Array(2);
+  sparse[1] = 1;
+  const cases = [
+    null,
+    true,
+    false,
+    0,
+    -0,
+    1.5,
+    NaN,
+    Infinity,
+    "",
+    'é🚤\u0000\n"\\',
+    "\ud800",
+    {},
+    [],
+    {
+      "": { "": "empty keys" },
+      optional: undefined,
+      array: [undefined, null, ...sparse],
+      sparse,
+      same: [shared, shared],
+    },
+    {
+      date: new Date("2026-10-18T00:00:00Z"),
+      custom: { toJSON: () => ({ value: false }) },
+    },
+    { number: Object(1), string: Object("test"), boolean: Object(false) },
+  ];
+  for (const value of cases) {
+    const expected = JSON.stringify(value);
+    const size = Buffer.byteLength(expected);
+    assert.equal(boundedJson(value, size), expected);
+    assert.throws(() => boundedJson(value, size - 1), /OUTPUT_LIMIT/);
+  }
+  assert.throws(
+    () => boundedJson({ body: "x".repeat(1000) }, 64, "REQUEST_TOO_LARGE", 413),
+    (error) => error.code === "REQUEST_TOO_LARGE" && error.status === 413,
+  );
+  if (typeof JSON.rawJSON === "function")
+    assert.throws(
+      () =>
+        boundedJson(
+          { raw: JSON.rawJSON(JSON.stringify("x".repeat(1024))) },
+          64,
+        ),
+      /OUTPUT_LIMIT/,
+    );
+  const circular = {};
+  circular.self = circular;
+  assert.throws(() => boundedJson(circular, 1024), /circular/i);
+});
+
+test("oversized results stop traversal before later values are serialized", () => {
+  const { boundedJson } = require("../dist/json.js");
+  let visited = false;
+  const large = {
+    value: "x".repeat(1024 * 1024),
+    later: {
+      toJSON() {
+        visited = true;
+        return "must not be reached";
+      },
+    },
+  };
+  assert.throws(() => boundedJson(large, 256 * 1024), /OUTPUT_LIMIT/);
+  assert.equal(visited, false);
+  const repeated = {
+    values: Array(64).fill("x".repeat(8192)),
+    later: {
+      toJSON() {
+        visited = true;
+        return 0;
+      },
+    },
+  };
+  assert.throws(() => boundedJson(repeated, 256 * 1024), /OUTPUT_LIMIT/);
+  assert.equal(visited, false);
+});

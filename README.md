@@ -39,9 +39,9 @@ Restart Signal K, configure the plugin in Plugin Config, then enable it:
 
 Enable Signal K security and supply an existing user/device token in `Authorization: Bearer <token>` on every request. Guest reads and security-disabled servers are refused. The plugin does not create tokens or read signing secrets. Use Signal K TLS or a trusted TLS reverse proxy for remote access.
 
-The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. Its loopback address and test provider are examples, not vessel settings.
+The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. Its loopback address is an example, not a vessel setting.
 
-![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.png)
+![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.jpg)
 
 See [package verification, upgrade/removal and release acceptance](docs/release-readiness.md) before preparing an installation candidate.
 
@@ -169,6 +169,6 @@ MCP_TEST_PYTHON=/tmp/signalk-mcp-python/bin/python npm run test:integration
 
 Without `MCP_TEST_PYTHON`, that test is explicitly skipped. Credentials reach Python over stdin. The native integration runner uses `--test-force-exit` after tests/cleanup because the upstream test server leaves background handles after stopping; the plugin does not force process exit.
 
-The separate lifecycle test checks gateway-owned timer/TCP cleanup before terminating residual server processes and also runs without forced test exit. The opt-in local ARM64 benchmark passed the agreed development gates; Raspberry Pi and whole-server restart acceptance remain open. See [resource results, reproduction commands and limits](docs/resource-validation.md).
+The separate lifecycle test checks gateway-owned timer/TCP cleanup before terminating residual server processes and also runs without forced test exit. The opt-in local ARM64 benchmark passed the agreed development gates. Full server process replacement preserves client access and permissions in native tests; in-process server shutdown still has upstream cleanup gaps. Raspberry Pi acceptance remains open. Oversized ordinary JSON results now stop serialization at the byte budget, but that is not a total host-memory limit. See [resource results, reproduction commands and limits](docs/resource-validation.md).
 
 To verify an installed tarball, set `MCP_TEST_PLUGIN_DIR` to the installed package directory while running the integration test. CI covers Signal K 2.32.0 and 2.33.0 on Node 22 and 24 with both clients. See the verification report for actual results and outstanding acceptance work.
