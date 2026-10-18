@@ -68,7 +68,7 @@ function primitive(schema: Record<string, unknown>): z.ZodTypeAny {
       !Number.isInteger(max) ||
       (min as number) < 0 ||
       (max as number) < (min as number) ||
-      (max as number) > 256
+      (max as number) > 512
     )
       throw new GatewayError("UNSUPPORTED_SCHEMA");
     value = z
@@ -213,13 +213,21 @@ export function discoverOperations(
       "trace",
     ]) {
       const operation = raw[method];
-      if (
-        !record(operation) ||
-        !operationIdSchema.safeParse(operation.operationId).success
-      )
-        continue;
+      if (!record(operation)) continue;
+      // OpenAPI operationId is optional. Use a stable route-derived name only
+      // when absent, never to repair an invalid published ID. Exact method/path
+      // approval still applies; collisions are disabled below, not guessed away.
+      const id =
+        operation.operationId === undefined &&
+        routeSchema.safeParse(path).success
+          ? `${method}.${path
+              .replace(/^\//, "")
+              .replace(/\/$/, "")
+              .replace(/\{([^}]+)\}/g, "by-$1")
+              .replaceAll("/", ".")}`
+          : operation.operationId;
+      if (!operationIdSchema.safeParse(id).success) continue;
       if (result.length >= 128) throw new GatewayError("DISCOVERY_LIMIT");
-      const id = operation.operationId as string;
       const approval = approvals.find(
         (a) =>
           a.pluginId === pluginId &&
@@ -228,7 +236,7 @@ export function discoverOperations(
           a.method === method.toUpperCase(),
       );
       const entry: DiscoveredOperation = {
-        id,
+        id: id as string,
         method: method.toUpperCase(),
         path,
         description:

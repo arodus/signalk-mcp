@@ -11,13 +11,13 @@ const {
   StreamableHTTPClientTransport,
 } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
 
-const pluginId = "signalk-alert-manager";
+const pluginId = "signalk-alert-center";
 const capability = `plugin.${pluginId}`;
 const approval = {
   pluginId,
-  operationId: "listAlerts",
+  operationId: "get.definitions",
   method: "GET",
-  path: "/alerts",
+  path: "/definitions",
   readOnly: true,
   permission: "admin",
 };
@@ -39,7 +39,7 @@ async function start(t, installed = true) {
   fs.mkdirSync(path.join(dir, "node_modules"));
   fs.mkdirSync(path.join(dir, "plugin-config-data"));
   const packageRoot = path.dirname(require.resolve(`${pluginId}/package.json`));
-  assert.equal(require(`${pluginId}/package.json`).version, "0.1.0");
+  assert.equal(require(`${pluginId}/package.json`).version, "0.4.1");
   fs.symlinkSync(
     process.env.MCP_TEST_PLUGIN_DIR || path.resolve(__dirname, ".."),
     path.join(dir, "node_modules/signalk-mcp"),
@@ -58,16 +58,16 @@ async function start(t, installed = true) {
       version: "1.0.0",
       dependencies: {
         "signalk-mcp": "0.1.0",
-        ...(installed ? { [pluginId]: "0.1.0" } : {}),
+        ...(installed ? { [pluginId]: "0.4.1" } : {}),
       },
     }),
   );
   const configuration = { allowedHosts: [host], pluginOperations: [approval] };
   const providerConfig = {
-    audio: { minAudiblePriority: "off" },
-    escalation: { warningToAlarm: { enabled: false } },
-    sourceTimeout: { markStaleAfterSeconds: 3600 },
-    dev: { enableSimulation: false },
+    notifiers: [],
+    defaults: { soundEnabled: false, speechEnabled: false, notifiers: [] },
+    connectivity: { enabled: false },
+    retention: { enabled: false },
   };
   for (const [id, config] of [
     ["signalk-mcp", configuration],
@@ -121,7 +121,7 @@ async function start(t, installed = true) {
   });
   await server.start();
   t.diagnostic(
-    `Node ${process.version}; Signal K ${serverRequire("./package.json").version}; ${pluginId} 0.1.0; installed=${installed}`,
+    `Node ${process.version}; Signal K ${serverRequire("./package.json").version}; ${pluginId} 0.4.1; installed=${installed}`,
   );
   if (process.env.MCP_TEST_SERVER_VERSION)
     assert.equal(
@@ -158,7 +158,7 @@ const describe = (client) =>
     name: "describe_capability",
     arguments: { id: capability },
   });
-const execute = (client, operation = "listAlerts", args = {}) =>
+const execute = (client, operation = "get.definitions", args = {}) =>
   client.callTool({
     name: "execute_capability",
     arguments: { id: capability, operation, arguments: args },
@@ -169,57 +169,59 @@ function error(result, code) {
 }
 
 test(
-  "published alert-manager: native read authorization, discovery and forwarding",
+  "published Alert Center: native permissions, discovery and unchanged forwarding",
   { timeout: 60000 },
   async (t) => {
     const { server, configuration, providerConfig, clientFor, direct } =
       await start(t);
     const provider = server.app.pluginsMap[pluginId];
-    assert.ok(
-      provider,
-      "published package must load through native plugin discovery",
-    );
-    await provider.whenReady();
+    assert.ok(provider, "published package must load through native discovery");
     const admin = await clientFor("admin");
     const reader = await clientFor("reader");
-    // Seed synthetic notification deltas through the native server, outside MCP.
-    // No browser audio client, live notifier, or vessel hardware is connected.
+    assert.equal(
+      provider.openApi.paths["/definitions"].get.operationId,
+      undefined,
+    );
+    // Isolated synthetic deltas only. No notifier, audio or connectivity service.
     server.app.handleMessage("mcp-fixture", {
       context: "vessels.self",
       updates: [
         {
           source: { label: "mcp-fixture" },
           timestamp: new Date().toISOString(),
-          values: [
-            {
-              path: "notifications.mcp.synthetic.bilge",
-              value: {
-                state: "warn",
-                method: [],
-                message: "Synthetic bilge alert",
-              },
+          values: ["bilge", "battery"].map((name) => ({
+            path: `notifications.mcp.synthetic.${name}`,
+            value: {
+              state: "warn",
+              method: [],
+              message: `Synthetic ${name} alert`,
             },
-          ],
+          })),
         },
       ],
     });
     let expected;
-    for (let attempt = 0; attempt < 30; attempt++) {
-      const response = await direct("/alerts");
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const response = await direct("/definitions");
       assert.equal(response.status, 200);
-      const alerts = await response.json();
-      if (alerts.length) {
-        expected = alerts[0];
+      const page = await response.json();
+      if (
+        page.items.filter((item) =>
+          item.pathPattern.startsWith("notifications.mcp.synthetic."),
+        ).length === 2
+      ) {
+        expected = page;
         break;
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    assert.ok(expected, "published provider must consume the synthetic delta");
-    assert.equal(expected.message, "Synthetic bilge alert");
-    assert.equal(expected.priority, "warning");
+    assert.ok(
+      expected,
+      "published provider must ingest both synthetic notifications",
+    );
 
     await t.test(
-      "discovers real operations and forwards exact provider JSON under admin",
+      "discovers route-derived operation IDs and forwards paginated provider JSON",
       async () => {
         const listing = await admin.callTool({
           name: "list_capabilities",
@@ -231,58 +233,71 @@ test(
           ),
         );
         const info = (await describe(admin)).structuredContent;
-        const read = info.operations.find((op) => op.id === "listAlerts");
+        const read = info.operations.find((op) => op.id === "get.definitions");
         assert.equal(read.enabled, true);
         assert.equal(read.permission, "admin");
-        assert.deepEqual(read.inputSchema.properties.stale.enum, [
-          "true",
-          "false",
-        ]);
-        assert.equal(
-          info.operations.find((op) => op.id === "getAlert").reason,
-          "UNSUPPORTED_SCHEMA",
+        assert.equal(read.inputSchema.properties.cursor.maxLength, 512);
+        assert.equal(read.inputSchema.properties.limit.maximum, 100);
+        const args = { limit: 1, sourceType: "recognized", enabled: true };
+        const native = await direct(
+          "/definitions?limit=1&sourceType=recognized&enabled=true",
         );
-        const native = await direct("/alerts?priority=warning&stale=false");
-        assert.equal(native.status, 200);
-        const result = await execute(admin, "listAlerts", {
-          priority: "warning",
-          stale: "false",
+        const first = (await execute(admin, "get.definitions", args))
+          .structuredContent.data;
+        assert.deepEqual(first, await native.json());
+        assert.equal(first.items.length, 1);
+        assert.ok(first.nextCursor);
+        const second = await execute(admin, "get.definitions", {
+          ...args,
+          cursor: first.nextCursor,
         });
-        assert.deepEqual(result.structuredContent.data, await native.json());
-        assert.deepEqual(result.structuredContent.data, [expected]);
+        const nativeSecond = await direct(
+          `/definitions?limit=1&sourceType=recognized&enabled=true&cursor=${encodeURIComponent(first.nextCursor)}`,
+        );
         assert.deepEqual(
-          (await execute(admin, "listAlerts", { priority: "alarm" }))
-            .structuredContent.data,
-          [],
+          second.structuredContent.data,
+          await nativeSecond.json(),
+        );
+        assert.notEqual(
+          first.items[0].id,
+          second.structuredContent.data.items[0].id,
+        );
+        assert.deepEqual(
+          (await execute(admin)).structuredContent.data,
+          expected,
         );
       },
     );
 
     await t.test(
-      "enforces admin approval and the target route's independent native permissions",
+      "honors conservative admin approval and the provider's native readonly route",
       async () => {
         const read = (await describe(reader)).structuredContent.operations.find(
-          (op) => op.id === "listAlerts",
+          (op) => op.id === "get.definitions",
         );
         assert.equal(read.reason, "PERMISSION_DENIED");
         error(await execute(reader), "OPERATION_DISABLED");
-        assert.equal((await direct("/alerts", "reader")).status, 401);
-        // A mistakenly relaxed gateway approval must not override native admin routing.
+        // Alert Center itself permits native readonly callers. It does not filter
+        // this JSON by telemetry ACLs, so the reviewed gateway example is admin-only.
+        assert.equal((await direct("/definitions", "reader")).status, 200);
+        assert.equal(
+          (
+            await direct("/snooze", "reader", {
+              method: "POST",
+              body: JSON.stringify({ durationSeconds: 60 }),
+            })
+          ).status,
+          401,
+        );
         server.app.pluginsMap["signalk-mcp"].start({
           ...configuration,
           pluginOperations: [{ ...approval, permission: "readonly" }],
         });
         try {
-          assert.equal(
-            (await describe(reader)).structuredContent.operations.find(
-              (op) => op.id === "listAlerts",
-            ).enabled,
-            true,
-          );
-          error(await execute(reader), "UPSTREAM_PERMISSION_DENIED");
-          assert.deepEqual((await execute(admin)).structuredContent.data, [
+          assert.deepEqual(
+            (await execute(reader)).structuredContent.data,
             expected,
-          ]);
+          );
         } finally {
           server.app.pluginsMap["signalk-mcp"].start(configuration);
         }
@@ -290,25 +305,50 @@ test(
     );
 
     await t.test(
-      "rejects invalid inputs and sanitizes native provider errors",
+      "validates provider inputs and sanitizes native errors",
       async () => {
         for (const args of [
-          { stale: true },
-          { stale: "yes" },
-          { category: "x".repeat(257) },
+          { limit: 0 },
+          { limit: 101 },
+          { limit: "1" },
+          { enabled: "true" },
+          { sourceType: "invalid" },
+          { cursor: "x".repeat(513) },
           { token: "synthetic-secret" },
           { method: "POST" },
-          { path: "/alerts/silence-all" },
         ]) {
-          error(await execute(admin, "listAlerts", args), "INVALID_ARGUMENTS");
+          error(
+            await execute(admin, "get.definitions", args),
+            "INVALID_ARGUMENTS",
+          );
         }
-        // The provider owns semantics not expressed in its string schema.
-        error(
-          await execute(admin, "listAlerts", {
-            state: "synthetic-secret-invalid-state",
-          }),
-          "UPSTREAM_HTTP_ERROR",
+        assert.deepEqual(
+          (await execute(admin, "get.definitions", { cursor: "x".repeat(512) }))
+            .structuredContent.data,
+          { items: [] },
         );
+        // A valid, nonexistent detail ID exercises native error sanitization.
+        server.app.pluginsMap["signalk-mcp"].start({
+          ...configuration,
+          pluginOperations: [
+            approval,
+            {
+              ...approval,
+              operationId: "get.definitions.by-id",
+              path: "/definitions/{id}",
+            },
+          ],
+        });
+        try {
+          error(
+            await execute(admin, "get.definitions.by-id", {
+              id: "synthetic-secret-missing",
+            }),
+            "CAPABILITY_UNAVAILABLE",
+          );
+        } finally {
+          server.app.pluginsMap["signalk-mcp"].start(configuration);
+        }
       },
     );
 
@@ -322,7 +362,7 @@ test(
         try {
           assert.equal(
             (await describe(admin)).structuredContent.operations.find(
-              (op) => op.id === "listAlerts",
+              (op) => op.id === "get.definitions",
             ).reason,
             "NOT_ALLOWLISTED",
           );
@@ -330,44 +370,71 @@ test(
         } finally {
           server.app.pluginsMap["signalk-mcp"].start(configuration);
         }
-        const info = (await describe(admin)).structuredContent;
-        const mutations = info.operations.filter((op) => op.method !== "GET");
+        error(await execute(admin, "get.snooze"), "OPERATION_DISABLED");
+        const routes = [
+          "/definitions",
+          "/occurrences",
+          "/snooze",
+          "/deliveries",
+        ];
+        const before = await Promise.all(
+          routes.map(async (route) => (await direct(route)).json()),
+        );
+        const mutations = (
+          await describe(admin)
+        ).structuredContent.operations.filter((op) => op.method !== "GET");
         assert.ok(mutations.length >= 5);
         for (const operation of mutations) {
           assert.equal(operation.reason, "METHOD_NOT_READONLY");
           error(
-            await execute(admin, operation.id, { id: expected.id }),
+            await execute(admin, operation.id, { id: expected.items[0].id }),
             "OPERATION_DISABLED",
           );
         }
-        assert.deepEqual(await (await direct("/alerts")).json(), [expected]);
+        assert.deepEqual(
+          await Promise.all(
+            routes.map(async (route) => (await direct(route)).json()),
+          ),
+          before,
+        );
       },
     );
 
     await t.test(
-      "rechecks changed documents on each invocation and reports safe diagnostics",
+      "changed schemas, routes and operation ID collisions fail closed",
       async () => {
         const original = provider.openApi;
         const cases = [
           [
             "UNSUPPORTED_SCHEMA",
             (doc) => {
-              doc.paths["/alerts"].get.parameters[0].schema = {
+              doc.paths["/definitions"].get.parameters[0].schema = {
                 type: "object",
               };
             },
           ],
           [
-            "NOT_ALLOWLISTED",
+            undefined,
             (doc) => {
-              doc.paths["/moved-alerts"] = doc.paths["/alerts"];
-              delete doc.paths["/alerts"];
+              doc.paths["/moved-definitions"] = doc.paths["/definitions"];
+              delete doc.paths["/definitions"];
             },
           ],
           [
             "AMBIGUOUS_OPERATION_ID",
             (doc) => {
-              doc.paths["/duplicate"] = { get: doc.paths["/alerts"].get };
+              doc.paths["/duplicate"] = {
+                get: {
+                  ...doc.paths["/definitions"].get,
+                  operationId: "get.definitions",
+                },
+              };
+            },
+          ],
+          [
+            undefined,
+            (doc) => {
+              doc.paths["/definitions"].get.operationId = "renamed";
             },
           ],
         ];
@@ -378,27 +445,31 @@ test(
             provider.openApi = changed;
             const read = (
               await describe(admin)
-            ).structuredContent.operations.find((op) => op.id === "listAlerts");
-            assert.equal(read.reason, reason);
-            assert.equal(read.enabled, false);
+            ).structuredContent.operations.find(
+              (op) => op.id === "get.definitions",
+            );
+            assert.equal(read?.reason, reason);
+            assert.notEqual(read?.enabled, true);
             error(await execute(admin), "OPERATION_DISABLED");
           }
           provider.openApi = { ...original, openapi: "2.0" };
-          const unsupported = (await describe(admin)).structuredContent;
-          assert.equal(unsupported.available, false);
-          assert.equal(unsupported.reason, "UNSUPPORTED_OPENAPI");
+          assert.equal(
+            (await describe(admin)).structuredContent.reason,
+            "UNSUPPORTED_OPENAPI",
+          );
           error(await execute(admin), "UNSUPPORTED_OPENAPI");
         } finally {
           provider.openApi = original;
         }
-        assert.deepEqual((await execute(admin)).structuredContent.data, [
+        assert.deepEqual(
+          (await execute(admin)).structuredContent.data,
           expected,
-        ]);
+        );
       },
     );
 
     await t.test(
-      "a provider disabled through native configuration is unavailable",
+      "native configuration disabling the provider makes it unavailable",
       async () => {
         const response = await direct("/config", "admin", {
           method: "POST",
@@ -408,8 +479,10 @@ test(
           }),
         });
         assert.equal(response.status, 200);
-        const info = (await describe(admin)).structuredContent;
-        assert.equal(info.reason, "PLUGIN_DISABLED");
+        assert.equal(
+          (await describe(admin)).structuredContent.reason,
+          "PLUGIN_DISABLED",
+        );
         error(await execute(admin), "CAPABILITY_UNAVAILABLE");
       },
     );

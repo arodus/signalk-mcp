@@ -1,41 +1,39 @@
-# Reviewed plugin read: Hat Labs Alert Manager
+# Reviewed plugin read: Signal K Alert Center
 
-Review date: 2026-10-18. This is a reproducible compatibility example, not a default approval. `pluginOperations` remains empty unless the user explicitly configures it.
+This compatibility test uses the `arodus/signalk-alert-center` plugin. It is a test fixture and an explicit configuration example; the MCP gateway does not install Alert Center at runtime or approve its operations automatically.
 
 ## Exact package and operation
 
-| Component                 | Reviewed target                                                                                                                                              |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Independent provider      | [`signalk-alert-manager@0.1.0`](https://www.npmjs.com/package/signalk-alert-manager/v/0.1.0), maintained by Hat Labs                                         |
-| Published source          | [`b8c4e8bdd86e38cc9f9a73d64c10872fe88fad9d`](https://github.com/hatlabs/signalk-alert-manager/tree/b8c4e8bdd86e38cc9f9a73d64c10872fe88fad9d) (npm `gitHead`) |
-| Native route              | `GET /plugins/signalk-alert-manager/alerts`                                                                                                                  |
-| OpenAPI operation         | `listAlerts`                                                                                                                                                 |
-| Caller requirement        | Existing Signal K admin identity                                                                                                                             |
-| Signal K / Node CI matrix | Signal K 2.32.0 and 2.33.0 × Node 22 and 24                                                                                                                  |
+| Component                | Reviewed target                                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Provider                 | `signalk-alert-center@0.4.1`                                                                                                               |
+| Published source         | [`2397918db0551d64c88afd7495607bd992900590`](https://github.com/arodus/signalk-alert-center/tree/2397918db0551d64c88afd7495607bd992900590) |
+| Native route             | `GET /plugins/signalk-alert-center/definitions`                                                                                            |
+| Gateway operation        | `get.definitions` (derived from method and route; the provider omits operation IDs)                                                        |
+| Native permission        | Signal K readonly                                                                                                                          |
+| Example gateway approval | Admin, because the endpoint does not filter results by telemetry path/source ACLs                                                          |
+| CI matrix                | Signal K 2.32.0 / 2.33.0 × Node 22 / 24                                                                                                    |
 
-The dev dependency and lockfile pin the exact published tarball (SHA-512 integrity `ULdVkaouIApRz36IobNrPTfnzoPvq1jlb3U2Hio2nQpDIk7f306eYaahZljn5NyWazGsMa9ziuhEDPQtiulD/A==`). It is test-only: installing this gateway's production package does not install or enable Alert Manager. The test does not patch the installed provider or replace its handlers.
+The exact npm package is pinned as a development dependency with lockfile integrity `sha512-hbUQvsO4RQUXnY4U83lMHFEoh9ur4e3pZ7M2eXsqGi0ZQjxKJQTPcc/RAGt1Bm3mQLDxucNxiep7RPHhF0UIWg==`. Tests load the published package unchanged, using a fresh temporary configuration and SQLite database. No local Alert Center checkout, operational database, real credentials or live notification services are used.
 
-Review evidence:
+## Handler and permission review
 
-- [`src/api/routes.ts`](https://github.com/hatlabs/signalk-alert-manager/blob/b8c4e8bdd86e38cc9f9a73d64c10872fe88fad9d/src/api/routes.ts): the `/alerts` GET validates string filters and calls `manager.getAlerts(filter)`. It does not raise, acknowledge, silence, clear, persist or emit alerts. It registers on the default admin router, without a `router.access` downgrade.
-- [`src/core/AlertManager.ts`](https://github.com/hatlabs/signalk-alert-manager/blob/b8c4e8bdd86e38cc9f9a73d64c10872fe88fad9d/src/core/AlertManager.ts): `getAlerts` reads the in-memory collection and applies provider-owned filters. The gateway forwards that provider result and performs no calculation or transformation of alert values.
-- [`src/api/openApi.json`](https://github.com/hatlabs/signalk-alert-manager/blob/b8c4e8bdd86e38cc9f9a73d64c10872fe88fad9d/src/api/openApi.json): `listAlerts` exposes optional string filters `state`, `priority`, `category` and `stale`; the latter is the string enum `"true"`/`"false"`. No schema expansion is needed.
-- [`src/index.ts`](https://github.com/hatlabs/signalk-alert-manager/blob/b8c4e8bdd86e38cc9f9a73d64c10872fe88fad9d/src/index.ts): the provider itself owns alert persistence, notification consumption and lifecycle behavior. The read approval does not expose those mutation APIs through MCP.
+The pinned [`src/api/routes.ts`](https://github.com/arodus/signalk-alert-center/blob/2397918db0551d64c88afd7495607bd992900590/src/api/routes.ts) registers `/definitions` with `router.access("readonly")`. It parses pagination and filters, then calls `repository.listDefinitions`. The [`runtime repository`](https://github.com/arodus/signalk-alert-center/blob/2397918db0551d64c88afd7495607bd992900590/src/runtime.ts) reads stored definitions, applies provider-owned filters, and returns a page. That GET does not acknowledge, silence, send notifications or change alert policy. The gateway forwards the resulting JSON; it does not perform the provider's calculations or transformations itself.
 
-**The endpoint does not filter its JSON using Signal K telemetry path/source ACLs.** Its native security boundary is admin access. This example must remain admin-only; a readonly approval would misdescribe who can access it. The gateway forwards the caller's original bearer and still goes through native authorization. No privileged replacement identity is created. Even a deliberately relaxed approval in the regression test cannot make the target accept a readonly caller.
+The endpoint does not apply Signal K telemetry path/source ACL filtering. The example therefore adds an admin requirement in the gateway; this is a conservative approval, not a claim that Alert Center itself requires admin. The original bearer still reaches Signal K's native route. Tests distinguish the two layers: readonly callers are refused by the example approval, native readonly GET succeeds, and native readonly attempts to POST snooze are refused. A deliberately relaxed test approval confirms that the gateway follows the actual native read permission rather than substituting credentials.
 
 ## Configure and call
 
-After installing and enabling that exact provider in a test Signal K instance, add this explicitly reviewed entry to this gateway's configuration:
+After installing and enabling the reviewed provider, add this entry to the gateway's configuration alongside the existing `allowedHosts`:
 
 ```json
 {
   "pluginOperations": [
     {
-      "pluginId": "signalk-alert-manager",
-      "operationId": "listAlerts",
+      "pluginId": "signalk-alert-center",
+      "operationId": "get.definitions",
       "method": "GET",
-      "path": "/alerts",
+      "path": "/definitions",
       "readOnly": true,
       "permission": "admin"
     }
@@ -43,21 +41,29 @@ After installing and enabling that exact provider in a test Signal K instance, a
 }
 ```
 
-Keep the gateway's existing `allowedHosts` and other settings. `readOnly: true` records the handler review above; HTTP GET alone does not establish absence of side effects. An upgrade requires another review even if its method/path/operation ID is unchanged. Configuration does not pin the installed provider version automatically.
-
-Call `describe_capability` with `{"id":"plugin.signalk-alert-manager"}`, then invoke `execute_capability` with an existing admin bearer:
+Inspect `describe_capability({"id":"plugin.signalk-alert-center"})`, then call with an existing admin bearer:
 
 ```json
 {
-  "id": "plugin.signalk-alert-manager",
-  "operation": "listAlerts",
-  "arguments": { "priority": "warning", "stale": "false" }
+  "id": "plugin.signalk-alert-center",
+  "operation": "get.definitions",
+  "arguments": { "limit": 1, "sourceType": "recognized", "enabled": true }
 }
 ```
 
-The result's `data` is the provider's JSON. The gateway does not infer alarm health, recompute priorities, or acknowledge anything. This API is unpaginated; responses over the gateway's 256 KiB bound fail rather than returning a partial invented result.
+Use this object as arguments to `execute_capability`. The response's `data` contains Alert Center's original page, including `items` and an optional `nextCursor`. Pass that cursor unchanged on the next request. The provider owns pagination and filtering. Limits are 1–100 items and at most 512 characters for the cursor, as declared by its OpenAPI document; gateway response-byte and timeout limits still apply. No pages are automatically combined or truncated.
 
-## Reproduce
+## OpenAPI compatibility
+
+Alert Center's published [`OpenAPI document`](https://github.com/arodus/signalk-alert-center/blob/2397918db0551d64c88afd7495607bd992900590/src/api/openapi.ts) omits optional `operationId` fields. The gateway derives a name only when the field is absent: lowercase method plus dot-separated route segments, with `{id}` represented as `by-id`. Examples are `get.definitions` and `get.definitions.by-id`. Published valid IDs take precedence; invalid supplied IDs are omitted. Generated/published ID collisions disable every operation with that ID. Exact plugin, operation, method and route approval is still required. Renaming a route or publishing a different ID does not retain its old approval.
+
+The primitive input subset accepts an explicitly declared string maximum up to 512 characters, while unspecified strings remain bounded to 256. Larger limits and unsupported schemas remain disabled. Date-time formats, arrays and arbitrary JSON inputs are not enabled by this change. Detail IDs containing punctuation rejected by the existing safe path-parameter rule remain unsupported; the definition-list cursor is a query parameter and preserves those identifiers through URL encoding.
+
+GET alone is not proof of a safe read. Unknown reads, event streams, notifier tests, acknowledgements, snooze writes, retries, policy changes and deletion remain unapproved or non-executable. Installing a new provider version requires a fresh handler review; an approval does not pin the installed version automatically.
+
+## Verification
+
+Run with Node 24:
 
 ```sh
 npm ci --ignore-scripts --omit=optional
@@ -65,26 +71,8 @@ npm run build
 node --test --test-force-exit test/production-plugin.test.cjs
 ```
 
-Use Node 24 for the primary check. The existing CI matrix runs this suite under both supported server versions and Node majors. `MCP_TEST_SERVER_DIR` selects a separately installed Signal K runtime as described in [authentication compatibility](authentication.md). The package's use of built-in `node:sqlite` also requires a Node release with that module; CI uses current Node 22/24 releases, not every historical patch release.
+The isolated fixture seeds two synthetic notification deltas through Signal K outside MCP. It configures no notifiers, disables sound/speech, connectivity management and retention, and connects no audio service or hardware. Tests exercise native discovery, exact JSON forwarding across pages, boolean/integer/enum/cursor validation, independent gateway/native permissions, disabled and absent packages, changed schemas/routes/IDs, collision refusal and sanitized native errors. Every documented mutation is refused through MCP, and native alert, occurrence, snooze and delivery snapshots remain unchanged afterward.
 
-Tests use a fresh temporary configuration and SQLite database, synthetic device identities and a synthetic notification delta. Provider audio is disabled, escalation is disabled and no browser audio client or external notifier is connected. Seed setup is outside MCP. The test compares MCP output with native HTTP output, then verifies mutation attempts leave alert state unchanged. It uses native configuration to disable the provider and starts a separate server without the installed package to test stale approval behavior. Schema-drift cases replace only the temporary server's published OpenAPI record, restoring it afterward; the published package stays unchanged.
+Schema-drift tests temporarily replace the test server's published OpenAPI record and restore it; the installed package is never patched. Node's built-in SQLite support is required by Alert Center. The CI matrix uses current Node 22/24 releases, not every historical patch release. These checks establish the reviewed read contract with synthetic data, not delivery, audibility, vessel safety or complete provider lifecycle correctness.
 
-## Diagnostics and compatibility limits
-
-| Result                                       | Meaning / action                                                                                                                                                                          |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PERMISSION_DENIED` in description           | This approval requires admin; readonly callers cannot use it.                                                                                                                             |
-| `UPSTREAM_PERMISSION_DENIED`                 | Native target authorization refused the original caller (the reviewed default admin middleware returns HTTP 401 for a readonly token). A gateway approval cannot grant extra permissions. |
-| `NOT_ALLOWLISTED`                            | No exact reviewed plugin/operation/method/path match; re-review configuration and provider version.                                                                                       |
-| `UNSUPPORTED_SCHEMA`                         | An input schema is outside the bounded subset. This package's individual-alert UUID and history date-time inputs remain disabled; no format is silently ignored.                          |
-| `AMBIGUOUS_OPERATION_ID`                     | The provider document duplicates an operation ID; execution is disabled.                                                                                                                  |
-| `METHOD_NOT_READONLY`                        | A mutation method is documented but never executable.                                                                                                                                     |
-| `PLUGIN_DISABLED` / `CAPABILITY_UNAVAILABLE` | Enablement or the target API is unavailable; the gateway does not enable it.                                                                                                              |
-| `CAPABILITY_NOT_FOUND`                       | The provider is absent from native discovery, including an approval left behind after removal and restart.                                                                                |
-| `INVALID_ARGUMENTS`                          | Wrong types, extra fields, invalid enum values or bounds; consult the described input schema.                                                                                             |
-| `UPSTREAM_HTTP_ERROR`                        | The provider rejected a schema-valid request or failed. Native error bodies are deliberately not echoed; consult that provider's local diagnostics.                                       |
-| `UNSUPPORTED_OPENAPI`                        | The document is not supported OpenAPI 3.0/3.1.                                                                                                                                            |
-
-Operations without valid `operationId` values are omitted rather than assigned invented IDs. Missing docs, schema support, or approval are not proof that a provider has no read API. Unsupported operations remain unavailable. Invalid gateway configuration reports the configuration field names, including `pluginOperations`, without echoing supplied values or credentials.
-
-These tests establish the reviewed API contract with synthetic alerts. They do not validate live vessel data, external notification delivery, physical safety, arbitrary plugin versions, or the provider's complete lifecycle implementation.
+Relevant diagnostics remain `NOT_ALLOWLISTED`, `PERMISSION_DENIED`, `METHOD_NOT_READONLY`, `AMBIGUOUS_OPERATION_ID`, `UNSUPPORTED_SCHEMA`, `INVALID_ARGUMENTS`, `PLUGIN_DISABLED`, `CAPABILITY_NOT_FOUND`, `CAPABILITY_UNAVAILABLE` and `UPSTREAM_PERMISSION_DENIED`. Native error bodies are not exposed to clients.

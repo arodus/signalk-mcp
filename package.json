@@ -50,7 +50,7 @@
     "prettier": "^3.8.4",
     "typescript": "^5.9.3",
     "signalk-server": "2.33.0",
-    "signalk-alert-manager": "0.1.0"
+    "signalk-alert-center": "0.4.1"
   },
   "repository": {
     "type": "git",

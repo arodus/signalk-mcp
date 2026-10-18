@@ -326,3 +326,93 @@ test("invalid approval configuration reports field guidance without leaking inpu
   assert.match(errors[0], /reviewed GET/);
   assert.doesNotMatch(errors[0], /synthetic-private-value/);
 });
+
+test("optional OpenAPI IDs use route names but never bypass exact approval or collision checks", () => {
+  const document = spec();
+  delete document.paths["/reading/{id}"].get.operationId;
+  const routeApproval = { ...approval, operationId: "get.reading.by-id" };
+  const read = discoverOperations(
+    document,
+    "example",
+    [routeApproval],
+    principal,
+  )[0];
+  assert.equal(read.id, "get.reading.by-id");
+  assert.equal(read.enabled, true);
+  assert.equal(
+    discoverOperations(document, "example", [approval], principal)[0].enabled,
+    false,
+  );
+  assert.equal(
+    discoverOperations(document, "example", [], principal)[0].reason,
+    "NOT_ALLOWLISTED",
+  );
+  document.paths["/reading/by-id"] = { get: {} };
+  for (const operation of discoverOperations(
+    document,
+    "example",
+    [routeApproval],
+    principal,
+  ))
+    assert.equal(operation.reason, "AMBIGUOUS_OPERATION_ID");
+  delete document.paths["/reading/by-id"];
+  document.paths["/other"] = { get: { operationId: "get.reading.by-id" } };
+  for (const operation of discoverOperations(
+    document,
+    "example",
+    [routeApproval],
+    principal,
+  ))
+    assert.equal(operation.reason, "AMBIGUOUS_OPERATION_ID");
+  delete document.paths["/other"];
+  document.paths["/reading/{id}"].post = {};
+  assert.equal(
+    discoverOperations(document, "example", [routeApproval], principal)[1]
+      .reason,
+    "METHOD_NOT_READONLY",
+  );
+  for (const invalid of [null, "", "bad/id", 42]) {
+    document.paths["/reading/{id}"].get.operationId = invalid;
+    assert.equal(
+      discoverOperations(document, "example", [routeApproval], principal).some(
+        (op) => op.method === "GET",
+      ),
+      false,
+    );
+  }
+});
+
+test("explicit 512-character string bounds remain enforced and larger schemas fail closed", () => {
+  const document = spec();
+  document.paths["/reading/{id}"].get.parameters.push({
+    name: "cursor",
+    in: "query",
+    schema: { type: "string", maxLength: 512 },
+  });
+  const operation = discoverOperations(
+    document,
+    "example",
+    [approval],
+    principal,
+  )[0];
+  assert.equal(operation.enabled, true);
+  assert.ok(
+    operationRoute("example", operation, {
+      id: "sample",
+      cursor: "x".repeat(512),
+    }).includes("cursor="),
+  );
+  assert.throws(
+    () =>
+      operationRoute("example", operation, {
+        id: "sample",
+        cursor: "x".repeat(513),
+      }),
+    /INVALID_ARGUMENTS/,
+  );
+  document.paths["/reading/{id}"].get.parameters[1].schema.maxLength = 513;
+  assert.equal(
+    discoverOperations(document, "example", [approval], principal)[0].reason,
+    "UNSUPPORTED_SCHEMA",
+  );
+});
