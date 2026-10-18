@@ -1,3 +1,4 @@
+const { loadedPlugin } = require("./native-server.cjs");
 const { Buffer } = require("node:buffer");
 const console = require("node:console");
 const assert = require("node:assert/strict");
@@ -290,7 +291,7 @@ async function main() {
         paths: [{ path: "navigation.speedOverGround", source: "fixture.XX" }],
       });
       assert.equal(history.structuredContent.data[0][1], 0);
-      const fixture = server.app.pluginsMap["mcp-fixture"];
+      const fixture = loadedPlugin(server, "mcp-fixture");
       const before = fixture.testCalls.disconnected;
       const held = fixture.holdNextRead("plugin");
       const pending = send("tools/call", {

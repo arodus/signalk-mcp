@@ -1,3 +1,4 @@
+const { loadedPlugin } = require("./native-server.cjs");
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -626,7 +627,7 @@ test(
     await t.test(
       "unknown/writing routes, redirects and schema drift never gain approval",
       async () => {
-        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const fixture = loadedPlugin(server, "mcp-fixture");
         assert.equal((await cap("unapproved")).isError, true);
         assert.equal((await cap("write")).isError, true);
         assert.equal((await cap("badSchema")).isError, true);
@@ -660,7 +661,7 @@ test(
           true,
           JSON.stringify(description),
         );
-        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const fixture = loadedPlugin(server, "mcp-fixture");
         const query = {
           provider: "mcp-fixture",
           from: "2026-10-17T10:00:00Z",
@@ -768,7 +769,7 @@ test(
         const security = server.app.securityStrategy;
         const configuration = security.getConfiguration();
         const original = configuration.acls;
-        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const fixture = loadedPlugin(server, "mcp-fixture");
         const input = {
           provider: "mcp-fixture",
           from: "2026-10-17T10:00:00Z",
@@ -839,7 +840,7 @@ test(
     await t.test(
       "history provider errors and deadlines never disclose partial results",
       async () => {
-        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const fixture = loadedPlugin(server, "mcp-fixture");
         const input = {
           provider: "mcp-fixture",
           from: "2026-10-17T10:00:00Z",
@@ -1028,7 +1029,7 @@ test(
     await t.test(
       "native permission changes during a provider response discard the result",
       async () => {
-        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const fixture = loadedPlugin(server, "mcp-fixture");
         const device = server.app.securityStrategy
           .getConfiguration()
           .devices.find((entry) => entry.clientId === "reader");
@@ -1056,7 +1057,7 @@ test(
     await t.test(
       "native history ACL revocation while fetching prevents data disclosure",
       async () => {
-        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const fixture = loadedPlugin(server, "mcp-fixture");
         const acl =
           server.app.securityStrategy.getConfiguration().acls[0].resources[0];
         const original = acl.permissions;
@@ -1094,7 +1095,7 @@ test(
       },
     );
     await t.test("disable and re-enable native plugin", async () => {
-      const plugin = server.app.pluginsMap["signalk-mcp"];
+      const plugin = loadedPlugin(server, "signalk-mcp");
       await plugin.stop();
       assert.equal((await request(initialize)).status, 503);
       plugin.start({ allowedHosts: [host] });

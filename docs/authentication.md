@@ -36,6 +36,8 @@ Source review on 2026-10-18 covered the published `@signalk/server-api` declarat
 
 No verified public replacement is available from this assessment. Keep the private dependency isolated and fail closed. A [local draft of the needed public contract](proposals/signalk-auth-api.md) records the integration gap; it has not been submitted upstream and is not an existing API.
 
+The official Signal K plugin CI warns about `securityStrategy` and `isDummy()` access. These warnings remain visible: native route protection does not replace per-path/source ACL checks or reauthorization while a response is pending. Do not remove the bridge merely to silence the scanner. The upstream lifecycle shim lacks the permission-aware router and uses empty configuration, so a passing generic lifecycle check only establishes safe rejection/cleanup there. It does not prove that the MCP endpoint is enabled or authorized. The separate real-server matrix verifies those behaviors.
+
 ## Reproduce against a separate runtime
 
 Build the gateway, install the target server in a disposable directory, then point the native integration harness at that package. For example:

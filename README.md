@@ -141,15 +141,19 @@ npm run check
 
 Tests use a real temporary Signal K instance, a synthetic installed provider, disposable identities and synthetic deltas. Signal K binds its test listener using its default address; run in an isolated development environment. No vessel connection is configured.
 
+`npm test` runs the portable permission, schema, history-validation and local HTTP transport tests without forced exit. `npm run test:integration` runs the native Signal K, hosting, provider and lifecycle tests. `npm run check` includes both suites plus type, lint and format checks.
+
+The official [Signal K plugin CI](https://github.com/SignalK/signalk-server/blob/master/.github/workflows/plugin-ci.yml) runs the portable suite and upstream package/schema/lifecycle checks on Linux x64, Linux ARM64, macOS and Windows with Node 22/24. Our separate native integration CI retains the Signal K 2.32.0/2.33.0 matrix, Python MCP and real disposable InfluxDB. Generic upstream checks do not establish native permission compatibility, hardware acceptance or a registry score.
+
 To include the second client (Python 3.10+):
 
 ```sh
 python3 -m venv /tmp/signalk-mcp-python
 /tmp/signalk-mcp-python/bin/pip install -r test/python-requirements.txt
-MCP_TEST_PYTHON=/tmp/signalk-mcp-python/bin/python npm test
+MCP_TEST_PYTHON=/tmp/signalk-mcp-python/bin/python npm run test:integration
 ```
 
-Without `MCP_TEST_PYTHON`, that test is explicitly skipped. Credentials reach Python over stdin. The test runner uses `--test-force-exit` after tests/cleanup because the upstream test server leaves background handles after stopping; the plugin does not force process exit.
+Without `MCP_TEST_PYTHON`, that test is explicitly skipped. Credentials reach Python over stdin. The native integration runner uses `--test-force-exit` after tests/cleanup because the upstream test server leaves background handles after stopping; the plugin does not force process exit.
 
 The separate lifecycle test checks gateway-owned timer/TCP cleanup before terminating residual server processes and also runs without forced test exit. The opt-in local ARM64 benchmark passed the agreed development gates; Raspberry Pi and whole-server restart acceptance remain open. See [resource results, reproduction commands and limits](docs/resource-validation.md).
 
