@@ -37,7 +37,7 @@ function security(app: App): Security {
   if (
     !strategy ||
     typeof strategy.isDummy !== "function" ||
-    strategy.isDummy() ||
+    strategy.isDummy() !== false ||
     typeof strategy.authorizeWS !== "function" ||
     typeof strategy.checkACL !== "function"
   ) {
@@ -64,13 +64,17 @@ export function authenticate(
   if (
     connection.skIsAuthenticated !== true ||
     !principal ||
+    typeof principal.identifier !== "string" ||
     principal.identifier === "AUTO" ||
     !principal.identifier ||
     !["readonly", "readwrite", "admin"].includes(principal.permissions)
   ) {
     throw new GatewayError("PERMISSION_DENIED", 403);
   }
-  return Object.freeze({ ...principal });
+  return Object.freeze({
+    identifier: principal.identifier,
+    permissions: principal.permissions,
+  });
 }
 export function canRead(
   app: App,

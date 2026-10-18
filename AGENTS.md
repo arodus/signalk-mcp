@@ -27,7 +27,7 @@ Keep this project independent. Preserve compatibility with ordinary Signal K ins
 
 ## Verification and handoff
 
-- Use Node 24 for the primary Signal K 2.33.0 integration check; CI also covers Node 22.
+- Use Node 24 for the primary Signal K 2.33.0 integration check. CI covers Signal K 2.32.0 and 2.33.0 on Node 22 and 24; keep this explicit compatibility matrix and docs/authentication.md current.
 - Run `npm run check` and `git diff --check`. Include regression tests for authorization, discovery and execution boundaries.
 - For two-client testing, install `test/python-requirements.txt` in an isolated Python environment and set `MCP_TEST_PYTHON` to its Python executable.
 - Test native plugin loading through a real temporary Signal K server with synthetic data. Do not substitute mocks for claims about native routing or authentication.

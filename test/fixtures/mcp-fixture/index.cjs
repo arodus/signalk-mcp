@@ -2,6 +2,14 @@
 module.exports = (app) => {
   const calls = { reads: 0, writes: 0, unapproved: 0, history: 0 };
   let historyMode = "valid";
+  let heldRead;
+  async function waitForRelease(kind) {
+    if (heldRead?.kind !== kind) return;
+    const pending = heldRead;
+    heldRead = undefined;
+    pending.entered();
+    await pending.released;
+  }
   const document = {
     openapi: "3.0.3",
     info: { title: "Fixture", version: "1" },
@@ -56,6 +64,18 @@ module.exports = (app) => {
     schema: { type: "object", properties: {} },
     testCalls: calls,
     testDocument: document,
+    holdNextRead(kind) {
+      if (heldRead) throw new Error("A fixture read is already held");
+      let entered, release;
+      const started = new Promise((resolve) => {
+        entered = resolve;
+      });
+      const released = new Promise((resolve) => {
+        release = resolve;
+      });
+      heldRead = { kind, entered, released };
+      return { started, release };
+    },
     setHistoryMode: (mode) => {
       historyMode = mode;
     },
@@ -65,6 +85,7 @@ module.exports = (app) => {
         getPaths: async () => ["navigation.speedOverGround"],
         async getValues(query) {
           calls.history++;
+          await waitForRelease("history");
           const values = query.pathSpecs.map((spec) => ({
             path: spec.path,
             method: spec.aggregate,
@@ -93,7 +114,7 @@ module.exports = (app) => {
     },
     getOpenApi: () => document,
     registerWithRouter(router) {
-      router.access("readonly").get("/reading/:name", (req, res) => {
+      router.access("readonly").get("/reading/:name", async (req, res) => {
         if (
           !app.securityStrategy.checkACL(
             req.skPrincipal.identifier,
@@ -105,6 +126,7 @@ module.exports = (app) => {
         )
           return res.sendStatus(403);
         calls.reads++;
+        await waitForRelease("plugin");
         res.json({
           principal: req.skPrincipal.identifier,
           name: req.params.name,

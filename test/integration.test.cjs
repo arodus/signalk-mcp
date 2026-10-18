@@ -5,10 +5,26 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const net = require("node:net");
+const { createRequire } = require("node:module");
 const { Client } = require("@modelcontextprotocol/sdk/client/index.js");
 const {
   StreamableHTTPClientTransport,
 } = require("@modelcontextprotocol/sdk/client/streamableHttp.js");
+
+const serverPackage = process.env.MCP_TEST_SERVER_DIR
+  ? path.join(path.resolve(process.env.MCP_TEST_SERVER_DIR), "package.json")
+  : require.resolve("signalk-server/package.json");
+const serverRequire = createRequire(serverPackage);
+const serverVersion = serverRequire("./package.json").version;
+const serverApiVersion = JSON.parse(
+  fs.readFileSync(
+    path.join(
+      path.dirname(serverRequire.resolve("@signalk/server-api")),
+      "../package.json",
+    ),
+    "utf8",
+  ),
+).version;
 
 async function freePort() {
   const socket = net.createServer();
@@ -19,9 +35,16 @@ async function freePort() {
 }
 
 test(
-  "native plugin on Signal K 2.33.0: authentication, ACLs, transport and lifecycle",
+  `native plugin on Signal K ${serverVersion}: authentication, ACLs, transport and lifecycle`,
   { timeout: 90000 },
   async (t) => {
+    if (process.env.MCP_TEST_SERVER_VERSION) {
+      assert.equal(serverVersion, process.env.MCP_TEST_SERVER_VERSION);
+      assert.equal(serverApiVersion, process.env.MCP_TEST_SERVER_VERSION);
+    }
+    t.diagnostic(
+      `Node ${process.version}; Signal K ${serverVersion}; ServerAPI ${serverApiVersion}`,
+    );
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "signalk-mcp-test-"));
     const root =
       process.env.MCP_TEST_PLUGIN_DIR || path.resolve(__dirname, "..");
@@ -92,16 +115,14 @@ test(
     process.env.SIGNALK_DISABLE_SERVER_UPDATES = "true";
     process.env.HTTP_RATE_LIMITS = "api=1000,loginStatus=1000,login=1000";
     process.env.NODE_ENV = "test";
-    const Server = require("signalk-server");
-    const jwt = require("node:module").createRequire(
-      require.resolve("signalk-server"),
-    )("jsonwebtoken");
+    const Server = serverRequire("./");
+    const jwt = serverRequire("jsonwebtoken");
     const secret = crypto.randomBytes(32).toString("hex");
     const securityConfig = {
       allow_readonly: true,
       expiration: "1d",
       secretKey: secret,
-      users: [],
+      users: [{ username: "crew", type: "readonly" }],
       devices: ["reader", "other", "writer", "admin"].map((clientId) => ({
         clientId,
         permissions:
@@ -121,6 +142,7 @@ test(
               permissions: [
                 { subject: "reader", permission: "read" },
                 { subject: "writer", permission: "read" },
+                { subject: "crew", permission: "read" },
                 { subject: "admin", permission: "read" },
               ],
             },
@@ -776,6 +798,129 @@ test(
         devices.splice(devices.indexOf(device), 1);
         assert.equal((await request(initialize)).status, 401);
         devices.push(device);
+      },
+    );
+    await t.test(
+      "user tokens retain native permissions and stop working after user removal",
+      async () => {
+        const userBearer = jwt.sign({ id: "crew" }, secret, {
+          expiresIn: "5m",
+        });
+        const userClient = new Client({ name: "user-principal", version: "1" });
+        await userClient.connect(
+          new StreamableHTTPClientTransport(endpoint, {
+            requestInit: { headers: { Authorization: `Bearer ${userBearer}` } },
+          }),
+        );
+        t.after(() => userClient.close());
+        const result = await cap(
+          "readReading",
+          { name: "speed" },
+          "plugin.mcp-fixture",
+          userClient,
+        );
+        assert.equal(result.structuredContent.data.principal, "crew");
+        const readings = await userClient.callTool({
+          name: "get_values",
+          arguments: {
+            paths: [
+              "navigation.speedOverGround",
+              "electrical.batteries.house.voltage",
+            ],
+          },
+        });
+        assert.equal(readings.structuredContent.measurements[0].value, 0);
+        assert.equal(
+          readings.structuredContent.measurements[1].status,
+          "unavailable",
+        );
+        const users = server.app.securityStrategy.getConfiguration().users;
+        const user = users.find((entry) => entry.username === "crew");
+        const index = users.indexOf(user);
+        try {
+          user.type = "unknown";
+          assert.equal(
+            (await request(initialize, `Bearer ${userBearer}`)).status,
+            403,
+          );
+          user.type = "readonly";
+          users.splice(index, 1);
+          assert.equal(
+            (await request(initialize, `Bearer ${userBearer}`)).status,
+            401,
+          );
+        } finally {
+          user.type = "readonly";
+          if (!users.includes(user)) users.splice(index, 0, user);
+        }
+      },
+    );
+    await t.test(
+      "native permission changes during a provider response discard the result",
+      async () => {
+        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const device = server.app.securityStrategy
+          .getConfiguration()
+          .devices.find((entry) => entry.clientId === "reader");
+        const held = fixture.holdNextRead("plugin");
+        const pending = cap("readReading", { name: "speed" });
+        try {
+          await Promise.race([
+            held.started,
+            pending.then(() => {
+              throw new Error("Provider call ended before the held response");
+            }),
+          ]);
+          device.permissions = "unknown";
+          held.release();
+          const result = await pending;
+          assert.equal(result.isError, true);
+          assert.equal(result.content[0].text, "PERMISSION_DENIED");
+          assert.equal(result.structuredContent, undefined);
+        } finally {
+          held.release();
+          device.permissions = "readonly";
+        }
+      },
+    );
+    await t.test(
+      "native history ACL revocation while fetching prevents data disclosure",
+      async () => {
+        const fixture = server.app.pluginsMap["mcp-fixture"];
+        const acl =
+          server.app.securityStrategy.getConfiguration().acls[0].resources[0];
+        const original = acl.permissions;
+        const held = fixture.holdNextRead("history");
+        const pending = client.callTool({
+          name: "get_history",
+          arguments: {
+            from: "2026-10-17T10:00:00Z",
+            to: "2026-10-17T10:01:00Z",
+            resolution: 10,
+            paths: [
+              { path: "navigation.speedOverGround", source: "fixture.XX" },
+            ],
+          },
+        });
+        try {
+          await Promise.race([
+            held.started,
+            pending.then(() => {
+              throw new Error("Provider call ended before the held response");
+            }),
+          ]);
+          acl.permissions = original.filter(
+            (entry) => entry.subject !== "reader",
+          );
+          held.release();
+          const result = await pending;
+          assert.equal(result.isError, true);
+          assert.equal(result.content[0].text, "PERMISSION_DENIED");
+          assert.equal(result.structuredContent, undefined);
+        } finally {
+          held.release();
+          acl.permissions = original;
+        }
       },
     );
     await t.test("disable and re-enable native plugin", async () => {

@@ -58,6 +58,68 @@ test("security-disabled, missing hooks and unverified identities fail closed", (
   assert.throws(() => authenticate(app, "Bearer token"), /PERMISSION_DENIED/);
 });
 
+test("changed security hooks cannot turn unknown state into authorization", () => {
+  for (const hook of ["isDummy", "authorizeWS", "checkACL"]) {
+    for (const value of [undefined, null, true, {}]) {
+      const { app } = fixture();
+      app.securityStrategy[hook] = value;
+      assert.throws(
+        () => authenticate(app, "Bearer token"),
+        /SIGNALK_SECURITY_UNAVAILABLE/,
+      );
+    }
+  }
+  for (const value of [undefined, null, 0, "", "false", true]) {
+    const { app } = fixture();
+    app.securityStrategy.isDummy = () => value;
+    assert.throws(
+      () => authenticate(app, "Bearer token"),
+      /SIGNALK_SECURITY_UNAVAILABLE/,
+    );
+  }
+});
+
+test("principal snapshots validate identity shape and do not copy private fields", () => {
+  const { app, principal } = fixture();
+  for (const identifier of [undefined, null, 1, {}, [], "", "AUTO"]) {
+    principal.identifier = identifier;
+    assert.throws(() => authenticate(app, "Bearer token"), /PERMISSION_DENIED/);
+  }
+  principal.identifier = "reader";
+  principal.internal = "must not enter the gateway principal";
+  const result = authenticate(app, "Bearer token");
+  assert.deepEqual(result, { identifier: "reader", permissions: "readonly" });
+  assert.equal(Object.isFrozen(result), true);
+  principal.permissions = "admin";
+  assert.equal(result.permissions, "readonly");
+});
+
+test("only a literal native ACL grant permits a measurement read", () => {
+  const { app, principal } = fixture();
+  for (const decision of [
+    undefined,
+    null,
+    0,
+    1,
+    "true",
+    {},
+    Promise.resolve(true),
+    false,
+  ]) {
+    app.securityStrategy.checkACL = () => decision;
+    assert.equal(canRead(app, principal, "navigation.speed", "fixture"), false);
+  }
+  app.securityStrategy.checkACL = () => {
+    throw new Error("ACL unavailable");
+  };
+  assert.throws(
+    () => canRead(app, principal, "navigation.speed", "fixture"),
+    /ACL unavailable/,
+  );
+  app.securityStrategy.checkACL = () => true;
+  assert.equal(canRead(app, principal, "navigation.speed", "fixture"), true);
+});
+
 test("unknown and future timestamps are not reported as fresh; no alternate source data leaks", () => {
   const { app, principal } = fixture();
   assert.equal(

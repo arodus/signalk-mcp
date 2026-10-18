@@ -8,6 +8,7 @@ jobs:
     strategy:
       matrix:
         node: [22, 24]
+        signalk: [2.32.0, 2.33.0]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,10 +19,18 @@ jobs:
         with:
           python-version: "3.12"
       - run: npm ci --ignore-scripts --omit=optional
+      - name: Install alternate Signal K runtime
+        if: matrix.signalk != '2.33.0'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/signalk-runtime" --ignore-scripts --omit=optional --no-audit --no-fund "signalk-server@$SIGNALK_VERSION" "@signalk/server-api@$SIGNALK_VERSION"
+          echo "MCP_TEST_SERVER_DIR=$RUNNER_TEMP/signalk-runtime/node_modules/signalk-server" >> "$GITHUB_ENV"
+        env:
+          SIGNALK_VERSION: ${{ matrix.signalk }}
       - run: |
           python -m venv /tmp/signalk-mcp-python
           /tmp/signalk-mcp-python/bin/pip install -r test/python-requirements.txt
       - run: npm run check
         env:
           MCP_TEST_PYTHON: /tmp/signalk-mcp-python/bin/python
+          MCP_TEST_SERVER_VERSION: ${{ matrix.signalk }}
       - run: npm pack --dry-run
