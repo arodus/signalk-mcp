@@ -3,7 +3,7 @@ import type { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { authenticate, GatewayError, type App } from "./auth.js";
 import { configSchema, schema, uiSchema, type Config } from "./config.js";
-import { localActions, localGet } from "./capabilities/http.js";
+import { localActions, localGet, localPost } from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
 import { boundedJson } from "./json.js";
 import { validateOrigin } from "./origin.js";
@@ -75,6 +75,12 @@ function pluginFactory(app: App): Plugin {
         requests,
         puts,
         localActions(
+          req,
+          req.get("authorization")!,
+          controller.signal,
+          settings.localTlsServerName,
+        ),
+        localPost(
           req,
           req.get("authorization")!,
           controller.signal,
@@ -169,7 +175,7 @@ function pluginFactory(app: App): Plugin {
           }
         });
       app.setPluginStatus(
-        "MCP endpoint ready; reads and individually approved PUTs require Signal K permissions",
+        "MCP endpoint ready; reads and individually approved writes require Signal K permissions",
       );
     },
     async stop() {

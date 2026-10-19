@@ -11,7 +11,7 @@ import {
   stateInput,
   valuesInput,
 } from "./capabilities/schemas.js";
-import type { LocalGet } from "./capabilities/http.js";
+import type { LocalGet, LocalPost } from "./capabilities/http.js";
 import { boundedJson } from "./json.js";
 import type { ApprovalRequests } from "./approvals.js";
 import type { LocalActions } from "./put-types.js";
@@ -32,6 +32,7 @@ export function createMcpServer(
   requests?: ApprovalRequests,
   puts?: NativePuts,
   actions?: LocalActions,
+  post?: LocalPost,
 ) {
   const server = new McpServer({ name: "signalk-mcp", version: "0.1.0" });
   const registry = new CapabilityRegistry(
@@ -43,6 +44,7 @@ export function createMcpServer(
     requests,
     puts,
     actions,
+    post,
   );
   const run = async (
     operation: () => object | Promise<object>,
@@ -64,7 +66,7 @@ export function createMcpServer(
           outcome: "unknown",
           submitted: true,
           retrySafe: false,
-          code: "PUT_RESULT_UNAVAILABLE",
+          code: "MUTATION_RESULT_UNAVAILABLE",
         };
         text = JSON.stringify(data);
       }
@@ -182,7 +184,7 @@ export function createMcpServer(
     "execute_mutation",
     {
       description:
-        "Execute an individually approved mutation under the caller's Signal K identity. Currently only signalk.put / put_value is supported. Plugin POSTs remain disabled. Never automatically retry a submitted or unknown outcome.",
+        "Execute an individually approved mutation under the caller's Signal K identity. Supports signalk.put / put_value and individually reviewed plugin POST operations. Plugin JSON bodies go in arguments.body. An eligible blocked POST queues a native administrator review; only saving Plugin Config can approve it. Never automatically retry a submitted or unknown outcome.",
       inputSchema: z
         .object({
           id: z.string().min(1).max(160),
@@ -222,7 +224,7 @@ export function createMcpServer(
     "execute_capability",
     {
       description:
-        "Execute a core read or an individually approved plugin GET as the current Signal K user. Every plugin operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require their own individual approval through put_value or execute_mutation; plugin POSTs remain disabled. Never claim approval or retry repeatedly while waiting.",
+        "Execute a core read or an individually approved plugin GET as the current Signal K user. Every plugin operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require their own individual approval through put_value or execute_mutation; plugin POSTs require execute_mutation and their own saved approval. Never claim approval or retry repeatedly while waiting.",
       inputSchema: {
         id: z.string().min(1).max(160),
         operation: z.string().min(1).max(128),

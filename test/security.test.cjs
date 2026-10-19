@@ -417,7 +417,7 @@ test("mutation tools declare side effects, preserve uncertain outcomes and rejec
     name: "execute_mutation",
     arguments: { id: "plugin.fixture", operation: "post", arguments: {} },
   });
-  assert.equal(pluginPost.content[0].text, "OPERATION_DISABLED");
+  assert.equal(pluginPost.content[0].text, "PERMISSION_DENIED");
   assert.equal(calls, 0);
   const result = await client.callTool({ name: "put_value", arguments: args });
   assert.equal(calls, 1);

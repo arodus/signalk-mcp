@@ -233,3 +233,112 @@ export function localActions(
     },
   };
 }
+
+export interface PostResponse {
+  status: number;
+  data?: unknown;
+}
+export type LocalPost = (path: string, body?: unknown) => Promise<PostResponse>;
+
+export function localPost(
+  req: Request,
+  authorization: string,
+  signal: AbortSignal,
+  tlsServerName?: string,
+): LocalPost {
+  const address = req.socket.localAddress;
+  const mapped = address?.startsWith("::ffff:") ? address.slice(7) : undefined;
+  const hostname = mapped && isIP(mapped) === 4 ? mapped : address;
+  const port = req.socket.localPort;
+  const encrypted = "encrypted" in req.socket && req.socket.encrypted === true;
+  return async (path, body) => {
+    if (!hostname || !port)
+      throw new GatewayError("LOCAL_HTTP_UNAVAILABLE", 503);
+    if (
+      !/^\/plugins\/(?:@[a-z0-9_-]+\/)?[a-z0-9][a-z0-9._-]*\/[A-Za-z0-9_/-]+(?:\?[^#\r\n\\]*)?$/.test(
+        path,
+      ) ||
+      /(?:^|\/)(?:config|configuration|settings)(?:\/|\?|$)/i.test(path) ||
+      path.includes("/plugins/signalk-mcp/")
+    )
+      throw new GatewayError("INVALID_LOCAL_ROUTE");
+    const serialized =
+      body === undefined
+        ? undefined
+        : boundedJson(body, 64 * 1024, "INPUT_LIMIT");
+    return new Promise<PostResponse>((resolve, reject) => {
+      const request = (encrypted ? https : http).request(
+        {
+          hostname,
+          port,
+          path,
+          method: "POST",
+          ...(encrypted && tlsServerName ? { servername: tlsServerName } : {}),
+          headers: {
+            Authorization: authorization,
+            Accept: "application/json",
+            ...(serialized === undefined
+              ? {}
+              : {
+                  "Content-Type": "application/json",
+                  "Content-Length": Buffer.byteLength(serialized),
+                }),
+          },
+          signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
+        },
+        (response) => {
+          const status = response.statusCode ?? 500;
+          // Never follow redirects or expose provider error bodies.
+          if (status < 200 || status >= 300) {
+            response.destroy();
+            reject(new GatewayError("PLUGIN_POST_HTTP_ERROR", status));
+            return;
+          }
+          if (status === 204) {
+            response.on("error", () =>
+              reject(new GatewayError("UPSTREAM_RESPONSE_FAILED")),
+            );
+            response.resume();
+            response.on("end", () => resolve({ status }));
+            return;
+          }
+          if (
+            !/^application\/(?:[\w.-]+\+)?json(?:;|$)/i.test(
+              response.headers["content-type"] ?? "",
+            )
+          ) {
+            response.destroy();
+            reject(new GatewayError("UPSTREAM_NOT_JSON"));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          let size = 0;
+          response.on("data", (chunk: Buffer) => {
+            size += chunk.length;
+            if (size > 224 * 1024) {
+              response.destroy();
+              reject(new GatewayError("OUTPUT_LIMIT"));
+            } else chunks.push(chunk);
+          });
+          response.on("error", () =>
+            reject(new GatewayError("UPSTREAM_RESPONSE_FAILED")),
+          );
+          response.on("end", () => {
+            try {
+              resolve({
+                status,
+                data: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+              });
+            } catch {
+              reject(new GatewayError("UPSTREAM_INVALID_JSON"));
+            }
+          });
+        },
+      );
+      request.on("error", () =>
+        reject(new GatewayError("UPSTREAM_UNAVAILABLE", 503)),
+      );
+      request.end(serialized);
+    });
+  };
+}

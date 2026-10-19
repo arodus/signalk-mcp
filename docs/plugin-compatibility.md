@@ -1,4 +1,4 @@
-# Reviewed plugin read: Signal K Alert Center
+# Reviewed plugin operations: Signal K Alert Center
 
 This compatibility test uses the `arodus/signalk-alert-center` plugin. It is a test fixture and an explicit configuration example; the MCP gateway does not install Alert Center at runtime or approve its operations automatically.
 
@@ -24,7 +24,7 @@ The endpoint does not apply Signal K telemetry path/source ACL filtering. The ex
 
 ## Configure and call
 
-After installing and enabling the reviewed provider, request the discovered read and approve it under **Plugin read requests**, selecting **Administrators only** for this example. Alternatively, add this manual entry using `pluginOperations`:
+For this conservative admin-only GET example, add a manual `pluginOperations` entry. The review table has no role selector:
 
 ```json
 {
@@ -76,3 +76,7 @@ The isolated fixture seeds two synthetic notification deltas through Signal K ou
 Schema-drift tests temporarily replace the test server's published OpenAPI record and restore it; the installed package is never patched. Node's built-in SQLite support is required by Alert Center. The CI matrix uses current Node 22/24 releases, not every historical patch release. These checks establish the reviewed read contract with synthetic data, not delivery, audibility, vessel safety or complete provider lifecycle correctness.
 
 Relevant diagnostics remain `NOT_ALLOWLISTED`, `PERMISSION_DENIED`, `METHOD_NOT_READONLY`, `AMBIGUOUS_OPERATION_ID`, `UNSUPPORTED_SCHEMA`, `INVALID_ARGUMENTS`, `PLUGIN_DISABLED`, `CAPABILITY_NOT_FOUND`, `CAPABILITY_UNAVAILABLE` and `UPSTREAM_PERMISSION_DENIED`. Native error bodies are not exposed to clients.
+
+## Individually reviewed POST acceptance
+
+The same unchanged package supplies `POST /snooze` (`post.snooze`) with a required JSON object containing integer `durationSeconds` from 1 to 28800. Its native route requires `readwrite`; it changes provider snooze state for every service, including emergency alerts. Review its global effect before approval. The isolated acceptance fixture disables external notifiers, audio/speech and connectivity services. It verifies reader denial, no state change before approval, input bounds, writer dispatch and exact forwarding of provider state. The native synthetic suite separately proves admin-only configuration persistence and stricter target-route permission denial. See [POST contracts](plugin-posts.md).

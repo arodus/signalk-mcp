@@ -758,7 +758,7 @@ test(
         );
         assert.equal(
           operations.find((op) => op.id === "write").reason,
-          "METHOD_NOT_READONLY",
+          "NOT_ALLOWLISTED",
         );
         assert.equal(
           operations.find((op) => op.id === "badSchema").reason,

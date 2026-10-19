@@ -191,7 +191,7 @@ export default function Configuration() {
     h(
       "p",
       { className: "mcp-help" },
-      "Review each GET or native PUT before accepting it. PUTs can change vessel state: check the source, meaning and value constraints. Signal K permissions still apply. Changes take effect when you save.",
+      "Review each GET, POST or native PUT before accepting it. Writes can change vessel state: check the target, meaning, input constraints and provider permissions. Signal K permissions still apply. Changes take effect when you save.",
     ),
     error
       ? h("div", { role: "alert", className: "mcp-notice mcp-error" }, error)
@@ -211,7 +211,7 @@ export default function Configuration() {
               className: "mcp-table-wrap",
               tabIndex: 0,
               role: "region",
-              "aria-label": "GET and PUT approvals",
+              "aria-label": "GET, POST and PUT approvals",
             },
             h(
               "table",
@@ -233,6 +233,8 @@ export default function Configuration() {
                 rows.length
                   ? rows.map(([key, item]) => {
                       const put = item.kind === "put";
+                      const post = item.kind === "post";
+                      const write = put || post;
                       const absent =
                         !put && !base.installed.includes(item.pluginId);
                       const label = put
@@ -253,7 +255,7 @@ export default function Configuration() {
                             null,
                             put
                               ? `Native PUT · ${item.context}`
-                              : `Plugin GET · ${item.pluginId}`,
+                              : `Plugin ${post ? "POST" : "GET"} · ${item.pluginId}`,
                             absent ? " · Not installed" : "",
                           ),
                           put
@@ -267,7 +269,7 @@ export default function Configuration() {
                               null,
                               put
                                 ? "Meaning and value constraints"
-                                : `GET ${item.path}`,
+                                : `${post ? "POST" : "GET"} ${item.path}`,
                             ),
                             h(
                               "p",
@@ -276,17 +278,34 @@ export default function Configuration() {
                                 ? description
                                 : "No description provided.",
                             ),
-                            put
+                            write
                               ? h(
                                   React.Fragment,
                                   null,
-                                  h("p", null, "Provider metadata"),
+                                  put
+                                    ? h("p", null, "Provider metadata")
+                                    : null,
                                   h(
                                     "pre",
                                     null,
-                                    JSON.stringify(item.metadata, null, 2),
+                                    JSON.stringify(
+                                      put
+                                        ? item.metadata
+                                        : {
+                                            method: item.method,
+                                            path: item.path,
+                                          },
+                                      null,
+                                      2,
+                                    ),
                                   ),
-                                  h("p", null, "Accepted value schema"),
+                                  h(
+                                    "p",
+                                    null,
+                                    post
+                                      ? "Accepted input schema (body is sent as JSON)"
+                                      : "Accepted value schema",
+                                  ),
                                   h(
                                     "pre",
                                     null,
@@ -318,12 +337,14 @@ export default function Configuration() {
                           h(
                             "span",
                             {
-                              className: `mcp-badge mcp-${put ? "write" : "read"}`,
+                              className: `mcp-badge mcp-${write ? "write" : "read"}`,
                               title: put
                                 ? "Requires native Signal K PUT permission"
-                                : "Requires native Signal K read permission",
+                                : post
+                                  ? "Requires a write-capable Signal K identity and provider permission"
+                                  : "Requires native Signal K read permission",
                             },
-                            put ? "Write" : "Read",
+                            write ? "Write" : "Read",
                           ),
                         ),
                         h(
@@ -351,7 +372,7 @@ export default function Configuration() {
                                 "aria-label": `Reject ${label}`,
                               },
                             ),
-                            (put || absent) && deleting !== key
+                            (write || absent) && deleting !== key
                               ? button("Delete", () => setDeleting(key), {
                                   disabled: busy,
                                   "aria-label": `Delete ${label}`,
@@ -364,7 +385,7 @@ export default function Configuration() {
                                   h(
                                     "small",
                                     null,
-                                    put
+                                    write
                                       ? "Remove this review and revoke its approval when you save? A later request will need a new review."
                                       : "Remove this saved review?",
                                   ),
@@ -391,7 +412,7 @@ export default function Configuration() {
                       h(
                         "td",
                         { colSpan: 4 },
-                        "No requests yet. Refresh after a client attempts an unapproved plugin GET or native PUT.",
+                        "No requests yet. Refresh after a client attempts an unapproved plugin GET, POST or native PUT.",
                       ),
                     ),
               ),
@@ -403,7 +424,7 @@ export default function Configuration() {
               className: "mcp-help",
               style: { marginTop: 10, marginBottom: 0 },
             },
-            "Rejected requests stay in this list. Delete a native PUT review to revoke its approval; plugin GET reviews can be deleted when the plugin is no longer installed. Save to apply changes.",
+            "Rejected requests stay in this list. Delete a POST or native PUT review to revoke its approval; plugin GET reviews can be deleted when the plugin is no longer installed. Save to apply changes.",
           ),
           h(
             "details",

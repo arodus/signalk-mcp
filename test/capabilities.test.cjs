@@ -406,7 +406,7 @@ test("optional OpenAPI IDs use route names but never bypass exact approval or co
   assert.equal(
     discoverOperations(document, "example", [routeApproval], principal)[1]
       .reason,
-    "METHOD_NOT_READONLY",
+    "UNSUPPORTED_PARAMETER",
   );
   for (const invalid of [null, "", "bad/id", 42]) {
     document.paths["/reading/{id}"].get.operationId = invalid;

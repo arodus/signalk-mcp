@@ -9,7 +9,7 @@ import {
 import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
 import { applyReviews, type ApprovalRequests } from "../approvals.js";
-import type { LocalGet } from "./http.js";
+import type { LocalGet, LocalPost } from "./http.js";
 import type { LocalActions } from "../put-types.js";
 import {
   NativePuts,
@@ -70,6 +70,7 @@ export class CapabilityRegistry {
     private readonly requests?: ApprovalRequests,
     private readonly puts?: NativePuts,
     private readonly actions?: LocalActions,
+    private readonly post?: LocalPost,
   ) {
     this.core = {
       "signalk.telemetry": {
@@ -246,6 +247,8 @@ export class CapabilityRegistry {
     args: unknown,
   ): Promise<object> {
     this.authorize();
+    if (id.startsWith("plugin."))
+      return this.executePlugin(id, operation, args, true);
     if (id !== "signalk.put" || operation !== "put_value")
       throw new GatewayError("OPERATION_DISABLED", 403);
     const input = putInput.safeParse(args);
@@ -326,7 +329,7 @@ export class CapabilityRegistry {
           id: `plugin.${plugin.id}`,
           provider: plugin.id,
           kind: "plugin",
-          readOnly: true,
+          readOnly: false,
           availability: plugin.enabled ? "inspect-required" : "disabled",
         });
     } catch (error) {
@@ -459,7 +462,7 @@ export class CapabilityRegistry {
       return {
         id,
         provider: plugin.id,
-        readOnly: true,
+        readOnly: false,
         available: false,
         reason: "PLUGIN_DISABLED",
         operations: [],
@@ -482,7 +485,7 @@ export class CapabilityRegistry {
       return {
         id,
         provider: plugin.id,
-        readOnly: true,
+        readOnly: false,
         available: true,
         reason: null,
         operations: operations.map(operationDescription),
@@ -492,7 +495,7 @@ export class CapabilityRegistry {
       return {
         id,
         provider: plugin.id,
-        readOnly: true,
+        readOnly: false,
         available: false,
         reason:
           error instanceof GatewayError ? error.code : "DISCOVERY_UNAVAILABLE",
@@ -524,6 +527,19 @@ export class CapabilityRegistry {
       this.authorize();
       return result;
     }
+    return this.executePlugin(id, operation, args, false);
+  }
+  private async executePlugin(
+    id: string,
+    operation: string,
+    args: unknown,
+    mutation: boolean,
+  ): Promise<object> {
+    if (
+      mutation &&
+      !["readwrite", "admin"].includes(this.authorize().permissions)
+    )
+      throw new GatewayError("PERMISSION_DENIED", 403);
     const plugin = await this.plugin(id);
     if (!plugin.enabled) throw new GatewayError("CAPABILITY_UNAVAILABLE");
     const document = await this.get(
@@ -540,6 +556,20 @@ export class CapabilityRegistry {
       this.config.readRequests ?? {},
       this.authorize(),
     ).find((candidate) => candidate.id === operation);
+    if (target && target.method !== (mutation ? "POST" : "GET"))
+      throw new GatewayError(
+        mutation
+          ? "OPERATION_DISABLED"
+          : target.method === "POST"
+            ? "MUTATION_TOOL_REQUIRED"
+            : "OPERATION_DISABLED",
+        403,
+      );
+    if (
+      mutation &&
+      !["readwrite", "admin"].includes(this.authorize().permissions)
+    )
+      throw new GatewayError("PERMISSION_DENIED", 403);
     if (target?.reason === "NOT_ALLOWLISTED" && this.requests) {
       if (!target.input?.safeParse(args).success)
         throw new GatewayError("INVALID_ARGUMENTS");
@@ -552,6 +582,68 @@ export class CapabilityRegistry {
       throw new GatewayError("OPERATION_DISABLED", 403);
     const route = operationRoute(plugin.id, target, args);
     this.authorize();
+    if (mutation) {
+      if (!this.post) throw new GatewayError("PLUGIN_POST_UNAVAILABLE", 503);
+      const body = target.input!.parse(args).body;
+      // Recheck lifecycle, enabled state and approval after asynchronous discovery.
+      if (!(await this.plugin(id)).enabled)
+        throw new GatewayError("CAPABILITY_UNAVAILABLE");
+      const principal = this.authorize();
+      if (!["readwrite", "admin"].includes(principal.permissions))
+        throw new GatewayError("PERMISSION_DENIED", 403);
+      const current = applyReviews(
+        [{ ...target, enabled: false, reason: "NOT_ALLOWLISTED" }],
+        plugin.id,
+        this.config.readRequests ?? {},
+        principal,
+      )[0]!;
+      if (!current.enabled)
+        throw new GatewayError(current.reason ?? "OPERATION_DISABLED", 403);
+      try {
+        const response = await this.post(route, body);
+        const after = this.authorize();
+        if (
+          after.identifier !== principal.identifier ||
+          !["readwrite", "admin"].includes(after.permissions) ||
+          !applyReviews(
+            [{ ...target, enabled: false, reason: "NOT_ALLOWLISTED" }],
+            plugin.id,
+            this.config.readRequests ?? {},
+            after,
+          )[0]!.enabled
+        )
+          throw new GatewayError("PERMISSION_DENIED", 403);
+        return {
+          capability: id,
+          operation,
+          provider: plugin.id,
+          outcome: response.status === 202 ? "accepted" : "responded",
+          submitted: true,
+          retrySafe: false,
+          statusCode: response.status,
+          ...(response.data === undefined ? {} : { data: response.data }),
+        };
+      } catch (error) {
+        // An HTTP error can follow a provider side effect. No automatic retries,
+        // invented completion state or claims that cancellation undid the action.
+        return {
+          capability: id,
+          operation,
+          provider: plugin.id,
+          outcome: "unknown",
+          submitted: true,
+          retrySafe: false,
+          code:
+            error instanceof GatewayError
+              ? error.code
+              : "PLUGIN_POST_RESULT_UNAVAILABLE",
+          ...(error instanceof GatewayError &&
+          error.code === "PLUGIN_POST_HTTP_ERROR"
+            ? { statusCode: error.status }
+            : {}),
+        };
+      }
+    }
     const result = await this.get(route);
     const principal = this.authorize();
     if (target.permission === "admin" && principal.permissions !== "admin")
