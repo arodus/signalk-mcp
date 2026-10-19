@@ -1,6 +1,6 @@
 # ADR 002: Read-only capability registry and discovery
 
-Date: 2026-10-19. Scope: native telemetry, notification measurements, standardized history, plugin feature/OpenAPI discovery and explicitly approved GET invocation.
+Date: 2026-10-19. Scope: native telemetry, notification measurements, standardized history, plugin feature/OpenAPI discovery, explicitly approved GET invocation and individually approved native PUTs in the issue #30 development extension. The published first alpha remains read-only.
 
 ## Architecture
 

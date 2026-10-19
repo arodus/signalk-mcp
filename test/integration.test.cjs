@@ -399,14 +399,19 @@ test(
           (await client.listTools()).tools.map((tool) => tool.name).sort(),
           [
             "describe_capability",
+            "describe_put",
             "execute_capability",
+            "execute_mutation",
             "get_history",
             "get_notification",
+            "get_put_status",
             "get_values",
             "get_vessel_state",
             "list_capabilities",
             "list_notifications",
             "list_paths",
+            "list_put_paths",
+            "put_value",
           ],
         );
         const result = await client.callTool({

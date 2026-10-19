@@ -10,6 +10,14 @@ import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
 import { applyReviews, type ApprovalRequests } from "../approvals.js";
 import type { LocalGet } from "./http.js";
+import type { LocalActions } from "../put-types.js";
+import {
+  NativePuts,
+  describePutInput,
+  putInput,
+  putPathsInput,
+  putStatusInput,
+} from "../puts.js";
 import { getHistory, historyProviders } from "./history.js";
 import { getNotification, listNotifications } from "./notifications.js";
 import {
@@ -60,6 +68,8 @@ export class CapabilityRegistry {
       throw new GatewayError("LOCAL_HTTP_UNAVAILABLE");
     },
     private readonly requests?: ApprovalRequests,
+    private readonly puts?: NativePuts,
+    private readonly actions?: LocalActions,
   ) {
     this.core = {
       "signalk.telemetry": {
@@ -178,7 +188,69 @@ export class CapabilityRegistry {
           },
         },
       },
+      "signalk.put": {
+        description:
+          "Native self-context actions; every exact path/source needs saved administrator approval and native PUT permission",
+        operations: {
+          list_put_paths: {
+            description:
+              "Discover metadata-advertised PUT path candidates for an explicit source; no current values or inferred handler sources",
+            input: putPathsInput,
+            run: (args) =>
+              this.nativePuts().list(
+                () => this.authorize(),
+                putPathsInput.parse(args),
+              ),
+          },
+          describe_put: {
+            description:
+              "Describe a native action using its path metadata and exact source; discovery does not grant approval or prove handler availability",
+            input: describePutInput,
+            run: (args) =>
+              this.nativePuts().describe(
+                () => this.authorize(),
+                describePutInput.parse(args),
+              ),
+          },
+          get_put_status: {
+            description:
+              "Check a gateway-submitted native action owned by this Signal K identity; unknown/expired requests stay unavailable",
+            input: putStatusInput,
+            run: (args) =>
+              this.nativePuts().status(
+                this.putContext(),
+                putStatusInput.parse(args),
+              ),
+          },
+        },
+      },
     };
+  }
+  private nativePuts(): NativePuts {
+    if (!this.puts) throw new GatewayError("PUT_UNAVAILABLE", 503);
+    return this.puts;
+  }
+  private putContext() {
+    if (!this.actions || !this.requests)
+      throw new GatewayError("PUT_UNAVAILABLE", 503);
+    return {
+      authorize: () => this.authorize(),
+      config: this.config,
+      requests: this.requests,
+      http: this.actions,
+    };
+  }
+  async executeMutation(
+    id: string,
+    operation: string,
+    args: unknown,
+  ): Promise<object> {
+    this.authorize();
+    if (id !== "signalk.put" || operation !== "put_value")
+      throw new GatewayError("OPERATION_DISABLED", 403);
+    const input = putInput.safeParse(args);
+    if (!input.success) throw new GatewayError("INVALID_ARGUMENTS");
+    return this.nativePuts().execute(this.putContext(), input.data);
   }
   authorize(): Principal {
     if (!this.running()) throw new GatewayError("PLUGIN_STOPPED", 503);
@@ -226,9 +298,13 @@ export class CapabilityRegistry {
         provider: "signalk",
         kind: "core",
         description: cap.description,
-        readOnly: true,
+        readOnly: id !== "signalk.put",
         availability:
-          id === "signalk.history" ? "provider-dependent" : "available",
+          id === "signalk.history"
+            ? "provider-dependent"
+            : id === "signalk.put"
+              ? "per-target-approval"
+              : "available",
       }),
     );
     let discovery: string = "complete";
@@ -266,6 +342,49 @@ export class CapabilityRegistry {
   }
   async describe(id: string) {
     this.authorize();
+    if (id === "signalk.put") {
+      const principal = this.authorize();
+      const available = Boolean(this.puts && this.actions && this.requests);
+      const permitted = ["readwrite", "admin"].includes(principal.permissions);
+      return {
+        id,
+        provider: "signalk",
+        readOnly: false,
+        available,
+        reason: available ? null : "PUT_UNAVAILABLE",
+        description: this.core[id]!.description,
+        operations: [
+          ...Object.entries(this.core[id]!.operations).map(
+            ([name, operation]) => ({
+              id: name,
+              readOnly: true,
+              permission: "readwrite",
+              enabled: available && permitted,
+              reason: !available
+                ? "PUT_UNAVAILABLE"
+                : permitted
+                  ? null
+                  : "PERMISSION_DENIED",
+              description: operation.description,
+              inputSchema: zodToJsonSchema(operation.input, {
+                $refStrategy: "none",
+              }),
+            }),
+          ),
+          {
+            id: "put_value",
+            readOnly: false,
+            permission: "readwrite",
+            enabled: false,
+            reason: "PER_TARGET_APPROVAL_REQUIRED",
+            executionTool: "put_value",
+            description:
+              "Submit one approved path/source action. Never automatically retry an unknown outcome. Use put_value or execute_mutation; execute_capability only reads.",
+            inputSchema: zodToJsonSchema(putInput, { $refStrategy: "none" }),
+          },
+        ],
+      };
+    }
     if (Object.hasOwn(this.core, id)) {
       const capability = this.core[id]!;
       let providers: { id: string; isDefault: boolean }[] | undefined;
@@ -392,6 +511,8 @@ export class CapabilityRegistry {
   }
   async execute(id: string, operation: string, args: unknown): Promise<object> {
     this.authorize();
+    if (id === "signalk.put" && operation === "put_value")
+      throw new GatewayError("MUTATION_TOOL_REQUIRED", 403);
     if (Object.hasOwn(this.core, id)) {
       const operations = this.core[id]!.operations;
       if (!Object.hasOwn(operations, operation))

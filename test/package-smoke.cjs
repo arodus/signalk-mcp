@@ -49,6 +49,7 @@ try {
     "LICENSE",
     "CHANGELOG.md",
     "docs/images/native-plugin-config.jpg",
+    "docs/images/native-put-approvals.png",
   ])
     assert.ok(
       packed.files.some(({ path: file }) => file === required),
@@ -92,7 +93,12 @@ try {
   const installed = path.join(install, "node_modules", "signalk-mcp");
   const result = spawnSync(
     process.execPath,
-    ["--test", "--test-force-exit", "test/integration.test.cjs"],
+    [
+      "--test",
+      "--test-force-exit",
+      "test/integration.test.cjs",
+      "test/native-puts.test.cjs",
+    ],
     {
       cwd: root,
       env: { ...process.env, MCP_TEST_PLUGIN_DIR: installed },

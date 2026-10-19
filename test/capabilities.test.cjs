@@ -208,7 +208,7 @@ test("oversized feature discovery fails closed and recovers with bounded input",
     app.getFeatures = async () => features;
     const result = await registry.list();
     assert.equal(result.discovery, "INVALID_FEATURES");
-    assert.equal(result.capabilities.length, 3);
+    assert.equal(result.capabilities.length, 4);
     await assert.rejects(
       registry.describe("plugin.example"),
       /INVALID_FEATURES/,
@@ -256,7 +256,7 @@ test("partial discovery stays truthful and does not break core capabilities", as
   };
   const listed = await registry.list();
   assert.equal(listed.discovery, "DISCOVERY_UNAVAILABLE");
-  assert.equal(listed.capabilities.length, 3);
+  assert.equal(listed.capabilities.length, 4);
   const notifications = await registry.execute(
     "signalk.notifications",
     "list",

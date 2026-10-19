@@ -2,9 +2,9 @@
 
 **Project:** `signalk-mcp`
 
-**Scope updated:** 2026-10-18, following the owner's explicit direction
+**Scope updated:** 2026-10-19, following the owner's explicit direction in issue #30
 
-**Purpose:** Discover, fetch and forward authorized Signal K data to MCP clients.
+**Purpose:** Discover, fetch and forward authorized Signal K data and individually approved native PUT actions for MCP clients.
 
 This brief supersedes the original proposals for calculations and sandboxed data processing. The gateway does not perform calculations, mathematical analysis, aggregation, integration, inference or other domain transformations on fetched data. It does not provide `execute_code` or a computation worker. These are outside the project scope, not deferred features.
 
@@ -14,7 +14,9 @@ Authorization, input/response validation, bounded selection, pagination and MCP 
 
 The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy and v2 notification reads, standard v2 history with native permission checks, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection.
 
-Only explicitly reviewed GET operations can execute, using the original Signal K bearer identity and native route permissions. Unknown operations remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
+Plugin execution remains limited to explicitly reviewed GET operations. The development PUT extension uses the same native administrator review/save workflow, binding every action to an exact self-context path, explicit source and reviewed metadata/value contract. There is no blanket PUT grant. Original Signal K bearer identity, native PUT permissions and native route checks remain mandatory. Unknown operations and plugin POSTs remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
+
+The released `0.1.0-alpha.1` remains read-only. The issue #30 development extension requires separate release and deployment authorization; local implementation is not published functionality.
 
 Authenticated reads, standard v2 history and reviewed plugin reads are verified under Signal K 2.32.0/2.33.0 on Node 22/24. The unchanged published packages `signalk-to-influxdb` 1.11.0 and `signalk-alert-center` 0.4.1 are exercised with synthetic data; see [history verification](docs/history-providers.md) and [plugin compatibility](docs/plugin-compatibility.md). Product-client connections, live vessel acceptance and publication remain unverified.
 
@@ -28,6 +30,7 @@ README.md and docs describe implemented behavior and verification. This brief de
 - Discover and fetch authorized current telemetry, history and supported read-only APIs.
 - Discover installed plugin capabilities through public features, OpenAPI and explicit adapters where needed.
 - Forward approved third-party API reads under the original caller's identity.
+- Forward individually approved native self-context PUTs under the original caller's identity, using native metadata for discovery and description. Add reviewed plugin POSTs only in a subsequent change.
 - Keep the MCP tool catalog compact and support batched reads.
 - Remain suitable for ordinary Signal K installations and resource-constrained onboard systems, without Docker or Podman requirements.
 - Keep the project independent and useful beyond any single vessel.
@@ -49,6 +52,7 @@ Read-only capability layer
     +-- standardized History API providers
     +-- supported notification reads
     +-- explicitly approved plugin GET operations
+    +-- individually approved native self-context PUT actions
     |
     v
 Bounded, validated MCP responses preserving provider data
@@ -56,7 +60,7 @@ Bounded, validated MCP responses preserving provider data
 
 Transport, identity, telemetry access, discovery and capability execution remain separate. Dedicated tools and generic capability calls use the same authorization and data-access implementation.
 
-The gateway must not expose controls, configuration writes, arbitrary HTTP requests, host files, shell commands or JavaScript execution. Container Manager integration and sandbox lifecycle management are outside this gateway's scope.
+The gateway must not expose unreviewed controls, arbitrary configuration writes or HTTP requests, host files, shell commands or JavaScript execution. Native PUT actions need one exact saved review each. Container Manager integration and sandbox lifecycle management are outside this gateway's scope.
 
 ## 4. Authentication and authorization
 
@@ -92,8 +96,13 @@ Use the official MCP TypeScript SDK and stateless Streamable HTTP where supporte
 | `list_capabilities`   | Discover core and installed-plugin capabilities                |
 | `describe_capability` | Describe schemas, permissions, availability and approval state |
 | `execute_capability`  | Invoke a supported authorized read-only operation              |
+| `list_put_paths`      | Discover PUT candidates for an explicit source                 |
+| `describe_put`        | Describe one path/source using native metadata                 |
+| `put_value`           | Submit one individually approved native PUT                    |
+| `get_put_status`      | Check an owned gateway-submitted native request                |
+| `execute_mutation`    | Invoke the same approved native PUT implementation             |
 
-Avoid one tool per measurement or plugin operation. Any future MCP resources must follow the same read-only and authorization boundaries.
+Avoid one tool per measurement or plugin operation. Read tools remain read-only; mutation tools use accurate annotations and a separate execution entry point. Any future MCP resources must follow the same authorization boundaries.
 
 Use Signal K’s server-wide CORS policy for browser requests without separate plugin host/origin lists. Preserve bearer authentication, sanitized errors, bounded requests/results, deadlines and concurrency limits. Never log or publish tokens, signing secrets or sensitive vessel data.
 
@@ -126,7 +135,7 @@ Use the compact capability interface rather than generating hundreds of MCP tool
 
 ## 8. Implementation and release sequence
 
-Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signalk-mcp/issues/12).
+The original read-only roadmap is recorded in [#12](https://github.com/arodus/signalk-mcp/issues/12). Track the subsequent individually approved PUT extension and later plugin POST work in [#30](https://github.com/arodus/signalk-mcp/issues/30).
 
 ### Compatibility and acceptance
 
@@ -160,4 +169,16 @@ CI success, package installation, AppStore indexing, live retrieval and physical
 
 An authenticated MCP client can discover and fetch authorized Signal K measurements and supported plugin/provider responses through a native plugin, with data provenance intact and the original Signal K permissions enforced.
 
-The plugin's responsibility ends at reliable, permission-aware data access and forwarding. Calculations and other data processing are outside this project.
+The plugin's responsibility ends at reliable, permission-aware data access and forwarding, including individually approved native actions. Calculations and other data processing are outside this project.
+
+## 10. Individually approved native actions
+
+Native PUT discovery uses `supportsPut` and actual path metadata; it never infers a handler source from telemetry or invents a command schema from a current value. Source is explicit. Runtime metadata observed through the public delta hook and previously described targets supplement the value model; metadata-only paths advertised before observation may require an explicit `describe_put`. Incomplete enumeration must be reported honestly.
+
+An eligible valid but unapproved action queues bounded review metadata without dispatch. Accept/Reject and native Save Configuration remain the only approval route. Bind the exact context, path, source and metadata/value contract, preserve GET decisions and rejection precedence, and require renewed review when the binding changes. No all-PUT option or wildcard approval is permitted.
+
+Require native `readwrite` or `admin` identity and exact-source `put` ACL authorization before dispatch. Preserve the original bearer through fixed-local HTTP because in-process helpers do not carry the caller's request identity. The supported servers check HTTP PUT ACLs with a null source before choosing the handler, so the gateway must additionally check the explicit source. Metadata configuration writes are excluded from this action interface.
+
+Preserve native request IDs, pending/completed/failed state and status codes. Restrict status lookup to gateway-submitted requests owned by the same native identity, with current approval/permissions, bounded one-hour expiry and lifecycle reset. A later denial must not disguise an already-submitted action as an unexecuted read failure. Unknown outcomes are explicit, with no automatic mutation retries or physical-operation claims.
+
+Plugin POSTs follow only after the native PUT boundary is verified. They require their own exact reviewed method/route/body contract; a GET approval can never enable POST. No generic unrestricted HTTP executor is planned.

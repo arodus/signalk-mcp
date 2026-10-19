@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add individually approved native self-context PUTs using the existing Plugin Config review table, exact path/source/metadata binding and native PUT permissions. There is no blanket PUT grant; plugin POSTs remain disabled.
+- Add bounded metadata-driven PUT discovery, explicit source selection, owned request-status tracking and truthful uncertain outcomes without automatic mutation retries. Preserve existing reads, plugin GET reviews and native configuration saves.
+
 ## [0.1.0-alpha.1] - 2026-10-19
 
 - Add the tag-driven release pipeline used by Alert Center: both CI gates, release-tag and notes checks, commit-stamped tarballs, exact-package integration checks, npm prerelease tags and published `gitHead` verification.

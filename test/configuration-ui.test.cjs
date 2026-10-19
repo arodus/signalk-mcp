@@ -1,6 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { reviewKey } = require("../dist/approvals.js");
+const { reviewKey, putReview } = require("../dist/approvals.js");
 const { configSchema } = require("../dist/config.js");
 const clone = (value) => globalThis.structuredClone(value);
 const ui = () => import("../ui/configuration.mjs");
@@ -14,6 +14,14 @@ const review = {
   permission: "readonly",
 };
 const key = reviewKey(review);
+const put = putReview({
+  context: "vessels.self",
+  path: "steering.autopilot.target.headingTrue",
+  source: "fixture.autopilot",
+  metadata: { description: "Desired heading", units: "rad" },
+  inputSchema: { type: "number", minimum: 0, maximum: 6.28 },
+});
+const putKey = reviewKey(put);
 function inventory(reviews = { [key]: review }, installed = true) {
   return [
     {
@@ -213,4 +221,78 @@ test("connection and manual approval edits retain native configuration constrain
       .success,
     true,
   );
+});
+
+test("GET and PUT decisions save together through native configuration while concurrent requests survive", async () => {
+  const { saveConfiguration } = await ui();
+  const mixed = { [key]: review, [putKey]: put };
+  const base = await snapshot(inventory(mixed));
+  const draft = draftOf(base);
+  draft.reviews[key].decision = "rejected";
+  draft.reviews[putKey].decision = "approved";
+  const next = { ...put, source: "fixture.new" };
+  const nextKey = reviewKey(next);
+  const current = inventory(mixed);
+  current[0].schema.properties.readRequests.properties[nextKey] = {
+    default: next,
+  };
+  let saved;
+  const calls = [];
+  const result = await saveConfiguration(base, draft, async (url, options) => {
+    calls.push([url, options.method ?? "GET"]);
+    if (url === "/plugins") return response(current);
+    if (options.method === "POST") {
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  });
+  assert.deepEqual(calls, [
+    ["/plugins", "GET"],
+    ["/plugins/signalk-mcp/config", "POST"],
+    ["/plugins/signalk-mcp/config", "GET"],
+  ]);
+  assert.equal(result.reviews[key].decision, "rejected");
+  assert.equal(result.reviews[putKey].decision, "approved");
+  assert.equal(Object.hasOwn(result.reviews[putKey], "permission"), false);
+  assert.equal(result.reviews[nextKey].decision, "pending");
+  assert.equal(configSchema.safeParse(saved.configuration).success, true);
+  assert.equal(base.reviews[putKey].decision, "pending");
+});
+
+test("native PUT reviews can be revoked without plugin absence and concurrent edits still conflict", async () => {
+  const { mergeChanges } = await ui();
+  const accepted = { ...put, decision: "approved" };
+  const base = await snapshot(inventory({ [key]: review, [putKey]: accepted }));
+  const draft = draftOf(base);
+  delete draft.reviews[putKey];
+  const merged = mergeChanges(base, draft, base);
+  assert.deepEqual(merged.configuration.readRequests, { [key]: review });
+  const changed = clone(base);
+  changed.reviews[putKey].decision = "rejected";
+  assert.throws(() => mergeChanges(base, draft, changed), /another session/);
+  const rejected = draftOf(base);
+  rejected.reviews[putKey].decision = "rejected";
+  assert.equal(
+    mergeChanges(base, rejected, base).configuration.readRequests[putKey]
+      .decision,
+    "rejected",
+  );
+});
+
+test("invalid PUT metadata or gateway permission policy cannot enter the approval table", async () => {
+  for (const changes of [
+    { permission: "readonly" },
+    { permission: "readwrite" },
+    { permission: "admin" },
+    { context: "vessels.other" },
+    { source: undefined },
+    { metadata: [] },
+    { inputSchema: null },
+    { kind: "post" },
+  ])
+    await assert.rejects(
+      snapshot(inventory({ [putKey]: { ...put, ...changes } })),
+      /invalid/,
+    );
 });

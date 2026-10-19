@@ -114,7 +114,7 @@ test(
         path: "navigation.speedOverGround",
         status: "unavailable",
       });
-      assert.equal((await clients[0].listTools()).tools.length, 9);
+      assert.equal((await clients[0].listTools()).tools.length, 14);
       assert.equal(
         fs.readFileSync(
           path.join(dir, "plugin-config-data/signalk-mcp.json"),

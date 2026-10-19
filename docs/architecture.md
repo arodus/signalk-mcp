@@ -2,6 +2,8 @@
 
 Date: 2026-10-18. Status: initial proof of concept implemented; extended by [ADR 002](capabilities.md). Vessel and publication acceptance remain pending.
 
+The owner extended the scope on 2026-10-19 in issue #30: individually approved native PUTs follow the existing plugin GET review/save workflow. The published first alpha remains read-only; see [native PUT architecture, permission gaps and limits](native-puts.md) for the development extension. Plugin POSTs remain a subsequent change. The historical read-only and sandbox assessments below describe the original proof of concept.
+
 ## Confirmed interfaces
 
 The source review used Signal K master commit [`340d5bb`](https://github.com/SignalK/signalk-server/tree/340d5bb62c17ec58d2a3497dbbf081cd87af2a96), Container Manager [`7ed3f47`](https://github.com/dirkwa/signalk-container/tree/7ed3f478c5cb86d1ea7825b840e1742b5ce40f58), and VesselSense [`e04e7db`](https://github.com/VesselSense/signalk-mcp-server/tree/e04e7dba68b43a4e1c1534b03c0da6192d82ec9d). Integration tests use the separately pinned npm release `signalk-server@2.33.0`; a master checkout is not release compatibility evidence.

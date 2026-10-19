@@ -1,5 +1,17 @@
 # Verification record
 
+## Individually approved native PUT checkpoint (issue #30, 2026-10-19)
+
+The development branch adds exact administrator approvals for native self-vessel PUT targets. There is no blanket PUT approval or PUT-specific role selector: the configurator labels commands **Read** or **Write**, and native Signal K roles and path/source ACLs apply on every invocation. Plugin POSTs remain disabled. This checkpoint does not describe a release or deployment.
+
+On Node **24.22.0** with Signal K **2.33.0**, `npm run check` passes TypeScript, ESLint, formatting, **71 portable tests**, and **57 native integration tests** with three optional skips. The native suite also passes with the same counts on Node **22.23.3** / Signal K **2.33.0**, Node **22.23.3** / Signal K **2.32.0**, and Node **24.22.0** / Signal K **2.32.0**. Python MCP interoperability passes in all four combinations. The skipped cases require optional installed Codex/Hermes clients or a disposable production History backend; those paths are not claimed verified by this checkpoint.
+
+Real temporary Signal K servers and synthetic handlers cover native admin saves, explicit source authorization, exact metadata/schema approval binding, zero/false/null values, pending-request ownership, native failure replies, revocation and uncertain outcomes without automatic retry, lifecycle resets, and stale handlers. Portable tests cover strict tool inputs and mutation annotations, schema and correlation bounds, expiry, changed target variants and malformed native replies. No live notification service or vessel-control hardware is used, and handler acknowledgement is not proof of physical operation.
+
+Metadata-only targets are covered through public metadata lookup and observed metadata deltas. Historical metadata-only paths cannot be enumerated through the tested public API and require explicit description; discovery reports that limitation.
+
+The embedded native configurator was inspected at **390**, **1280**, and **1920** pixel viewport widths, including expanded metadata. Read/Write labels and action controls remain visible, with no role selectors or horizontal overflow. The updated screenshot is [native PUT approvals](images/native-put-approvals.png). Installed-package verification and remote CI results are recorded with the implementation PR.
+
 2026-10-18. Capability-layer checkpoint; local macOS arm64 environment.
 
 ## Passed locally

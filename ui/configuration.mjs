@@ -50,7 +50,16 @@ export async function loadConfiguration(fetcher = nativeFetch) {
   Object.assign(reviews, configuration.readRequests ?? {});
   if (
     Object.values(reviews).some(
-      (review) => !object(review) || typeof review.pluginId !== "string",
+      (review) =>
+        !object(review) ||
+        (review.kind === "put"
+          ? review.context !== "vessels.self" ||
+            typeof review.path !== "string" ||
+            typeof review.source !== "string" ||
+            !object(review.metadata) ||
+            !object(review.inputSchema) ||
+            "permission" in review
+          : "kind" in review || typeof review.pluginId !== "string"),
     )
   )
     throw new Error(
@@ -123,7 +132,10 @@ export function mergeChanges(base, draft, current) {
     if (same(base.reviews[key], draft.reviews[key])) continue;
     if (!same(base.reviews[key], current.reviews[key])) conflict();
     if (!draft.reviews[key]) {
-      if (current.installed.includes(base.reviews[key].pluginId))
+      if (
+        base.reviews[key].kind !== "put" &&
+        current.installed.includes(base.reviews[key].pluginId)
+      )
         throw new Error(
           "This plugin is installed again. Refresh before deleting its review.",
         );
