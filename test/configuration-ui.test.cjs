@@ -61,6 +61,40 @@ const snapshot = async (list = inventory()) =>
 const draftOf = (base) =>
   clone({ reviews: base.reviews, settings: base.settings });
 
+test("first configuration saves without edits and preserves the host enable and logging flags", async () => {
+  const { loadConfiguration, saveConfiguration } = await ui();
+  for (const options of [
+    undefined,
+    {},
+    { enabled: false, configuration: null, enableLogging: true },
+    { enabled: true, configuration: {}, enableDebug: true },
+  ]) {
+    const plugins = inventory({});
+    plugins[0].data = options;
+    let saved;
+    const fetcher = async (url, request) => {
+      if (url === "/plugins") return response(plugins);
+      if (request.method === "POST") {
+        saved = JSON.parse(request.body);
+        return response("saved");
+      }
+      return response(saved);
+    };
+    const base = await loadConfiguration(fetcher);
+    const result = await saveConfiguration(base, draftOf(base), fetcher);
+    assert.deepEqual(saved, {
+      ...(options ?? { enabled: false }),
+      configuration: { readRequests: {} },
+    });
+    assert.deepEqual(result.settings, {
+      localTlsServerName: "",
+      staleAfterSeconds: 300,
+      pluginOperations: [],
+    });
+    assert.equal(configSchema.safeParse(saved.configuration).success, true);
+  }
+});
+
 test("table saves only intended edits and preserves new requests, settings and host flags", async () => {
   const { saveConfiguration } = await ui();
   const base = await snapshot();

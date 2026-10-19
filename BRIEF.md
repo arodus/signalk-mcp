@@ -18,6 +18,8 @@ Plugin execution remains limited to explicitly reviewed GET operations. The deve
 
 Every plugin GET operation and native PUT target starts blocked and requires an individual administrator approval saved through native Plugin Config. There is no blanket plugin or PUT approval, and native Signal K permissions remain mandatory on every call. Built-in data reads use native permissions without that extra operation review. The published `0.1.0-alpha.1` predates native PUT support; publishing or deploying the current implementation requires separate authorization.
 
+The configurator permits saving unchanged defaults. Its first successful configuration save refreshes the page so Signal K can display the native Enabled switch; saving preserves the existing enable state and does not approve any operation.
+
 Authenticated reads, standard v2 history and reviewed plugin reads are verified under Signal K 2.32.0/2.33.0 on Node 22/24. The unchanged published packages `signalk-to-influxdb` 1.11.0 and `signalk-alert-center` 0.4.1 are exercised with synthetic data; see [history verification](docs/history-providers.md) and [plugin compatibility](docs/plugin-compatibility.md). Product-client connections, live vessel acceptance and publication remain unverified.
 
 README.md and docs describe implemented behavior and verification. This brief defines the intended scope; it does not establish upstream API availability or live compatibility.

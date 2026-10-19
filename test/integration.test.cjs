@@ -1483,6 +1483,76 @@ test(
         }
       },
     );
+    await t.test(
+      "unconfigured plugin saves defaults unchanged before native enable without granting approvals",
+      async () => {
+        const { loadConfiguration, saveConfiguration } =
+          await import("../ui/configuration.mjs");
+        const nativeFetch =
+          (principal) =>
+          (url, options = {}) =>
+            fetch(`http://${host}/skServer${url}`, {
+              ...options,
+              headers: {
+                ...options.headers,
+                Authorization: `Bearer ${token(principal)}`,
+              },
+            });
+        const adminFetch = nativeFetch("admin");
+        const configUrl = "/plugins/signalk-mcp/config";
+        const original = await (await adminFetch(configUrl)).json();
+        const write = async (options) => {
+          const result = await adminFetch(configUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(options),
+          });
+          assert.equal(result.status, 200);
+        };
+        const waitStatus = async (expected) => {
+          let status;
+          for (let attempt = 0; attempt < 100; attempt++) {
+            status = (await request(initialize)).status;
+            if (status === expected) return;
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          assert.equal(status, expected);
+        };
+        try {
+          await write({ enabled: false, enableDebug: true });
+          await waitStatus(503);
+          const base = await loadConfiguration(adminFetch);
+          assert.equal(base.options.configuration, undefined);
+          const draft = globalThis.structuredClone({
+            reviews: base.reviews,
+            settings: base.settings,
+          });
+          await assert.rejects(
+            saveConfiguration(base, draft, nativeFetch("reader")),
+            /administrator/,
+          );
+          const saved = await saveConfiguration(base, draft, adminFetch);
+          assert.equal(saved.options.enabled, false);
+          assert.equal(saved.options.enableDebug, true);
+          assert.deepEqual(saved.options.configuration, { readRequests: {} });
+          assert.deepEqual(saved.settings, {
+            localTlsServerName: "",
+            staleAfterSeconds: 300,
+            pluginOperations: [],
+          });
+          await waitStatus(503);
+          await write({ ...saved.options, enabled: true });
+          await waitStatus(200);
+          assert.equal(
+            (await cap("readReading", { name: "speed" })).content[0].text,
+            "APPROVAL_PENDING",
+          );
+        } finally {
+          await write(original);
+          await waitStatus(200);
+        }
+      },
+    );
     await t.test("disable and re-enable native plugin", async () => {
       const plugin = loadedPlugin(server, "signalk-mcp");
       await plugin.stop();

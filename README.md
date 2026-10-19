@@ -46,7 +46,7 @@ Install the tarball in a **test** Signal K 2.32.0 or 2.33.0 configuration direct
 npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0-alpha.1.tgz
 ```
 
-Restart Signal K, configure the plugin in Plugin Config, then enable it:
+Restart Signal K, open the plugin in Plugin Config and click **Save Configuration**. You can save the defaults without editing anything. After the first save, the page refreshes to show Signal K’s **Enabled** switch; use it to enable the plugin:
 
 ```json
 {
