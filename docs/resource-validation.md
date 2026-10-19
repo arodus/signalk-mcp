@@ -1,6 +1,6 @@
 # Lifecycle and local resource validation
 
-Issue [#7](https://github.com/arodus/signalk-mcp/issues/7) remains open for Raspberry Pi acceptance and the upstream in-process shutdown gap. Full process replacement and client reconnection are now tested. These tests use isolated synthetic data and native Signal K permissions. No vessel hardware is involved.
+Issue [#7](https://github.com/arodus/signalk-mcp/issues/7) tracks the upstream in-process shutdown limitation and host dependency review. On 2026-10-19, the owner removed Raspberry Pi testing from release acceptance; existing local ARM64 measurements remain development evidence only. Full process replacement and client reconnection are now tested. These tests use isolated synthetic data and native Signal K permissions. No vessel hardware is involved.
 
 ## Shutdown regression
 
@@ -98,3 +98,9 @@ All expected successes/rejections and subsequent allowed/denied reads passed in 
 The [extended raw measurement](benchmarks/2026-10-18-arm64-600s.json) uses the same local hardware, Node 24.22.0, Signal K 2.33.0 and synthetic workload as the short baseline, with 30 seconds idle followed by 600 seconds of load. All **12,000/12,000 reads** succeeded at 20/second, with zero skipped requests and zero telemetry observation errors. Read p95 was **9.14 ms**, p99 **12.43 ms**, telemetry scheduling p99 **3.67 ms**, and post-GC heap change **−9.47 MiB**. The previously approved short-run thresholds are retained as reference checks and all pass; this extension does not establish new Raspberry Pi or production acceptance thresholds.
 
 Idle/load CPU was **1.17% / 15.99%** of one core, peak sampled RSS **330.83 / 361.02 MiB**, and event-loop p99 **11.58 / 14.66 ms**. Load telemetry processing p99 was **0.46 ms**. The raw artifact includes ten-second memory samples without forcing GC during the workload. No other test suite or build ran alongside this measurement. Natural exit remained false because of the upstream shutdown gap. Ten minutes of synthetic load and a negative retained-heap delta do not prove absence of long-term leaks or performance on vessel hardware.
+
+## Alpha acceptance scope (2026-10-19)
+
+Raspberry Pi testing is no longer required. Historical benchmark descriptions retain their original scope; no Pi compatibility is claimed. Vessel acceptance follows the first alpha release and requires separate access/deployment authorization.
+
+The shutdown limitation concerns whole-server shutdown inside a still-running Node process: supported Signal K versions do not invoke plugin stop hooks through `server.stop()`, and upstream timers survive. Gateway stop/start cleanup is tested separately. For the alpha, document this unsupported shutdown path and use full server process replacement, whose reconnection and permission behavior is tested. Fixing upstream shutdown is not required for the alpha; this does not mark the upstream defect resolved.

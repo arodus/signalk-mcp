@@ -49,9 +49,9 @@ For rollback, disable the plugin, reinstall the previously retained tarball/vers
 
 For removal, disable the plugin, run `npm uninstall signalk-mcp` in the Signal K configuration directory and restart. Confirm the MCP endpoint is no longer available. Signal K may retain its plugin settings; remove those only if intentionally discarding the saved configuration. Remove the client connection and revoke its native token only if that token was dedicated to this client and is no longer needed.
 
-## Owner-reviewed vessel acceptance procedure
+## Post-alpha vessel acceptance procedure
 
-This procedure is prepared only. Do not connect to a vessel or install the package without explicit access/deployment authorization.
+This procedure is scheduled after the first alpha release, not as a prerequisite for alpha publication. It is prepared only. Do not connect to a vessel or install the package without explicit access/deployment authorization.
 
 1. Record the approved vessel/server, exact package hash, Signal K/Node versions, client and permitted read-only time window. Confirm existing native security and a dedicated least-privilege token without exposing it in logs or screenshots.
 2. Configure Signal K’s browser-origin policy and trusted TLS. Start with no generic plugin GET approvals.
@@ -61,6 +61,20 @@ This procedure is prepared only. Do not connect to a vessel or install the packa
 6. Check server responsiveness, client disconnect/reconnect and gateway disable/re-enable. Stop on new errors or telemetry disruption and roll back the package/configuration if required.
 7. Record actual observations, omissions and errors. Successful reads do not prove sensor health, notification delivery or physical equipment operation.
 
-## Remaining release gates
+## First alpha checklist
 
-Raspberry Pi hardware acceptance, upstream in-process shutdown/reload gaps, host dependency advisories, full registry scoring and explicitly authorized vessel acceptance remain open. Full process replacement and synthetic large-value recovery are covered by local native tests; see the resource report for workload-specific limits. No publication or deployment is implied by the package checks or this procedure.
+- [ ] Verify the final clean-commit tarball on supported runtimes and retain its receipt.
+- [ ] Verify current npm publishing access, metadata and registry requirements; rerun the registry harness on the candidate.
+- [ ] Verify official CI on the exact release commit and reassess dependency advisories.
+- [ ] Verify the intended ChatGPT/Codex tunnel connection end-to-end with a restricted Signal K token, including allowed reads and permission denials. Static local token injection is source-verified only; it uses one shared Signal K identity per configured token.
+- [x] Record the upstream in-process shutdown limitation and the tested full-process restart procedure. Upstream repair is not an alpha prerequisite.
+- [x] Remove Raspberry Pi testing from release acceptance per the owner's 2026-10-19 decision; retain local ARM64 evidence without claiming Pi compatibility.
+- [ ] Obtain explicit authorization for alpha npm publication and a GitHub release.
+- [ ] After publication, verify the downloaded artifact and AppStore/registry indexing.
+
+## After the first alpha
+
+- [ ] Obtain explicit vessel access/deployment authorization and run the vessel procedure above.
+- [ ] Audit the actual production Signal K host before installation; package audit results do not certify that host.
+
+Full process replacement and synthetic large-value recovery are covered by local native tests; see the resource report for workload-specific limits. No publication or deployment is implied by these checklists.
