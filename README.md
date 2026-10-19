@@ -37,31 +37,22 @@ Replace `https://boat.example` throughout this guide with your server’s addres
 
 ## Create a Signal K token
 
-Create a separate device token for your agent using Signal K’s [access-request flow](https://signalk.org/specification/1.7.0/doc/access_requests.html). Start with **read-only** access for viewing data.
+Use Signal K’s standard token-generation utility for a dedicated user account:
 
-1. In Signal K, check that device registration is allowed under **Security → Settings**.
-2. In a terminal, generate a client ID with `uuidgen`. Copy that UUID into the command below in place of `YOUR-UUID`, then send the request to your server:
-
-   ```sh
-   curl --fail-with-body --silent --show-error \
-     --header 'Content-Type: application/json' \
-     --data '{"clientId":"YOUR-UUID","description":"Signal K MCP agent"}' \
-     https://boat.example/signalk/v1/access/requests
-   ```
-
-3. Keep the returned `href`; it identifies this request. In Signal K, open **Security → Access Requests**, select **Signal K MCP agent**, choose **Read Only**, set **Authentication Timeout** (for example, `1d` for one day), and click **Approve**.
-4. Fetch the result using your server address followed by the exact returned `href`. For example, replace `REQUEST-ID` below with the ID from your response:
+1. In the Signal K Admin UI, open **Security → Users** and add a user such as `mcp-agent` with **Read Only** permissions.
+2. Open a terminal on the Signal K server and run the following as the account that runs Signal K:
 
    ```sh
-   curl --fail-with-body --silent --show-error \
-     https://boat.example/signalk/v1/requests/REQUEST-ID
+   signalk-generate-token -u mcp-agent -e 30d -s ~/.signalk/security.json
    ```
 
-5. Once approved, the response contains `accessRequest.token`. Store that value in your agent’s secret settings or password manager. Treat it like a password: do not paste it into a chat, commit it to a repository or include it in screenshots.
+   Replace `mcp-agent` with the username you created. If your server uses a different configuration directory, replace `~/.signalk/security.json` with its actual path. This example creates a token valid for 30 days.
 
-The token uses the device’s Signal K permissions. For approved actions, the device needs **Read/Write** access as well as the individual operation approvals described below. Native PUT actions also require Signal K’s `put` permission for the exact target and source. An administrator token is not needed for ordinary data reads.
+3. Copy the printed token into your agent’s secret settings or password manager. Treat it like a password: do not paste it into a chat, commit it to a repository or include it in screenshots.
 
-Manage or revoke the device under **Security → Devices**. If its token expires, request a replacement. Signal K also documents an alternative [token-generation method for existing user accounts](https://demo.signalk.org/documentation/Security/Generating_Tokens.html).
+The token uses that user’s current Signal K permissions. Start with **Read Only** for viewing data. For approved actions, the user needs **Read/Write** access as well as the individual operation approvals described below. Native PUT actions also require Signal K’s `put` permission for the exact target and source. An administrator token is not needed for ordinary data reads.
+
+Generate a replacement when the token expires. Remove the dedicated user under **Security → Users** to revoke its access. See Signal K’s [token-generation guide](https://demo.signalk.org/documentation/Security/Generating_Tokens.html) for details. Existing Signal K user or device tokens also work; there is no separate MCP token to create.
 
 ## Connect your agent
 
@@ -138,10 +129,10 @@ If a submitted action times out or loses its connection, its outcome may be unkn
 | What you see                         | What to check                                                                                                                                      |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Connection or authentication failure | Confirm the plugin is enabled, the URL is reachable and the agent is sending a valid token. A browser login alone does not authenticate the agent. |
-| Missing measurements                 | Ask the agent to list available paths. Check that Signal K receives the data and that the device has permission to read it.                        |
+| Missing measurements                 | Ask the agent to list available paths. Check that Signal K receives the data and that the token’s user or device has permission to read it.        |
 | `APPROVAL_PENDING`                   | Review and save the individual operation in Plugin Config, then try again.                                                                         |
 | `HISTORY_UNAVAILABLE`                | Install and configure a provider for Signal K’s standard v2 History API.                                                                           |
-| Permission denied after approval     | Check the device’s Signal K permissions and the provider’s own access requirements. Approval does not override either.                             |
+| Permission denied after approval     | Check the token’s Signal K permissions and the provider’s own access requirements. Approval does not override either.                              |
 | Certificate or browser-origin errors | Follow the [hosting guide](docs/hosting.md). Browser access follows Signal K’s server-wide CORS settings.                                          |
 
 Upgrading from plugin-local `allowedHosts` or `allowedOrigins` settings? Those fields are now ignored; move any browser-origin restrictions to Signal K’s CORS settings. See [upgrade guidance](docs/hosting.md#browser-policy-and-upgrades).
