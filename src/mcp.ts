@@ -151,7 +151,7 @@ export function createMcpServer(
   registerCore(
     "describe_put",
     "signalk.put",
-    "Read a native PUT target's metadata, units and supplied value constraints for an explicit source. Discovery never approves execution or guarantees a registered handler.",
+    "Inspect a native PUT target's metadata, value constraints, precise schema diagnostics and exact approval state for an explicit source. A queued pending review is not saved approval. Handler source remains unverified until native dispatch; discovery never approves execution.",
     describePutInput,
   );
   registerCore(

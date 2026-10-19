@@ -10,6 +10,29 @@ The native public metadata getter supports direct lookup but does not enumerate 
 
 `describe_put` accepts `path` and an explicit `source`. It returns the target's native metadata and supplied value constraints, with schema status and a statement that native handler validation still applies. Units, names, descriptions, enums and other metadata retain their native meaning. Display scale and alarm zones do not become command limits. Missing schema information is reported; current values are not used to invent a type, range, or handler source.
 
+`describe_put` adds `schemaSource` and `schemaDiagnostics` (a code, field path and explanation). `NO_INPUT_TYPE` means no declared type or explicit choices; it remains eligible for exact review and native handler validation. Unsupported types, keywords and malformed constraints identify the offending field and block review queueing and dispatch. A diagnostic is the first detected issue, not an exhaustive validator report.
+
+`approvalStatus` is `required`, `pending`, `approved` or `rejected` for the exact current metadata/value contract. `approvalSaved` distinguishes a queued in-memory request from a saved pending decision. Description alone never queues a request. `enabled` means the current schema, saved approval and caller checks permit submission; `reason` explains a block. Neither an approval nor `enabled: true` verifies a handler or physical operation. Both discovery tools explicitly return `sourceVerified: false` and retain `sourceVerification: native-handler-on-dispatch`.
+
+## Explicit native value choices
+
+When no explicit `metadata.schema` exists, native `possibleValues` entries with their own scalar `value` fields become an exact JSON Schema `enum`. This supports native `type: "multiple"` without pretending that `multiple` is a JSON type. An example is:
+
+```json
+{
+  "supportsPut": true,
+  "type": "multiple",
+  "possibleValues": [
+    { "title": "Off", "value": "off" },
+    { "title": "Charger only", "value": "charger only" }
+  ]
+}
+```
+
+The reviewed input schema is `{"enum":["off","charger only"]}`. The native metadata is returned unchanged. Values are forwarded unchanged: strings, finite numbers, booleans and null are distinct; labels never become command values. There must be 1–128 unique bounded scalar choices. Missing values, objects/arrays, duplicate values and conflicts with declared enum/type/constraints block queueing and dispatch. Other native types remain unsupported; an explicit schema always retains precedence and cannot be rescued by display choices. Historical native `{id,name}` enum descriptors retain their existing behavior and are not converted into commands.
+
+Existing supported type, range and other constraints are retained. Choices do not grant approval, bypass native permissions or validate handler registration. The complete native metadata and reviewed enum remain part of the exact approval binding; changed values or labels require fresh review. No type or command is inferred from telemetry, path names, units, display scales or alarm zones.
+
 Both tools require a native write-capable identity and exact-source `put` authorization. This does not grant access to current values; ordinary reads still need native read permission. Only `vessels.self` is supported. Metadata configuration paths are excluded.
 
 ## Review and execution

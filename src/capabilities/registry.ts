@@ -205,12 +205,14 @@ export class CapabilityRegistry {
           },
           describe_put: {
             description:
-              "Describe a native action using its path metadata and exact source; discovery does not grant approval or prove handler availability",
+              "Describe a native action's schema diagnostics and exact approval state using its metadata and explicit source; discovery does not approve or verify a registered handler",
             input: describePutInput,
             run: (args) =>
               this.nativePuts().describe(
                 () => this.authorize(),
                 describePutInput.parse(args),
+                this.config.readRequests,
+                this.requests,
               ),
           },
           get_put_status: {

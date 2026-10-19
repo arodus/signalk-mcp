@@ -110,24 +110,47 @@ const schemaFields = [
   "title",
 ];
 
-function supportedSchema(schema: Record<string, unknown>, depth = 0): boolean {
-  if (
-    depth > 16 ||
-    Object.keys(schema).some((key) => !schemaFields.includes(key))
-  )
-    return false;
+interface SchemaDiagnostic {
+  code: string;
+  field: string;
+  message: string;
+}
+function schemaIssue(
+  schema: Record<string, unknown>,
+  depth = 0,
+  field = "schema",
+): SchemaDiagnostic | undefined {
+  const fail = (
+    key: string,
+    message: string,
+    code = "INVALID_INPUT_SCHEMA",
+  ) => ({
+    code,
+    field: key ? `${field}.${key}` : field,
+    message,
+  });
+  if (depth > 16) return fail("", "Input schema exceeds the nesting limit.");
+  const unknown = Object.keys(schema).find(
+    (key) => !schemaFields.includes(key),
+  );
+  if (unknown !== undefined)
+    return fail(
+      unknown,
+      "Unsupported input schema keyword.",
+      "UNSUPPORTED_SCHEMA_KEYWORD",
+    );
   if (
     schema.type !== undefined &&
     (typeof schema.type !== "string" || !jsonTypes.includes(schema.type))
   )
-    return false;
-  if (
-    schema.description !== undefined &&
-    typeof schema.description !== "string"
-  )
-    return false;
-  if (schema.title !== undefined && typeof schema.title !== "string")
-    return false;
+    return fail(
+      "type",
+      `Unsupported input type ${JSON.stringify(schema.type).slice(0, 80)}.`,
+      "UNSUPPORTED_INPUT_TYPE",
+    );
+  for (const key of ["description", "title"])
+    if (schema[key] !== undefined && typeof schema[key] !== "string")
+      return fail(key, "Expected a string.");
   if (
     schema.enum !== undefined &&
     (!Array.isArray(schema.enum) ||
@@ -135,8 +158,9 @@ function supportedSchema(schema: Record<string, unknown>, depth = 0): boolean {
       schema.enum.length > 128 ||
       !jsonValue(schema.enum))
   )
-    return false;
-  if (Object.hasOwn(schema, "const") && !jsonValue(schema.const)) return false;
+    return fail("enum", "Expected 1 to 128 bounded JSON values.");
+  if (Object.hasOwn(schema, "const") && !jsonValue(schema.const))
+    return fail("const", "Expected a bounded JSON value.");
   for (const key of [
     "minimum",
     "maximum",
@@ -147,7 +171,7 @@ function supportedSchema(schema: Record<string, unknown>, depth = 0): boolean {
       schema[key] !== undefined &&
       (typeof schema[key] !== "number" || !Number.isFinite(schema[key]))
     )
-      return false;
+      return fail(key, "Expected a finite number.");
   for (const key of ["minLength", "maxLength", "minItems", "maxItems"])
     if (
       schema[key] !== undefined &&
@@ -155,7 +179,7 @@ function supportedSchema(schema: Record<string, unknown>, depth = 0): boolean {
         Number(schema[key]) < 0 ||
         Number(schema[key]) > 32768)
     )
-      return false;
+      return fail(key, "Expected an integer between 0 and 32768.");
   for (const [min, max] of [
     ["minimum", "maximum"],
     ["minLength", "maxLength"],
@@ -166,7 +190,7 @@ function supportedSchema(schema: Record<string, unknown>, depth = 0): boolean {
       typeof schema[max] === "number" &&
       schema[min] > schema[max]
     )
-      return false;
+      return fail(min, `Minimum exceeds ${max}.`);
   if (
     schema.required !== undefined &&
     (!Array.isArray(schema.required) ||
@@ -174,26 +198,34 @@ function supportedSchema(schema: Record<string, unknown>, depth = 0): boolean {
       schema.required.some((key) => typeof key !== "string") ||
       new Set(schema.required).size !== schema.required.length)
   )
-    return false;
-  if (
-    schema.properties !== undefined &&
-    (!record(schema.properties) ||
-      Object.keys(schema.properties).length > 128 ||
-      Object.values(schema.properties).some(
-        (child) => !record(child) || !supportedSchema(child, depth + 1),
-      ))
-  )
-    return false;
-  if (
-    schema.items !== undefined &&
-    (!record(schema.items) || !supportedSchema(schema.items, depth + 1))
-  )
-    return false;
+    return fail("required", "Expected up to 128 unique property names.");
+  if (schema.properties !== undefined) {
+    if (
+      !record(schema.properties) ||
+      Object.keys(schema.properties).length > 128
+    )
+      return fail("properties", "Expected up to 128 property schemas.");
+    for (const [key, child] of Object.entries(schema.properties)) {
+      if (!record(child))
+        return fail(`properties.${key}`, "Expected a schema object.");
+      const issue = schemaIssue(child, depth + 1, `${field}.properties.${key}`);
+      if (issue) return issue;
+    }
+  }
+  if (schema.items !== undefined) {
+    if (!record(schema.items))
+      return fail("items", "Expected one schema object.");
+    const issue = schemaIssue(schema.items, depth + 1, `${field}.items`);
+    if (issue) return issue;
+  }
   if (
     schema.additionalProperties !== undefined &&
     typeof schema.additionalProperties !== "boolean"
   )
-    return false;
+    return fail(
+      "additionalProperties",
+      "Only boolean additionalProperties is supported.",
+    );
   if (
     schema.additionalProperties === false &&
     Array.isArray(schema.required) &&
@@ -202,16 +234,29 @@ function supportedSchema(schema: Record<string, unknown>, depth = 0): boolean {
         !record(schema.properties) || !Object.hasOwn(schema.properties, key),
     )
   )
-    return false;
-  return true;
+    return fail("required", "A required property has no declared schema.");
+  return undefined;
 }
 
-// Only explicitly declared schema constraints are used. Units, current values,
-// displayScale and zones are never converted into type/range assumptions.
+// Accept explicit native choices as validation constraints, never convert command
+// values or infer a type from telemetry, names, display ranges or labels.
 function valueSchema(metadata: Record<string, unknown>) {
   const explicit = Object.hasOwn(metadata, "schema");
+  const origin = explicit ? "explicit-schema" : "native-metadata";
   if (explicit && !record(metadata.schema))
-    return { schema: {}, available: false, supported: false };
+    return {
+      schema: {},
+      available: false,
+      supported: false,
+      origin,
+      diagnostics: [
+        {
+          code: "INVALID_INPUT_SCHEMA",
+          field: "schema",
+          message: "Expected a schema object.",
+        },
+      ],
+    };
   const declared = explicit
     ? (metadata.schema as Record<string, unknown>)
     : metadata;
@@ -220,18 +265,102 @@ function valueSchema(metadata: Record<string, unknown>) {
       .filter((key) => Object.hasOwn(declared, key))
       .map((key) => [key, declared[key]]),
   );
-  const available =
-    typeof schema.type === "string" && jsonTypes.includes(schema.type);
-  // Native enum entries may be {id,name} display descriptors, rather than
-  // literal JSON Schema values. Keep those unchanged in metadata and let the
-  // handler validate them; do not invent a converted schema.
+  // Historical native {id,name} enum descriptors retain their old behavior.
+  // They are not literal JSON Schema enum values.
   if (
     !explicit &&
     Array.isArray(schema.enum) &&
     schema.enum.some((item) => record(item))
   )
     delete schema.enum;
-  return { schema, available, supported: supportedSchema(schema) };
+  let issue: SchemaDiagnostic | undefined;
+  const nativeChoices = !explicit && Object.hasOwn(metadata, "possibleValues");
+  if (nativeChoices) {
+    const choices = metadata.possibleValues;
+    if (
+      !Array.isArray(choices) ||
+      choices.length === 0 ||
+      choices.length > 128 ||
+      choices.some(
+        (choice) =>
+          !record(choice) ||
+          !Object.hasOwn(choice, "value") ||
+          (choice.value !== null &&
+            !["string", "number", "boolean"].includes(typeof choice.value)) ||
+          !jsonValue(choice.value),
+      )
+    ) {
+      issue = {
+        code: "INVALID_NATIVE_CHOICES",
+        field: "possibleValues",
+        message:
+          "Expected 1 to 128 choices with explicit bounded scalar value fields.",
+      };
+    } else {
+      const values = choices.map(
+        (choice) => (choice as Record<string, unknown>).value,
+      );
+      if (
+        values.some((value, i) =>
+          values.slice(0, i).some((previous) => sameJson(previous, value)),
+        )
+      )
+        issue = {
+          code: "INVALID_NATIVE_CHOICES",
+          field: "possibleValues",
+          message: "Choice values must be unique without type coercion.",
+        };
+      else if (
+        schema.enum !== undefined &&
+        (!Array.isArray(schema.enum) ||
+          schema.enum.length !== values.length ||
+          !values.every(
+            (choice) =>
+              Array.isArray(schema.enum) &&
+              schema.enum.some((value) => sameJson(choice, value)),
+          ))
+      )
+        issue = {
+          code: "CONFLICTING_NATIVE_CHOICES",
+          field: "possibleValues",
+          message: "Native choices conflict with the declared enum.",
+        };
+      else {
+        if (schema.type === "multiple") delete schema.type;
+        schema.enum = values;
+      }
+    }
+  }
+  issue ??= schemaIssue(schema, 0, explicit ? "schema" : "metadata");
+  if (
+    !issue &&
+    nativeChoices &&
+    Array.isArray(schema.enum) &&
+    schema.enum.some((value) => !matchesSchema(value, schema))
+  )
+    issue = {
+      code: "CONFLICTING_NATIVE_CHOICES",
+      field: "possibleValues",
+      message: "Native choices conflict with declared type or constraints.",
+    };
+  const available =
+    (typeof schema.type === "string" && jsonTypes.includes(schema.type)) ||
+    Array.isArray(schema.enum) ||
+    Object.hasOwn(schema, "const");
+  if (!issue && !available)
+    issue = {
+      code: "NO_INPUT_TYPE",
+      field: explicit ? "schema.type" : "metadata.type",
+      message:
+        "No input type or explicit value choices supplied; native handler validation is required.",
+    };
+  return {
+    schema,
+    available,
+    supported: !issue || issue.code === "NO_INPUT_TYPE",
+    origin: nativeChoices ? "native-possible-values" : origin,
+    diagnostics: issue ? [issue] : [],
+  };
 }
 
 function sameJson(left: unknown, right: unknown): boolean {
@@ -478,6 +607,7 @@ export class NativePuts {
         input.offset + input.limit < sorted.length
           ? input.offset + input.limit
           : null,
+      sourceVerified: false,
       sourceVerification,
       discoveryCoverage: "model-and-observed-metadata",
       historicalMetadataOnlyPaths: "explicit-describe-required",
@@ -486,10 +616,21 @@ export class NativePuts {
     };
   }
 
-  describe(authorize: () => Principal, args: unknown) {
+  describe(
+    authorize: () => Principal,
+    args: unknown,
+    reviews: Config["readRequests"] = {},
+    requests?: ApprovalRequests,
+  ) {
     const input = describePutInput.parse(args);
-    const target = this.target(authorize(), input.path, input.source);
+    const principal = authorize();
+    const target = this.target(principal, input.path, input.source);
     const schema = valueSchema(target.metadata);
+    const approval = applyPutReview(target, reviews, principal);
+    const approvalStatus =
+      approval.status === "required" && requests?.pendingPut(target)
+        ? "pending"
+        : approval.status;
     return {
       ...target,
       schemaStatus: !schema.supported
@@ -497,7 +638,18 @@ export class NativePuts {
         : schema.available
           ? "available"
           : "unspecified",
+      schemaSource: schema.origin,
+      schemaDiagnostics: schema.diagnostics,
+      approvalStatus,
+      approvalSaved: approval.status !== "required",
+      enabled: schema.supported && approval.enabled,
+      reason: !schema.supported
+        ? "UNSUPPORTED_PUT_SCHEMA"
+        : approvalStatus === "pending"
+          ? "APPROVAL_PENDING"
+          : approval.reason,
       nativeHandlerValidation: true,
+      sourceVerified: false,
       sourceVerification,
     };
   }

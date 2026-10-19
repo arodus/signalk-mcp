@@ -244,6 +244,7 @@ test("PUT approval binds exact source, path, meaning and value schema with canon
   assert.deepEqual(allowed, {
     enabled: true,
     reason: null,
+    status: "approved",
   });
   for (const permissions of ["readonly", "unknown", ""])
     assert.equal(

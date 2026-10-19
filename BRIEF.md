@@ -175,6 +175,8 @@ The plugin's responsibility ends at reliable, permission-aware data access and f
 
 ## 10. Individually approved native actions
 
+Native PUT descriptions explain schema gaps and exact approval state, distinguish unsaved pending reviews and explicitly mark handler sources unverified. Explicit native scalar `possibleValues` can supply a reviewed enum without value conversion; malformed/conflicting choices stay blocked and changed contracts need fresh review.
+
 Native PUT discovery uses `supportsPut` and actual path metadata; it never infers a handler source from telemetry or invents a command schema from a current value. Source is explicit. Runtime metadata observed through the public delta hook and previously described targets supplement the value model; metadata-only paths advertised before observation may require an explicit `describe_put`. Incomplete enumeration must be reported honestly.
 
 An eligible valid but unapproved action queues bounded review metadata without dispatch. Accept/Reject and native Save Configuration remain the only approval route. Bind the exact context, path, source and metadata/value contract, preserve GET decisions and rejection precedence, and require renewed review when the binding changes. No all-PUT option or wildcard approval is permitted.

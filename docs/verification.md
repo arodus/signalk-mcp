@@ -1,5 +1,15 @@
 # Verification record
 
+## Native PUT schema diagnostics and declared choices (2026-10-19)
+
+`describe_put` now reports the first schema problem with its code, field and explanation, schema provenance, exact approval status, whether that approval is saved, submission eligibility/block reason and an explicit unverified handler-source flag. Pending in-memory requests remain distinct from saved decisions. Discovery itself does not queue reviews or invoke handlers, and approved metadata does not establish handler registration or physical operation.
+
+Native scalar `possibleValues` supply exact reviewed enum values, including native `type: "multiple"`. String, number, boolean and null values retain their types without coercion. Malformed, duplicate, oversized or conflicting choices remain blocked. Explicit schemas retain precedence, other declared constraints remain enforced and changes to choices or their labels require fresh review. Existing approval binding and native permissions remain mandatory.
+
+On Node **24.22.0** / Signal K **2.33.0**, `MCP_TEST_PYTHON=/tmp/signalk-mcp-python-client/bin/python npm run check` passes type checking, ESLint, formatting, **90 portable tests** and **62 native integration tests**, with three optional installed-product-client/production-History skips. Python interoperability passes. The focused native PUT suite passes all **17 entries without skips** on Node **22.23.3** / Signal K **2.33.0**, Node **24.22.0** / Signal K **2.32.0**, and Node **22.23.3** / Signal K **2.32.0** as well. `git diff --check` passes.
+
+The synthetic native test covers metadata-only discovery, generic/dedicated description parity, required and queued/saved pending decisions, native administrator approval/rejection, exact string and zero forwarding, invalid-value refusal before queueing, source/role denials and renewed approval after changed choices. Portable tests additionally cover mixed scalar types, malformed choices, conflicting declarations (including duplicate enum entries), explicit-schema precedence, nested diagnostics, and changed labels. No live credentials, controls or hardware were used for these tests. This checkpoint is local verification, not CI, publication or deployment.
+
 ## Mixed-case native plugin discovery (2026-10-19)
 
 Read-only inspection of tunaplotter's `/signalk/v2/features` found 47 native plugin entries. Exactly `AdvancedWind` and `SpeedAndCurrent` failed the gateway's lowercase-only plugin-ID validator, causing the whole plugin/API inventory to return `INVALID_FEATURES`. Signal K exposes native `plugin.id` values, which need not match lowercase npm package names. The shared validator now accepts bounded ASCII mixed-case IDs without normalizing them, and its exported JSON Schema retains that accepted character set.

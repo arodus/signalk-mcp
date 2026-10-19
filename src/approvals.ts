@@ -218,6 +218,9 @@ export class ApprovalRequests {
   requestPut(target: PutTarget): never {
     return this.enqueue(putReview(target));
   }
+  pendingPut(target: PutTarget): boolean {
+    return this.reviews[reviewKey(putReview(target))]?.decision === "pending";
+  }
   private enqueue(review: Review): never {
     const key = reviewKey(review);
     if (!this.reviews[key]) {
@@ -352,6 +355,7 @@ export function applyPutReview(
 ): {
   enabled: boolean;
   reason: string | null;
+  status: "required" | "pending" | "approved" | "rejected";
 } {
   const key = reviewKey(putReview(target));
   const parsed = putReviewSchema.safeParse(reviews[key]);
@@ -359,21 +363,25 @@ export function applyPutReview(
     return {
       enabled: false,
       reason: "NOT_ALLOWLISTED",
+      status: "required",
     };
   const review = parsed.data;
   if (review.decision === "rejected")
     return {
       enabled: false,
       reason: "APPROVAL_REJECTED",
+      status: "rejected",
     };
   if (review.decision !== "approved")
     return {
       enabled: false,
       reason: "NOT_ALLOWLISTED",
+      status: "pending",
     };
   const enabled = ["readwrite", "admin"].includes(principal.permissions);
   return {
     enabled,
     reason: enabled ? null : "PERMISSION_DENIED",
+    status: "approved",
   };
 }
