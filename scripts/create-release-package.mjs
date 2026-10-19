@@ -31,7 +31,11 @@ writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 const npmCache = mkdtempSync(join(tmpdir(), "signalk-mcp-npm-cache-"));
 const npmCli = process.env.npm_execpath;
 const npmCommand = npmCli ? process.execPath : "npm";
-const npmArgs = npmCli ? [npmCli, "pack", "--json"] : ["pack", "--json"];
+// The workflow builds before this step. Lifecycle stdout can corrupt npm JSON,
+// and the release artifact must package those already-validated build outputs.
+const npmArgs = npmCli
+  ? [npmCli, "pack", "--ignore-scripts", "--json"]
+  : ["pack", "--ignore-scripts", "--json"];
 let packed;
 try {
   packed = spawnSync(npmCommand, npmArgs, {

@@ -19,6 +19,10 @@ function fixture(t) {
       name: "mcp-release-fixture",
       version: "0.1.0-alpha.1",
       files: ["index.js"],
+      scripts: {
+        prepack:
+          "node -e \"throw new Error('release packaging must not rerun build hooks')\"",
+      },
     }) + "\n",
   );
   fs.writeFileSync(path.join(cwd, "index.js"), "module.exports = {};\n");
