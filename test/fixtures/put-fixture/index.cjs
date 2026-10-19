@@ -1,6 +1,44 @@
 // This synthetic provider records commands only inside the temporary server.
 module.exports = (app) => {
   const calls = [];
+  const postCalls = [];
+  const postModes = [
+    "normal",
+    "admin",
+    "badjson",
+    "redirect",
+    "large",
+    "disconnect",
+    "pending",
+    "empty",
+    "failure",
+  ];
+  const document = {
+    openapi: "3.0.3",
+    paths: Object.fromEntries(
+      postModes.map((mode) => [
+        `/post-${mode}`,
+        {
+          post: {
+            operationId: mode,
+            summary: `Synthetic ${mode} mutation`,
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: {
+                    type: "object",
+                    required: ["value"],
+                    properties: { value: { type: "boolean" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ]),
+    ),
+  };
   const completions = new Map();
   const delayed = new Set();
   const lifecycle = { starts: 0, stops: 0 };
@@ -50,6 +88,40 @@ module.exports = (app) => {
     description: "Commands never leave the isolated integration test server",
     schema: { type: "object", properties: {} },
     testCalls: calls,
+    postCalls,
+    postDocument: document,
+    getOpenApi: () => document,
+    registerWithRouter(router) {
+      for (const mode of postModes) {
+        // Deliberately misdeclared readonly for normal: gateway still requires writer.
+        const routes =
+          mode === "admin"
+            ? router
+            : router.access(mode === "normal" ? "readonly" : "readwrite");
+        routes.post(`/post-${mode}`, (req, res) => {
+          postCalls.push({
+            mode,
+            body: req.body,
+            principal: req.skPrincipal.identifier,
+          });
+          if (mode === "redirect")
+            return res.redirect(307, "/plugins/put-fixture/post-normal");
+          if (mode === "badjson")
+            return res.type("application/json").send("not json");
+          if (mode === "large")
+            return res.json({ large: "x".repeat(256 * 1024) });
+          if (mode === "disconnect") return req.socket.destroy();
+          if (mode === "empty") return res.status(204).end();
+          if (mode === "failure")
+            return res.status(500).json({ secret: "provider-only-error" });
+          res.status(mode === "pending" ? 202 : 200).json({
+            value: req.body.value,
+            principal: req.skPrincipal.identifier,
+            state: mode === "pending" ? "PENDING" : "COMPLETED",
+          });
+        });
+      }
+    },
     testPaths: paths,
     testLifecycle: lifecycle,
     setMetadata: meta,

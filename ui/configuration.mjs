@@ -59,7 +59,13 @@ export async function loadConfiguration(fetcher = nativeFetch) {
             !object(review.metadata) ||
             !object(review.inputSchema) ||
             "permission" in review
-          : "kind" in review || typeof review.pluginId !== "string"),
+          : review.kind === "post"
+            ? review.method !== "POST" ||
+              typeof review.pluginId !== "string" ||
+              !object(review.inputSchema) ||
+              typeof review.contractHash !== "string" ||
+              "permission" in review
+            : "kind" in review || typeof review.pluginId !== "string"),
     )
   )
     throw new Error(
@@ -133,7 +139,7 @@ export function mergeChanges(base, draft, current) {
     if (!same(base.reviews[key], current.reviews[key])) conflict();
     if (!draft.reviews[key]) {
       if (
-        base.reviews[key].kind !== "put" &&
+        !base.reviews[key].kind &&
         current.installed.includes(base.reviews[key].pluginId)
       )
         throw new Error(

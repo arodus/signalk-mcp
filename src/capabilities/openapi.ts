@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { boundedJson } from "../json.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { GatewayError, type Principal } from "../auth.js";
@@ -13,6 +15,7 @@ export interface DiscoveredOperation {
   reason: string | null;
   permission: string;
   inputSchema?: object;
+  contractHash?: string;
   input?: z.ZodObject<z.ZodRawShape>;
   parameters?: { name: string; location: "path" | "query" }[];
 }
@@ -44,6 +47,40 @@ function resolve(document: unknown, value: unknown): Record<string, unknown> {
     }
   }
   throw new GatewayError("UNSUPPORTED_REFERENCE");
+}
+// Bind only this endpoint, including referenced schemas and documented meaning.
+// Other endpoints, document versions and property order do not invalidate it.
+function resolvedContract(
+  document: unknown,
+  value: unknown,
+  depth = 0,
+  budget = { remaining: 2048 },
+): unknown {
+  if (depth > 16 || --budget.remaining < 0)
+    throw new GatewayError("UNSUPPORTED_SCHEMA");
+  if (Array.isArray(value))
+    return value.map((item) =>
+      resolvedContract(document, item, depth + 1, budget),
+    );
+  if (!record(value)) return value;
+  const resolved = resolve(document, value);
+  return Object.fromEntries(
+    Object.entries(resolved)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, item]) => [
+        key,
+        resolvedContract(
+          document,
+          key === "required" &&
+            Array.isArray(item) &&
+            item.every((value) => typeof value === "string")
+            ? [...item].sort()
+            : item,
+          depth + 1,
+          budget,
+        ),
+      ]),
+  );
 }
 function primitive(schema: Record<string, unknown>): z.ZodTypeAny {
   const allowed = new Set([
@@ -125,8 +162,9 @@ function inputs(
   item: Record<string, unknown>,
   operation: Record<string, unknown>,
   path: string,
+  method: string,
 ) {
-  if (operation.requestBody !== undefined)
+  if (method !== "post" && operation.requestBody !== undefined)
     throw new GatewayError("UNSUPPORTED_SCHEMA");
   const shape: z.ZodRawShape = Object.create(null);
   const parameters: { name: string; location: "path" | "query" }[] = [];
@@ -155,6 +193,8 @@ function inputs(
       ) ||
       ["constructor", "prototype"].includes(name) ||
       Object.hasOwn(shape, name) ||
+      (method === "post" &&
+        (name === "body" || /command|script|file|config/i.test(name))) ||
       (location !== "path" && location !== "query")
     )
       throw new GatewayError("UNSUPPORTED_PARAMETER");
@@ -181,6 +221,75 @@ function inputs(
   for (const match of path.matchAll(/\{([^}]+)\}/g))
     if (!parameters.some((p) => p.location === "path" && p.name === match[1]))
       throw new GatewayError("UNSUPPORTED_PARAMETER");
+  if (method === "post" && operation.requestBody !== undefined) {
+    if (Object.hasOwn(shape, "body"))
+      throw new GatewayError("UNSUPPORTED_SCHEMA");
+    const request = resolve(document, operation.requestBody);
+    if (
+      Object.keys(request).some(
+        (key) => !["required", "description", "content"].includes(key),
+      ) ||
+      (request.required !== undefined &&
+        typeof request.required !== "boolean") ||
+      !record(request.content) ||
+      Object.keys(request.content).length !== 1 ||
+      !record(request.content["application/json"])
+    )
+      throw new GatewayError("UNSUPPORTED_SCHEMA");
+    const media = request.content["application/json"];
+    if (
+      Object.keys(media).some(
+        (key) => !["schema", "example", "examples"].includes(key),
+      )
+    )
+      throw new GatewayError("UNSUPPORTED_SCHEMA");
+    const schema = resolve(document, media.schema);
+    if (
+      schema.type !== "object" ||
+      !record(schema.properties) ||
+      Object.keys(schema).some(
+        (key) =>
+          ![
+            "type",
+            "properties",
+            "required",
+            "additionalProperties",
+            "description",
+            "title",
+          ].includes(key),
+      ) ||
+      (schema.additionalProperties !== undefined &&
+        schema.additionalProperties !== false) ||
+      Object.keys(schema.properties).length > 32
+    )
+      throw new GatewayError("UNSUPPORTED_SCHEMA");
+    const required = schema.required ?? [];
+    if (
+      !Array.isArray(required) ||
+      new Set(required).size !== required.length ||
+      required.some(
+        (key) =>
+          typeof key !== "string" ||
+          !Object.hasOwn(schema.properties as object, key),
+      )
+    )
+      throw new GatewayError("UNSUPPORTED_SCHEMA");
+    const body: z.ZodRawShape = Object.create(null);
+    for (const [name, raw] of Object.entries(schema.properties)) {
+      if (
+        !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name) ||
+        /token|secret|password|authorization|cookie|url|uri|host|endpoint|command|script|file|config/i.test(
+          name,
+        ) ||
+        ["constructor", "prototype"].includes(name)
+      )
+        throw new GatewayError("UNSUPPORTED_PARAMETER");
+      const value = primitive(resolve(document, raw));
+      body[name] = required.includes(name) ? value : value.optional();
+    }
+    const bodyInput = z.object(body).strict();
+    shape.body = request.required === true ? bodyInput : bodyInput.optional();
+  }
   return { input: z.object(shape).strict(), parameters };
 }
 
@@ -245,20 +354,54 @@ export function discoverOperations(
             : "",
         enabled: false,
         reason: "NOT_ALLOWLISTED",
-        permission: approval?.permission ?? "unclassified",
+        permission:
+          method === "post"
+            ? "readwrite"
+            : (approval?.permission ?? "unclassified"),
       };
-      if (method !== "get") entry.reason = "METHOD_NOT_READONLY";
+      if (!["get", "post"].includes(method))
+        entry.reason = "METHOD_NOT_READONLY";
+      else if (
+        method === "post" &&
+        /(?:^|\/)(?:config|configuration|settings)(?:\/|$)/i.test(path)
+      )
+        entry.reason = "UNSUPPORTED_ROUTE";
       else if (!routeSchema.safeParse(path).success || raw.$ref !== undefined)
         entry.reason = "UNSUPPORTED_ROUTE";
       else {
         try {
-          const parsed = inputs(document, raw, operation, path);
+          const parsed = inputs(document, raw, operation, path, method);
           entry.inputSchema = zodToJsonSchema(parsed.input, {
             $refStrategy: "none",
           });
           entry.input = parsed.input;
           entry.parameters = parsed.parameters;
-          if (approval) {
+          if (method === "post") {
+            entry.inputSchema = resolvedContract(
+              document,
+              entry.inputSchema,
+            ) as object;
+            entry.description = [operation.summary, operation.description]
+              .filter((v) => typeof v === "string")
+              .join("\n");
+            if (entry.description.length > 4096)
+              throw new GatewayError("UNSUPPORTED_SCHEMA");
+            entry.contractHash = createHash("sha256")
+              .update(
+                boundedJson(
+                  resolvedContract(document, {
+                    parameters: raw.parameters ?? [],
+                    pathSummary: raw.summary ?? null,
+                    pathDescription: raw.description ?? null,
+                    security: operation.security ?? document.security ?? null,
+                    operation,
+                  }),
+                  32768,
+                ),
+              )
+              .digest("hex");
+          }
+          if (approval && method === "get") {
             entry.enabled =
               approval.permission === "readonly" ||
               principal.permissions === "admin";
@@ -283,6 +426,10 @@ export function operationDescription(operation: DiscoveredOperation) {
   return {
     id: operation.id,
     method: operation.method,
+    readOnly: operation.method === "GET",
+    ...(operation.method === "POST"
+      ? { executionTool: "execute_mutation" }
+      : {}),
     path: operation.path,
     description: operation.description,
     permission: operation.permission,

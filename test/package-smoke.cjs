@@ -50,6 +50,7 @@ try {
     "CHANGELOG.md",
     "docs/images/native-plugin-config.jpg",
     "docs/images/native-put-approvals.png",
+    "docs/images/plugin-post-approvals.png",
   ])
     assert.ok(
       packed.files.some(({ path: file }) => file === required),
@@ -98,6 +99,8 @@ try {
       "--test-force-exit",
       "test/integration.test.cjs",
       "test/native-puts.test.cjs",
+      "test/native-posts.test.cjs",
+      "test/production-plugin.test.cjs",
     ],
     {
       cwd: root,

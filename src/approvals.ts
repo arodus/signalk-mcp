@@ -86,10 +86,45 @@ const putReviewSchema = z
     }
   }, "Invalid PUT metadata or schema binding");
 export type PutReview = z.infer<typeof putReviewSchema>;
-export const reviewSchema = z.union([readReviewSchema, putReviewSchema]);
+const postReviewSchema = z
+  .object({
+    kind: z.literal("post"),
+    pluginId: pluginIdSchema.refine((id) => id !== "signalk-mcp"),
+    operationId: operationIdSchema,
+    method: z.literal("POST"),
+    path: routeSchema,
+    description: z.string().max(4096),
+    inputSchema: z.record(z.unknown()),
+    contractHash: z.string().regex(/^[a-f0-9]{64}$/),
+    decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
+  })
+  .strict()
+  .refine((review) => {
+    try {
+      boundedJson(review.inputSchema, 32768);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+export const reviewSchema = z.union([
+  readReviewSchema,
+  putReviewSchema,
+  postReviewSchema,
+]);
 export type Review = z.infer<typeof reviewSchema>;
 export function reviewKey(review: Review): string {
-  if ("kind" in review)
+  if ("kind" in review && review.kind === "post")
+    return digest([
+      "POST",
+      review.pluginId,
+      review.operationId,
+      review.path,
+      review.contractHash,
+      review.description,
+      canonicalJson(review.inputSchema),
+    ]);
+  if ("kind" in review && review.kind === "put")
     return digest([
       "PUT",
       review.context,
@@ -119,7 +154,19 @@ export const reviewsSchema = z
 function candidate(
   pluginId: string,
   operation: DiscoveredOperation,
-): ReadReview {
+): ReadReview | z.infer<typeof postReviewSchema> {
+  if (operation.method === "POST" && operation.input && operation.inputSchema)
+    return postReviewSchema.parse({
+      kind: "post",
+      method: "POST",
+      pluginId,
+      operationId: operation.id,
+      path: operation.path,
+      description: operation.description,
+      inputSchema: operation.inputSchema,
+      contractHash: operation.contractHash,
+      decision: "pending",
+    });
   if (
     operation.method !== "GET" ||
     !operation.input ||
@@ -191,20 +238,20 @@ export class ApprovalRequests {
       title: "Operation requests",
       additionalProperties: false,
       description:
-        "Refresh this page after a blocked MCP request. Review each GET or exact native PUT target, select Accept or Reject, then Save Configuration. PUTs can change vessel state; check the source, meaning and value constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
+        "Refresh this page after a blocked MCP request. Review each GET, POST or exact native PUT target, select Accept or Reject, then Save Configuration. PUTs can change vessel state; check the source, meaning and value constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
       properties: Object.fromEntries(
         Object.entries(this.reviews).map(([key, review]) => [
           key,
           {
             type: "object",
             title:
-              "kind" in review
+              "kind" in review && review.kind === "put"
                 ? `Native PUT: ${review.path}`
                 : `${review.pluginId}: ${review.operationId}`,
             description:
-              "kind" in review
+              "kind" in review && review.kind === "put"
                 ? `PUT ${review.context}:${review.path} — source ${review.source}. Metadata: ${canonicalJson(review.metadata)}. Value constraints: ${canonicalJson(review.inputSchema)}`
-                : `GET ${review.path}${review.description ? ` — ${review.description}` : ""}`,
+                : `${"kind" in review ? "POST" : "GET"} ${review.path}${review.description ? ` — ${review.description}` : ""}${"kind" in review ? `; input ${canonicalJson(review.inputSchema)}` : ""}`,
             default: structuredClone(review),
             additionalProperties: false,
             required: Object.keys(review),
@@ -266,7 +313,22 @@ export function applyReviews(
     )
       continue;
     const review = reviews[reviewKey(candidate(pluginId, operation))];
-    if (!review || "kind" in review) continue;
+    if (!review || ("kind" in review && review.kind !== "post")) continue;
+    if ("kind" in review) {
+      operation.permission = "readwrite";
+      operation.enabled =
+        review.decision === "approved" &&
+        ["readwrite", "admin"].includes(principal.permissions);
+      operation.reason =
+        review.decision === "rejected"
+          ? "APPROVAL_REJECTED"
+          : review.decision !== "approved"
+            ? "NOT_ALLOWLISTED"
+            : operation.enabled
+              ? null
+              : "PERMISSION_DENIED";
+      continue;
+    }
     if (review.decision === "rejected") {
       operation.enabled = false;
       operation.reason = "APPROVAL_REJECTED";

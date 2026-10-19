@@ -2,13 +2,13 @@
 
 A native Signal K plugin for vessel telemetry, capability discovery, approved plugin reads and individually approved native PUT actions over MCP Streamable HTTP. It runs at `/plugins/signalk-mcp/mcp`, using the existing Signal K server, bearer tokens and permissions. No extra account, key, listener or container is required.
 
-**Individual approval required:** every plugin GET operation and every native PUT target starts blocked and needs its own explicit administrator approval saved in Signal K Plugin Config. There is no allow-all switch. Installing the gateway, discovering an operation or holding a write-capable token does not approve it. Approvals cover an exact operation/target, not every future operation from a plugin; Signal K permissions still apply on every call. Built-in telemetry, history and notification reads use native Signal K permissions without an extra operation review.
+**Individual approval required:** every plugin GET or POST operation and every native PUT target starts blocked and needs its own explicit administrator approval saved in Signal K Plugin Config. There is no allow-all switch. Installing the gateway, discovering an operation or holding a write-capable token does not approve it. Approvals cover an exact operation/target, not every future operation from a plugin; Signal K permissions still apply on every call. Built-in telemetry, history and notification reads use native Signal K permissions without an extra operation review.
 
 **Scope:** discover, fetch and forward authorized data and individually approved native actions. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
 
-**Development status:** authenticated reads and individually approved native PUTs are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 on Node 22/24. This is experimental software for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
+**Development status:** authenticated reads, individually reviewed plugin POSTs and individually approved native PUTs are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 on Node 22/24. This is experimental software for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
 
-**Release status:** `0.1.0-alpha.2` adds individually approved native PUTs and fixes first-time configuration saving. Plugin POSTs remain disabled.
+**Release status:** `0.1.0-alpha.2` adds individually approved native PUTs and fixes first-time configuration saving. Individually reviewed plugin POSTs are available in the current source; they are not included in alpha.2.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
@@ -16,11 +16,11 @@ A native Signal K plugin for vessel telemetry, capability discovery, approved pl
 
 - Current vessel telemetry and capability discovery using native Signal K permissions.
 - Notification reads and standard v2 History API results from installed providers.
-- Reviewed plugin GET operations, with Accept/Reject controls and retained decisions in Plugin Config.
+- Reviewed plugin GET and POST operations, with Accept/Reject controls and retained decisions in Plugin Config.
 - Native self-context PUT actions, each bound to an individually saved path/source/metadata approval and native PUT permissions. There is no blanket PUT approval.
 - MCP Streamable HTTP through the existing Signal K server; no separate plugin account or data store.
 
-![Native Signal K configuration with individually reviewed GET and PUT operations](docs/images/native-put-approvals.png)
+![Native Signal K configuration with individually reviewed GET, POST and PUT operations](docs/images/plugin-post-approvals.png)
 
 The screenshot uses synthetic example plugins and approval requests. It does not show live vessel data. Clients need a native Signal K bearer token and a reachable, trusted endpoint. ChatGPT tunnel setup is not yet verified end-to-end; no built-in OAuth login is provided.
 
@@ -125,7 +125,7 @@ All plugin operations start disabled. When a client attempts a discovered, suppo
 
 Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay visible and blocked without creating duplicates. To change a rejection later, click **Accept** and **Save Configuration**. The queue holds at most 64 entries, including saved reviews; when full, new requests return `APPROVAL_QUEUE_FULL`. Rows for uninstalled plugins show **Not installed** and a **Delete** button. Click **Delete**, confirm **Delete row**, then **Save Configuration**. Disabled plugins still count as installed and cannot be deleted from this table. Other obsolete entries can be removed from `readRequests` in saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
 
-Plugin GET reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Plugin mutation methods, ambiguous operations and unsupported schemas never enter the plugin-read queue. Native PUTs use the same table with their own exact target binding; a GET approval never grants PUT access. There is no MCP approval/configuration-write tool.
+Plugin GET reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Unsupported methods, ambiguous operations and unsupported schemas never enter the review queue. Eligible POSTs use separate Write reviews. Native PUTs use the same table with their own exact target binding; a GET approval never grants PUT access. There is no MCP approval/configuration-write tool.
 
 Existing manual approvals remain supported under the expandable **Manual approvals (advanced)** section. This illustrative entry assumes an installed plugin with that documented operation:
 
@@ -167,7 +167,7 @@ Use `list_put_paths` with an explicit handler `source`, then `describe_put` with
 
 Native PUT approvals share the bounded 64-entry review queue with plugin GETs, survive native configuration saves, and bind context, path, source and reviewed metadata/value contract. Changed metadata or source requires fresh review. **Delete** a PUT review and confirm the removal to revoke it when saving; unlike plugin GET rows, native target revocation does not depend on a plugin being uninstalled. Existing GET approvals and decisions remain compatible.
 
-`execute_mutation` with `{ "id": "signalk.put", "operation": "put_value", "arguments": { ... } }` uses the same implementation. `execute_capability` handles reads and refuses mutation execution. All other mutations, including plugin POSTs, remain disabled.
+`execute_mutation` with `{ "id": "signalk.put", "operation": "put_value", "arguments": { ... } }` uses the same implementation. `execute_capability` handles reads and refuses mutation execution. Plugin POSTs use the same mutation tool with their own individually saved reviews. Plugin PUT/PATCH/DELETE remain disabled.
 
 Native replies preserve request IDs, state and status codes. Check a known `requestId` through `get_put_status`; only actions submitted through this gateway by the same Signal K identity are accessible, with current permissions/approval rechecked. Correlations expire after one hour and clear on plugin restart. A completed response may still contain a failure status code. A timeout, disconnect or invalid response after dispatch can leave the outcome **unknown**: never automatically retry it or assume cancellation stopped the action. Successful completion does not establish physical operation. See [native PUT contracts and limits](docs/native-puts.md).
 
@@ -210,7 +210,7 @@ The MCP endpoint is stateless: GET/DELETE return 405, each POST has an independe
 
 Provider requests derive their destination from the accepted local server socket, never client input or proxy headers. TLS certificate verification remains enabled. Native HTTPS can use `localTlsServerName` to verify a DNS certificate while retaining that fixed destination; private CAs require process-level trust configuration. See [tested TLS/proxy topologies and setup](docs/hosting.md). Non-TCP hosting remains unsupported. Core telemetry remains independent of provider HTTP calls.
 
-Authentication/read/PUT authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; the supported release set is Signal K 2.32.0 and 2.33.0 on Node 22 and 24; see the [authentication compatibility record](docs/authentication.md). OAuth interoperability remains future work. Calculations, sandbox execution, Container Manager integration, arbitrary configuration writes and unreviewed controls are outside scope. Plugin POSTs are a separate follow-up.
+Authentication/read/PUT authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; the supported release set is Signal K 2.32.0 and 2.33.0 on Node 22 and 24; see the [authentication compatibility record](docs/authentication.md). OAuth interoperability remains future work. Calculations, sandbox execution, Container Manager integration, arbitrary configuration writes and unreviewed controls are outside scope. Plugin POST constraints and outcome handling are described below.
 
 ## Development
 
@@ -239,3 +239,25 @@ Without `MCP_TEST_PYTHON`, that test is explicitly skipped. Credentials reach Py
 The separate lifecycle test checks gateway-owned timer/TCP cleanup before terminating residual server processes and also runs without forced test exit. The opt-in local ARM64 benchmark passed the agreed development gates. Full server process replacement preserves client access and permissions in native tests; in-process server shutdown still has upstream cleanup gaps. Raspberry Pi testing is outside the release acceptance scope; the local ARM64 results do not establish Pi compatibility. Oversized ordinary JSON results now stop serialization at the byte budget, but that is not a total host-memory limit. See [resource results, reproduction commands and limits](docs/resource-validation.md).
 
 To verify an installed tarball, set `MCP_TEST_PLUGIN_DIR` to the installed package directory while running the integration test. CI covers Signal K 2.32.0 and 2.33.0 on Node 22 and 24 with both clients. See the verification report for actual results and outstanding acceptance work.
+
+## Individually approved plugin POSTs
+
+Use `describe_capability` for the installed plugin, then `execute_mutation` for a supported POST. For example, the published Alert Center 0.4.1 describes `post.snooze`:
+
+```json
+{
+  "id": "plugin.signalk-alert-center",
+  "operation": "post.snooze",
+  "arguments": { "body": { "durationSeconds": 60 } }
+}
+```
+
+This action suppresses notifications, including emergency alerts; the example is not an approval or a request to run it. Path/query parameters remain top-level arguments; `body` is the JSON request body. A valid unapproved call from a write-capable identity returns `APPROVAL_PENDING` without dispatch. In native Plugin Config, inspect the **Plugin POST / Write** row, accept or reject it, then **Save Configuration**. Only that save persists approval. There is no extra confirmation on every later invocation.
+
+Reviews bind plugin ID, operation ID, POST method, route, supported inputs and the endpoint's resolved OpenAPI contract, including descriptions and referenced schemas. Changed endpoint contracts require renewed review. Package/document version changes and unrelated endpoints alone do not. Undocumented implementation changes cannot be detected from OpenAPI; review provider changes as needed. GET/manual approvals never enable a POST. Delete a POST review and save to revoke it even while the plugin remains installed. GET, POST and native PUT reviews share the 64-entry queue; submitted values and tokens are never retained there.
+
+The initial body subset is an optional or required JSON object with at most 32 declared primitive string, number, integer or boolean fields. Supported bounds/enums are enforced, unknown fields rejected, and defaults are not inserted. Local component references are supported within bounded contracts. Nested objects, arrays, null/nullable, composition, unsupported constraints, multipart and uploads remain disabled. Configuration routes and credential, URL, file or command fields are excluded. No general HTTP executor is exposed.
+
+Each invocation requires a current native `readwrite` or `admin` identity, enabled provider, exact saved approval and the provider's native route/data permissions. Original bearer forwarding uses the accepted server socket and verified TLS; redirects are refused. The gateway does not invent telemetry ACLs for arbitrary provider data, so administrator review must include the provider's authorization behavior.
+
+Results include `statusCode`, unchanged provider `data`, `submitted: true` and `retrySafe: false`. `outcome: responded` means an HTTP response was received, not that an action succeeded physically or semantically. HTTP 202 is `accepted`; inspect the provider's own pending/failure fields. HTTP errors, disconnects, invalid/oversized replies and post-dispatch revocation return `unknown` with sanitized codes. No automatic retry, generic status polling or cancellation guarantee is provided. No updated release or deployment is implied.

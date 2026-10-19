@@ -54,7 +54,15 @@ test("requests deduplicate without granting access or keeping arguments, and are
     assert.throws(() => requests.request("fixture", read), /APPROVAL_PENDING/);
   assert.equal(Object.keys(queued(requests)).length, 1);
   assert.equal(read.enabled, false);
-  assert.throws(() => requests.request("fixture", write), /OPERATION_DISABLED/);
+  assert.throws(
+    () =>
+      requests.request("fixture", {
+        ...write,
+        method: "DELETE",
+        reason: "METHOD_NOT_READONLY",
+      }),
+    /OPERATION_DISABLED/,
+  );
   const review = Object.values(queued(requests))[0];
   assert.deepEqual(
     Object.keys(review).sort(),

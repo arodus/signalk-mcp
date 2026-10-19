@@ -14,9 +14,9 @@ Authorization, input/response validation, bounded selection, pagination and MCP 
 
 The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy and v2 notification reads, standard v2 history with native permission checks, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection.
 
-Plugin execution remains limited to explicitly reviewed GET operations. The development PUT extension uses the same native administrator review/save workflow, binding every action to an exact self-context path, explicit source and reviewed metadata/value contract. There is no blanket PUT grant. Original Signal K bearer identity, native PUT permissions and native route checks remain mandatory. Unknown operations and plugin POSTs remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
+Plugin execution supports explicitly reviewed GET operations and individually reviewed POST operations with a bounded JSON body contract. The development PUT extension uses the same native administrator review/save workflow, binding every action to an exact self-context path, explicit source and reviewed metadata/value contract. There is no blanket PUT grant. Original Signal K bearer identity, native PUT permissions and native route checks remain mandatory. Unknown operations and unsupported plugin mutation methods remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 
-Every plugin GET operation and native PUT target starts blocked and requires an individual administrator approval saved through native Plugin Config. There is no blanket plugin or PUT approval, and native Signal K permissions remain mandatory on every call. Built-in data reads use native permissions without that extra operation review. Release `0.1.0-alpha.2` includes native PUT support and first-time configuration saving. Deployment requires separate authorization.
+Every plugin GET or POST operation and native PUT target starts blocked and requires an individual administrator approval saved through native Plugin Config. There is no blanket plugin or PUT approval, and native Signal K permissions remain mandatory on every call. Built-in data reads use native permissions without that extra operation review. Release `0.1.0-alpha.2` includes native PUT support and first-time configuration saving. Plugin POSTs are implemented in current source and are not included in alpha.2. Publication and deployment require separate authorization.
 
 The configurator permits saving unchanged defaults. Its first successful configuration save refreshes the page so Signal K can display the native Enabled switch; saving preserves the existing enable state and does not approve any operation.
 
@@ -32,7 +32,7 @@ README.md and docs describe implemented behavior and verification. This brief de
 - Discover and fetch authorized current telemetry, history and supported data APIs.
 - Discover installed plugin capabilities through public features, OpenAPI and explicit adapters where needed.
 - Forward approved third-party API reads under the original caller's identity.
-- Forward individually approved native self-context PUTs under the original caller's identity, using native metadata for discovery and description. Add reviewed plugin POSTs only in a subsequent change.
+- Forward individually approved native self-context PUTs under the original caller's identity, using native metadata for discovery and description. Forward individually reviewed plugin POSTs through the mutation boundary with their exact method/route/body contract.
 - Keep the MCP tool catalog compact and support batched reads.
 - Remain suitable for ordinary Signal K installations and resource-constrained onboard systems, without Docker or Podman requirements.
 - Keep the project independent and useful beyond any single vessel.
@@ -124,7 +124,7 @@ Prefer public feature discovery, plugin OpenAPI documents and narrow adapters. N
 
 Discovery is not approval. A blocked eligible GET request prepares an in-memory review in native Plugin Config; only an administrator saving that form can approve it. The embedded settings table offers Accept/Reject actions, retained rejected rows and deletion for uninstalled plugins; all changes use the native admin configuration API. Saved decisions bind plugin, operation, GET path, input schema and description. Rejections remain blocked, and unchanged provider metadata still requires implementation review on upgrades. Existing exact manual approvals remain supported. MCP exposes no approval or configuration-write tool.
 
-- Only reviewed read-only GET operations are eligible.
+- Read execution accepts reviewed GET operations only; individually reviewed POSTs use the separate mutation boundary described below.
 - GET or OpenAPI presence does not prove the handler is side-effect-free.
 - Validate schemas and reject unsupported or ambiguous inputs.
 - Reject arbitrary destinations, credential parameters and redirects.
@@ -137,7 +137,7 @@ Use the compact capability interface rather than generating hundreds of MCP tool
 
 ## 8. Implementation and release sequence
 
-The original data-access roadmap is recorded in [#12](https://github.com/arodus/signalk-mcp/issues/12). Track the subsequent individually approved PUT extension and later plugin POST work in [#30](https://github.com/arodus/signalk-mcp/issues/30).
+The original data-access roadmap is recorded in [#12](https://github.com/arodus/signalk-mcp/issues/12). Track the subsequent individually approved PUT extension and plugin POST work in [#30](https://github.com/arodus/signalk-mcp/issues/30).
 
 ### Compatibility and acceptance
 
@@ -183,4 +183,4 @@ Require native `readwrite` or `admin` identity and exact-source `put` ACL author
 
 Preserve native request IDs, pending/completed/failed state and status codes. Restrict status lookup to gateway-submitted requests owned by the same native identity, with current approval/permissions, bounded one-hour expiry and lifecycle reset. A later denial must not disguise an already-submitted action as an unexecuted read failure. Unknown outcomes are explicit, with no automatic mutation retries or physical-operation claims.
 
-Plugin POSTs follow only after the native PUT boundary is verified. They require their own exact reviewed method/route/body contract; a GET approval can never enable POST. No generic unrestricted HTTP executor is planned.
+The POST extension follows the verified native PUT boundary and is implemented in source. They require their own exact reviewed method/route/body contract; a GET approval can never enable POST. No generic unrestricted HTTP executor is planned.

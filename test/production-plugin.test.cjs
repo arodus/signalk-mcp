@@ -112,6 +112,7 @@ async function start(t, installed = true) {
       users: [],
       devices: [
         { clientId: "reader", permissions: "readonly", enabled: true },
+        { clientId: "writer", permissions: "readwrite", enabled: true },
         { clientId: "admin", permissions: "admin", enabled: true },
       ],
     },
@@ -393,10 +394,12 @@ test(
         ).structuredContent.operations.filter((op) => op.method !== "GET");
         assert.ok(mutations.length >= 5);
         for (const operation of mutations) {
-          assert.equal(operation.reason, "METHOD_NOT_READONLY");
+          assert.equal(operation.enabled, false);
           error(
             await execute(admin, operation.id, { id: expected.items[0].id }),
-            "OPERATION_DISABLED",
+            operation.method === "POST"
+              ? "MUTATION_TOOL_REQUIRED"
+              : "OPERATION_DISABLED",
           );
         }
         assert.deepEqual(
@@ -473,6 +476,59 @@ test(
           (await execute(admin)).structuredContent.data,
           expected,
         );
+      },
+    );
+
+    await t.test(
+      "published snooze POST requires saved approval and native writer identity",
+      async () => {
+        const gateway = loadedPlugin(server, "signalk-mcp");
+        const writer = await clientFor("writer");
+        const mutate = (client, body = { durationSeconds: 60 }) =>
+          client.callTool({
+            name: "execute_mutation",
+            arguments: {
+              id: capability,
+              operation: "post.snooze",
+              arguments: { body },
+            },
+          });
+        const before = await (await direct("/snooze")).json();
+        error(await mutate(reader), "PERMISSION_DENIED");
+        error(await mutate(writer), "APPROVAL_PENDING");
+        assert.deepEqual(await (await direct("/snooze")).json(), before);
+        const reviews = Object.fromEntries(
+          Object.entries(gateway.schema().properties.readRequests.properties)
+            .filter(([, v]) => v.default.kind === "post")
+            .map(([key, value]) => [
+              key,
+              { ...value.default, decision: "approved" },
+            ]),
+        );
+        assert.equal(Object.keys(reviews).length, 1);
+        gateway.start({ ...configuration, readRequests: reviews });
+        try {
+          error(
+            await mutate(writer, { durationSeconds: 0 }),
+            "INVALID_ARGUMENTS",
+          );
+          error(
+            await mutate(writer, { durationSeconds: 28801 }),
+            "INVALID_ARGUMENTS",
+          );
+          const result = await mutate(writer);
+          assert.equal(result.isError, undefined, JSON.stringify(result));
+          assert.equal(result.structuredContent.outcome, "responded");
+          assert.equal(result.structuredContent.statusCode, 200);
+          assert.deepEqual(
+            result.structuredContent.data,
+            await (await direct("/snooze")).json(),
+          );
+          assert.notDeepEqual(result.structuredContent.data, before);
+          error(await mutate(reader), "PERMISSION_DENIED");
+        } finally {
+          gateway.start(configuration);
+        }
       },
     );
 

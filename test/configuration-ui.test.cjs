@@ -330,3 +330,39 @@ test("invalid PUT metadata or gateway permission policy cannot enter the approva
       /invalid/,
     );
 });
+
+test("POST reviews load, save decisions and can be revoked while provider remains installed", async () => {
+  const { ApprovalRequests } = require("../dist/approvals.js");
+  const { discoverOperations } = require("../dist/capabilities/openapi.js");
+  const requests = new ApprovalRequests();
+  const op = discoverOperations(
+    {
+      openapi: "3.0.3",
+      paths: {
+        "/snooze": {
+          post: { operationId: "snooze", summary: "Synthetic action" },
+        },
+      },
+    },
+    "fixture",
+    [],
+    { permissions: "readwrite" },
+  )[0];
+  assert.throws(() => requests.request("fixture", op), /APPROVAL_PENDING/);
+  const [postKey, entry] = Object.entries(requests.schema().properties)[0];
+  const postReviews = { [postKey]: entry.default };
+  const api = await ui();
+  const base = await api.loadConfiguration(async () =>
+    response(inventory(postReviews)),
+  );
+  const draft = clone(base);
+  draft.reviews[postKey].decision = "approved";
+  const merged = api.mergeChanges(base, draft, base);
+  assert.equal(merged.configuration.readRequests[postKey].decision, "approved");
+  assert.equal(configSchema.safeParse(merged.configuration).success, true);
+  delete draft.reviews[postKey];
+  assert.deepEqual(
+    api.mergeChanges(base, draft, base).configuration.readRequests,
+    {},
+  );
+});
