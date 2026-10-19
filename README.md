@@ -95,10 +95,10 @@ All plugin operations start disabled. When a client attempts a discovered, suppo
 
 1. Refresh **Apps & Plugins → Configuration → Signal K MCP**.
 2. Under **Plugin read requests**, review the plugin, operation and endpoint. Provider descriptions are untrusted information; check the handler's side effects and data authorization.
-3. Select **Approve — confirmed read-only** or **Reject**, optionally restrict the read to administrators, then **Save Configuration**.
+3. Select **Accept** or **Reject**, optionally restrict the read to administrators, then **Save Configuration**.
 4. Ask the client to retry after approval. Approval never bypasses Signal K or provider permissions.
 
-Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay blocked without creating duplicates. The queue holds at most 64 entries, including saved reviews; when full, new requests return `APPROVAL_QUEUE_FULL`. To remove old entries, an administrator can remove the corresponding `readRequests` entries from the saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
+Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay visible and blocked without creating duplicates. To change a rejection later, select **Accept** and **Save Configuration**. The queue holds at most 64 entries, including saved reviews; when full, new requests return `APPROVAL_QUEUE_FULL`. To remove old entries, an administrator can remove the corresponding `readRequests` entries from the saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
 
 Reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Writes, ambiguous operations and unsupported schemas never enter this queue. There is no MCP approval/configuration-write tool.
 

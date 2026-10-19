@@ -91,7 +91,7 @@ export class ApprovalRequests {
       title: "Plugin read requests",
       additionalProperties: false,
       description:
-        "Refresh this page after a blocked MCP request. Review each endpoint, select Approve or Reject, then Save Configuration. Approve only reads without side effects. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
+        "Refresh this page after a blocked MCP request. Review each endpoint, select Accept or Reject, then Save Configuration. Accept only reads without side effects. Rejected requests stay here and can be accepted later. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
       properties: Object.fromEntries(
         Object.entries(this.reviews).map(([key, review]) => [
           key,
@@ -133,7 +133,7 @@ export class ApprovalRequests {
                 default: review.decision,
                 oneOf: [
                   { const: "pending", title: "Pending review" },
-                  { const: "approved", title: "Approve — confirmed read-only" },
+                  { const: "approved", title: "Accept" },
                   { const: "rejected", title: "Reject" },
                 ],
               },
