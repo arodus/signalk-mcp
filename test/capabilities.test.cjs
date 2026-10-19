@@ -7,6 +7,8 @@ const {
 const { CapabilityRegistry } = require("../dist/capabilities/registry.js");
 const { configSchema } = require("../dist/config.js");
 const { localGet } = require("../dist/capabilities/http.js");
+const { pluginIdSchema } = require("../dist/capabilities/schemas.js");
+const { zodToJsonSchema } = require("zod-to-json-schema");
 const principal = { identifier: "reader", permissions: "readonly" };
 const approval = {
   pluginId: "example",
@@ -186,6 +188,116 @@ function registryFixture() {
   const config = { staleAfterSeconds: 300, pluginOperations: [approval] };
   return { user, app, config };
 }
+test("native mixed-case plugin IDs preserve discovery, routes and exact approval identity", async () => {
+  const { app, config } = registryFixture();
+  const ids = [
+    "AdvancedWind",
+    "SpeedAndCurrent",
+    "advancedwind",
+    "@scope/MixedCase",
+  ];
+  app.getFeatures = async () => ({
+    apis: ["history"],
+    plugins: ids.map((id) => ({ id, enabled: true })),
+  });
+  const requests = [];
+  const registry = new CapabilityRegistry(
+    app,
+    "Bearer token",
+    config,
+    () => true,
+    async (route) => {
+      requests.push(route);
+      return route.startsWith("/skServer/") ? spec() : { value: 0 };
+    },
+  );
+  const listing = await registry.list();
+  assert.equal(listing.discovery, "complete");
+  assert.deepEqual(
+    listing.capabilities
+      .filter((cap) => cap.kind === "plugin")
+      .map((cap) => cap.provider)
+      .sort(),
+    [...ids].sort(),
+  );
+  for (const id of ids) {
+    assert.equal(
+      new RegExp(zodToJsonSchema(pluginIdSchema).pattern).test(id),
+      true,
+    );
+    const description = await registry.describe(`plugin.${id}`);
+    assert.equal(description.available, true);
+    assert.equal(description.operations[0].enabled, false);
+    assert.equal(description.operations[0].reason, "NOT_ALLOWLISTED");
+    assert.equal(
+      requests.at(-1),
+      `/skServer/openapi/plugins/${encodeURIComponent(id)}`,
+    );
+  }
+  config.pluginOperations = [{ ...approval, pluginId: "AdvancedWind" }];
+  assert.equal(configSchema.safeParse(config).success, true);
+  assert.deepEqual(
+    await registry.execute("plugin.AdvancedWind", "read", { id: "house" }),
+    {
+      capability: "plugin.AdvancedWind",
+      operation: "read",
+      provider: "AdvancedWind",
+      data: { value: 0 },
+    },
+  );
+  assert.equal(requests.at(-1), "/plugins/AdvancedWind/reading/house");
+  const count = requests.filter((route) =>
+    route.startsWith("/plugins/"),
+  ).length;
+  await assert.rejects(
+    registry.execute("plugin.advancedwind", "read", { id: "house" }),
+    /OPERATION_DISABLED/,
+  );
+  assert.equal(
+    requests.filter((route) => route.startsWith("/plugins/")).length,
+    count,
+  );
+  await assert.rejects(
+    registry.describe("plugin.ADVANCEDWIND"),
+    /CAPABILITY_NOT_FOUND/,
+  );
+});
+
+test("plugin IDs still reject traversal, URL syntax and oversized identities", async () => {
+  const { app, config } = registryFixture();
+  const registry = new CapabilityRegistry(
+    app,
+    "Bearer token",
+    config,
+    () => true,
+  );
+  for (const id of [
+    "",
+    ".",
+    "..",
+    "../AdvancedWind",
+    "@scope/..",
+    "AdvancedWind/other",
+    "AdvancedWind\\other",
+    "AdvancedWind?token=x",
+    "AdvancedWind#fragment",
+    "%41dvancedWind",
+    "AdvancedWind\n",
+    "A".repeat(129),
+  ]) {
+    assert.equal(
+      pluginIdSchema.safeParse(id).success,
+      false,
+      JSON.stringify(id),
+    );
+    app.getFeatures = async () => ({
+      apis: [],
+      plugins: [{ id, enabled: true }],
+    });
+    assert.equal((await registry.list()).discovery, "INVALID_FEATURES");
+  }
+});
+
 test("oversized feature discovery fails closed and recovers with bounded input", async () => {
   const { app, config } = registryFixture();
   const valid = app.getFeatures;
