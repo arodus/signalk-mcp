@@ -2,10 +2,14 @@
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-10-19
+
 - Describe the gateway as permission-aware data access with individually approved actions. Every plugin GET and native PUT starts blocked and needs its own saved administrator approval; there is no blanket approval. Built-in data reads continue to use native Signal K permissions.
 
 - Add individually approved native self-context PUTs using the existing Plugin Config review table, exact path/source/metadata binding and native PUT permissions. There is no blanket PUT grant; plugin POSTs remain disabled.
 - Add bounded metadata-driven PUT discovery, explicit source selection, owned request-status tracking and truthful uncertain outcomes without automatic mutation retries. Preserve existing reads, plugin GET reviews and native configuration saves.
+
+- Allow saving unchanged default configuration on first setup and refresh the native admin page so Enable becomes available. Preserve host flags and require native administrator authorization without granting operation approvals.
 
 ## [0.1.0-alpha.1] - 2026-10-19
 

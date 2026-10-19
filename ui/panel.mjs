@@ -123,6 +123,9 @@ export default function Configuration() {
     try {
       adopt(await saveConfiguration(base, draft));
       setMessage("Configuration saved.");
+      // The host hides Enable until configuration exists. Our native API save
+      // does not update its cached plugin inventory, so refresh after setup.
+      if (base.options.configuration == null) globalThis.location.reload();
     } catch (err) {
       setError(err.message);
     } finally {
@@ -535,7 +538,7 @@ export default function Configuration() {
               {
                 type: "submit",
                 className: "btn btn-primary",
-                disabled: busy || !dirty,
+                disabled: busy,
               },
               busy ? "Saving…" : "Save Configuration",
             ),

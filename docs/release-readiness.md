@@ -1,6 +1,6 @@
 # Release readiness
 
-The owner authorized the first alpha, `0.1.0-alpha.1`, on 2026-10-19. The release workflow provides publication evidence; these instructions alone do not establish npm publication, AppStore indexing or vessel deployment. Track acceptance in issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8).
+The owner authorized the first alpha, `0.1.0-alpha.1`, and the second alpha, `0.1.0-alpha.2`, on 2026-10-19. Alpha 2 includes individually approved native PUTs and the first-time configuration save fix. The release workflow provides publication evidence; these instructions alone do not establish npm publication, AppStore indexing or vessel deployment. Track acceptance in issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8).
 
 ## Package verification
 

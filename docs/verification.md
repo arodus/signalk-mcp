@@ -1,5 +1,17 @@
 # Verification record
 
+## Alpha 2 release preparation (2026-10-19)
+
+`0.1.0-alpha.2` includes the native PUT approval implementation and initial configuration save fix. Local `npm run check` passes on Node **24.22.0** / Signal K **2.33.0**: type checking, lint, formatting, **72 portable tests** and **58 native integration tests**. The two opt-in product clients and production History backend are skipped locally; the Python MCP client is enabled. The release workflow separately gates publication on both CI workflows, the four supported runtime combinations with real isolated History, and verification of the exact commit-stamped package. Publication and remote CI evidence are recorded by that workflow; these local checks do not establish vessel deployment or physical operation.
+
+## Initial configuration save fix (2026-10-19)
+
+The configurator allows saving defaults without an edit, including when Signal K has no stored configuration. After that first confirmed save it reloads the page so the host shows its native Enabled switch. Later unchanged saves remain available without reloading. Existing enable/logging/debug flags, administrator enforcement, conflict checks and operation approvals are preserved.
+
+On Node **24.19.0** / Signal K **2.33.0**, `npm run check` passes type checking, lint, formatting, **72 portable tests** and **58 native integration tests**, with three optional installed-product-client/production-History skips. Python MCP interoperability passes. The new native regression saves an unconfigured disabled plugin without edits, rejects a reader save, preserves host flags, enables through the native configuration API and confirms plugin reads still require approval. `git diff --check` passes.
+
+In a disposable real Signal K **2.33.0** Admin UI, an unconfigured plugin saves unchanged, the page refresh exposes Enabled, and toggling Enabled starts the endpoint. Further unchanged saves succeed at **1280** and **390** pixel widths. This verifies a local synthetic server; it is not a package release, deployment or physical-device test. Remote CI is recorded in the fix PR.
+
 ## Individually approved native PUT checkpoint (issue #30, 2026-10-19)
 
 The development branch adds exact administrator approvals for native self-vessel PUT targets. There is no blanket PUT approval or PUT-specific role selector: the configurator labels commands **Read** or **Write**, and native Signal K roles and path/source ACLs apply on every invocation. Plugin POSTs remain disabled. This checkpoint does not describe a release or deployment.
