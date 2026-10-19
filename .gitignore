@@ -4,3 +4,4 @@ dist/
 coverage/
 package-verification/
 .DS_Store
+public/

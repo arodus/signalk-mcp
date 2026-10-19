@@ -7,6 +7,7 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "public",
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
@@ -17,7 +18,8 @@
   "keywords": [
     "signalk-node-server-plugin",
     "signalk-category-utility",
-    "mcp"
+    "mcp",
+    "signalk-plugin-configurator"
   ],
   "signalk": {
     "displayName": "Signal K MCP",
@@ -30,16 +32,17 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:ui",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test",
+    "lint": "eslint src test ui webpack.config.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run build && node --test test/approvals.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs",
+    "test": "npm run build && node --test test/approvals.test.cjs test/configuration-ui.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs",
     "test:integration": "npm run build && node --test --test-force-exit test/integration.test.cjs test/hosting.test.cjs test/production-plugin.test.cjs test/runtime.test.cjs test/notifications-native.test.cjs test/restart.test.cjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
     "verify:package": "node test/package-smoke.cjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "build:ui": "webpack --config webpack.config.cjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
@@ -53,11 +56,14 @@
     "@types/node": "^22.0.0",
     "eslint": "^9.39.4",
     "prettier": "^3.8.4",
+    "react": "^19.3.1",
     "signalk-alert-center": "0.4.1",
     "signalk-server": "2.33.0",
     "signalk-to-influxdb": "1.11.0",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.61.1"
+    "typescript-eslint": "^8.61.1",
+    "webpack": "^5.112.0",
+    "webpack-cli": "^6.0.1"
   },
   "repository": {
     "type": "git",

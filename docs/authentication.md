@@ -54,3 +54,7 @@ npm run check
 ```
 
 Run under the selected Node version. Create the Python environment using the README instructions first. Without `MCP_TEST_SERVER_DIR`, the harness uses the project's pinned server dependency. `MCP_TEST_PLUGIN_DIR` can independently select an installed gateway tarball; the server and plugin package selections are separate.
+
+## Admin settings table
+
+The embedded configuration panel uses the host’s React 19 instance and `serverRoutesPrefix`, reads native `/plugins` metadata, and saves through `/plugins/signalk-mcp/config` with the existing browser session. This admin settings flow is separate from MCP bearer authentication. No new HTTP write route, MCP write tool or credential is introduced. Native tests on both supported server versions verify administrator-only saves and missing-plugin review deletion. The frontend rechecks current configuration and plugin presence before saving, but the host API does not offer atomic conditional writes.

@@ -93,16 +93,16 @@ Plugins appear as `plugin.<plugin-id>`. Describe one to read its OpenAPI operati
 
 All plugin operations start disabled. When a client attempts a discovered, supported GET with valid arguments, the read stays blocked with `APPROVAL_PENDING`. The plugin prepares a deduplicated review entry without calling that endpoint or saving configuration.
 
-1. Refresh **Apps & Plugins → Configuration → Signal K MCP**.
-2. Under **Plugin read requests**, review the plugin, operation and endpoint. Provider descriptions are untrusted information; check the handler's side effects and data authorization.
-3. Select **Accept** or **Reject**, optionally restrict the read to administrators, then **Save Configuration**.
+1. Open **Apps & Plugins → Configuration → Signal K MCP** and click **Refresh**.
+2. In the **Plugin read requests** table, review the plugin, operation and endpoint. Expand the endpoint to read its description. Provider descriptions are untrusted information; check the handler's side effects and data authorization.
+3. Click **Accept** or **Reject**, optionally set **Access** to **Admins only**, then **Save Configuration**. Buttons change the draft; nothing is persisted until you save. **Discard changes** restores the last loaded state.
 4. Ask the client to retry after approval. Approval never bypasses Signal K or provider permissions.
 
-Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay visible and blocked without creating duplicates. To change a rejection later, select **Accept** and **Save Configuration**. The queue holds at most 64 entries, including saved reviews; when full, new requests return `APPROVAL_QUEUE_FULL`. To remove old entries, an administrator can remove the corresponding `readRequests` entries from the saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
+Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay visible and blocked without creating duplicates. To change a rejection later, click **Accept** and **Save Configuration**. The queue holds at most 64 entries, including saved reviews; when full, new requests return `APPROVAL_QUEUE_FULL`. Rows for uninstalled plugins show **Not installed** and a **Delete** button. Click **Delete**, confirm **Delete row**, then **Save Configuration**. Disabled plugins still count as installed and cannot be deleted from this table. Other obsolete entries can be removed from `readRequests` in saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
 
 Reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Writes, ambiguous operations and unsupported schemas never enter this queue. There is no MCP approval/configuration-write tool.
 
-Existing manual approvals remain supported under **Manual plugin read approvals (advanced)**. This illustrative entry assumes an installed plugin with that documented operation:
+Existing manual approvals remain supported under the expandable **Manual approvals (advanced)** section. This illustrative entry assumes an installed plugin with that documented operation:
 
 ```json
 {
@@ -116,6 +116,8 @@ Existing manual approvals remain supported under **Manual plugin read approvals 
 ```
 
 Put entries in `pluginOperations`. Only GET is supported; `readOnly: true` is an explicit assertion by the administrator who reviewed the operation, not a fact inferred from HTTP or OpenAPI. Use `permission: "admin"` to add an admin-only requirement. Review approvals again when providers change.
+
+The table uses Signal K’s embedded configurator, plugin inventory and existing admin configuration API. It preserves unrelated settings and newly queued requests, and checks for conflicting edits before saving. Signal K’s configuration API has no atomic compare-and-swap, so avoid simultaneous settings saves. Connection and staleness options remain available under **Connection and data settings**.
 
 Execution forwards the original bearer token to the same Signal K server. Native route checks and the provider's own authorization remain active; even an approved operation can return `UPSTREAM_PERMISSION_DENIED`. The provider must correctly enforce any data-level permissions its endpoint needs. Generic JSON cannot be mapped automatically onto Signal K telemetry ACLs. Approve only endpoints whose authorization and bounded read-only behavior have been reviewed.
 

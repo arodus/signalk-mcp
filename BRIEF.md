@@ -111,7 +111,7 @@ Apply path/source authorization and validate response context, range, columns, s
 
 Prefer public feature discovery, plugin OpenAPI documents and narrow adapters. Not all installed plugins have complete API descriptions; represent partial support and unavailability explicitly.
 
-Discovery is not approval. A blocked eligible GET request prepares an in-memory review in native Plugin Config; only an administrator saving that form can approve it. Saved decisions bind plugin, operation, GET path, input schema and description. Rejections remain blocked, and unchanged provider metadata still requires implementation review on upgrades. Existing exact manual approvals remain supported. MCP exposes no approval or configuration-write tool.
+Discovery is not approval. A blocked eligible GET request prepares an in-memory review in native Plugin Config; only an administrator saving that form can approve it. The embedded settings table offers Accept/Reject actions, retained rejected rows and deletion for uninstalled plugins; all changes use the native admin configuration API. Saved decisions bind plugin, operation, GET path, input schema and description. Rejections remain blocked, and unchanged provider metadata still requires implementation review on upgrades. Existing exact manual approvals remain supported. MCP exposes no approval or configuration-write tool.
 
 - Only reviewed read-only GET operations are eligible.
 - GET or OpenAPI presence does not prove the handler is side-effect-free.

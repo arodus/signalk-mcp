@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace the long approval form with an embedded table, Accept/Reject buttons, retained rejected rows and deletion for uninstalled plugins. Save through the existing Signal K admin configuration API.
+
 - Queue eligible blocked plugin reads for native admin review, with deduplicated pending requests, saved approve/reject decisions, schema-bound approvals and unchanged Signal K permission enforcement.
 
 - Remove plugin-local host/browser-origin settings and use Signal K’s CORS policy; preserve existing configuration on upgrade. Clarify the HTTPS certificate hostname and refresh the settings-only screenshot.

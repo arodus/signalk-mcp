@@ -1416,6 +1416,63 @@ test(
             (await cap("unapproved", {}, "plugin.mcp-fixture", admin)).isError,
             undefined,
           );
+          const { loadConfiguration, saveConfiguration } =
+            await import("../ui/configuration.mjs");
+          const nativeFetch =
+            (principal) =>
+            (url, options = {}) =>
+              fetch(`http://${host}/skServer${url}`, {
+                ...options,
+                headers: {
+                  ...options.headers,
+                  Authorization: `Bearer ${token(principal)}`,
+                },
+              });
+          const orphan = {
+            ...entry.default,
+            pluginId: "removed-fixture",
+            decision: "rejected",
+          };
+          const orphanKey = require("../dist/approvals.js").reviewKey(orphan);
+          configuration.configuration.readRequests[orphanKey] = orphan;
+          await save(configuration, "approved");
+          const base = await loadConfiguration(nativeFetch("admin"));
+          assert.ok(base.installed.includes("mcp-fixture"));
+          assert.equal(base.installed.includes("removed-fixture"), false);
+          const draft = globalThis.structuredClone({
+            reviews: base.reviews,
+            settings: base.settings,
+          });
+          delete draft.reviews[orphanKey];
+          draft.reviews[key].decision = "rejected";
+          await assert.rejects(
+            saveConfiguration(base, draft, nativeFetch("reader")),
+            /administrator/,
+          );
+          const saved = await saveConfiguration(
+            base,
+            draft,
+            nativeFetch("admin"),
+          );
+          assert.equal(saved.reviews[orphanKey], undefined);
+          assert.equal(saved.reviews[key].decision, "rejected");
+          const confirmed = await (
+            await fetch(configUrl, { headers: adminHeaders })
+          ).json();
+          assert.equal(
+            confirmed.configuration.readRequests[orphanKey],
+            undefined,
+          );
+          assert.equal(
+            confirmed.configuration.readRequests[key].decision,
+            "rejected",
+          );
+          const remote = await fetch(
+            `http://${host}/signalk-mcp/remoteEntry.js`,
+            { headers: adminHeaders },
+          );
+          assert.equal(remote.status, 200);
+          assert.match(await remote.text(), /signalk_mcp/);
         } finally {
           await save(original, undefined);
         }

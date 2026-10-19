@@ -42,6 +42,7 @@ try {
   );
   for (const required of [
     "dist/index.js",
+    "public/remoteEntry.js",
     "README.md",
     "BRIEF.md",
     "AGENTS.md",
