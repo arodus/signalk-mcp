@@ -7,9 +7,12 @@ import { localGet } from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
 import { boundedJson } from "./json.js";
 import { validateOrigin } from "./origin.js";
+import { ApprovalRequests } from "./approvals.js";
+import { record } from "./data.js";
 
 function pluginFactory(app: App): Plugin {
   let config: Config | undefined;
+  const requests = new ApprovalRequests();
   const active = new Set<ReturnType<typeof createMcpServer>>();
   const pending = new Map<AbortController, Response>();
   const guard = (req: Request, res: Response) => {
@@ -66,6 +69,7 @@ function pluginFactory(app: App): Plugin {
           controller.signal,
           settings.localTlsServerName,
         ),
+        requests,
       );
       active.add(server);
       const transport = new StreamableHTTPServerTransport({
@@ -110,18 +114,33 @@ function pluginFactory(app: App): Plugin {
     id: "signalk-mcp",
     name: "Signal K MCP",
     description: "Authenticated read-only MCP vessel telemetry",
-    schema,
-    uiSchema,
+    schema: () => {
+      // A disabled plugin may never have started in this process. Its saved
+      // reviews must still be visible/editable in the native configuration UI.
+      if (!config && typeof app.readPluginOptions === "function") {
+        const options: unknown = app.readPluginOptions();
+        const saved = configSchema.safeParse(
+          record(options) ? options.configuration : undefined,
+        );
+        if (saved.success) requests.reset(saved.data.readRequests);
+      }
+      return {
+        ...schema,
+        properties: { readRequests: requests.schema(), ...schema.properties },
+      };
+    },
+    uiSchema: () => ({ ...uiSchema, readRequests: requests.uiSchema() }),
     start(options: unknown) {
       config = undefined;
       const parsed = configSchema.safeParse(options);
       if (!parsed.success) {
         app.setPluginError(
-          "Invalid MCP configuration: check pluginOperations (unique reviewed GET approvals), localTlsServerName and staleAfterSeconds",
+          "Invalid MCP configuration: check pluginOperations (unique reviewed GET approvals), readRequests, localTlsServerName and staleAfterSeconds",
         );
         return;
       }
       config = parsed.data;
+      requests.reset(config.readRequests);
       app.setPluginStatus(
         "Read-only MCP endpoint ready; Signal K token security required",
       );

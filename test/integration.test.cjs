@@ -1278,6 +1278,149 @@ test(
         }
       },
     );
+    await t.test(
+      "native admin review: pending, approve, reject, reload and schema change",
+      async () => {
+        const plugin = loadedPlugin(server, "signalk-mcp");
+        const fixture = loadedPlugin(server, "mcp-fixture");
+        const configUrl = `http://${host}/plugins/signalk-mcp/config`;
+        const adminHeaders = {
+          Authorization: `Bearer ${token("admin")}`,
+          "Content-Type": "application/json",
+        };
+        const original = await (
+          await fetch(configUrl, { headers: adminHeaders })
+        ).json();
+        const configuration = globalThis.structuredClone(original);
+        const before = fixture.testCalls.unapproved;
+        // Earlier blocked calls may already have queued this operation.
+        assert.equal(
+          (await cap("unapproved")).content[0].text,
+          "APPROVAL_PENDING",
+        );
+        assert.equal(
+          (await cap("unapproved")).content[0].text,
+          "APPROVAL_PENDING",
+        );
+        const schemas = plugin.schema().properties.readRequests.properties;
+        const entries = Object.entries(schemas).filter(
+          ([, entry]) => entry.default.operationId === "unapproved",
+        );
+        assert.equal(entries.length, 1);
+        const [key, entry] = entries[0];
+        assert.equal(fixture.testCalls.unapproved, before);
+        assert.equal(
+          original.configuration.readRequests,
+          undefined,
+          "MCP must not persist configuration",
+        );
+        configuration.configuration.readRequests = {
+          [key]: { ...entry.default, decision: "approved" },
+        };
+        for (const principal of [undefined, "reader", "writer"]) {
+          const response = await fetch(configUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(principal
+                ? { Authorization: `Bearer ${token(principal)}` }
+                : {}),
+            },
+            body: JSON.stringify(configuration),
+          });
+          assert.ok(
+            [401, 403].includes(response.status),
+            `${principal}: ${response.status}`,
+          );
+        }
+        async function save(options, expected) {
+          const response = await fetch(configUrl, {
+            method: "POST",
+            headers: adminHeaders,
+            body: JSON.stringify(options),
+          });
+          assert.equal(response.status, 200);
+          for (let i = 0; i < 100; i++) {
+            const saved =
+              plugin.schema().properties.readRequests.properties[key]?.default
+                .decision;
+            if (saved === expected) return;
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          }
+          assert.fail("Native configuration restart did not complete");
+        }
+        try {
+          await save(configuration, "approved");
+          const approved = await cap("unapproved");
+          assert.equal(approved.isError, undefined, JSON.stringify(approved));
+          assert.equal(fixture.testCalls.unapproved, before + 1);
+          const persisted = await (
+            await fetch(configUrl, { headers: adminHeaders })
+          ).json();
+          assert.equal(
+            persisted.configuration.readRequests[key].decision,
+            "approved",
+          );
+          await plugin.stop();
+          assert.equal(
+            plugin.schema().properties.readRequests.properties[key].default
+              .decision,
+            "approved",
+            "Disabled plugin retains saved reviews in settings",
+          );
+          plugin.start(persisted.configuration);
+          assert.equal((await cap("unapproved")).isError, undefined);
+          // A changed schema requires a separate review; approval is not broadened.
+          const operation = fixture.testDocument.paths["/unapproved"].get;
+          operation.parameters = [
+            {
+              name: "count",
+              in: "query",
+              required: true,
+              schema: { type: "integer" },
+            },
+          ];
+          const queuedBefore = Object.keys(
+            plugin.schema().properties.readRequests.properties,
+          ).length;
+          assert.equal(
+            (await cap("unapproved")).content[0].text,
+            "INVALID_ARGUMENTS",
+          );
+          assert.equal(
+            Object.keys(plugin.schema().properties.readRequests.properties)
+              .length,
+            queuedBefore,
+          );
+          assert.equal(
+            (await cap("unapproved", { count: 1 })).content[0].text,
+            "APPROVAL_PENDING",
+          );
+          delete operation.parameters;
+          configuration.configuration.readRequests[key].decision = "rejected";
+          await save(configuration, "rejected");
+          const reads = fixture.testCalls.unapproved;
+          assert.equal(
+            (await cap("unapproved")).content[0].text,
+            "APPROVAL_REJECTED",
+          );
+          assert.equal(fixture.testCalls.unapproved, reads);
+          assert.equal((await cap("write")).isError, true);
+          assert.equal(fixture.testCalls.writes, 0);
+          configuration.configuration.readRequests[key].decision = "approved";
+          configuration.configuration.readRequests[key].permission = "admin";
+          await save(configuration, "approved");
+          assert.equal((await cap("unapproved")).isError, true);
+          const admin = await clientFor("admin");
+          assert.equal(
+            (await cap("unapproved", {}, "plugin.mcp-fixture", admin)).isError,
+            undefined,
+          );
+        } finally {
+          await save(original, undefined);
+        }
+      },
+    );
     await t.test("disable and re-enable native plugin", async () => {
       const plugin = loadedPlugin(server, "signalk-mcp");
       await plugin.stop();

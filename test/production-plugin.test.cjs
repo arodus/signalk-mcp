@@ -367,11 +367,18 @@ test(
             ).reason,
             "NOT_ALLOWLISTED",
           );
-          error(await execute(admin), "OPERATION_DISABLED");
+          error(await execute(admin), "APPROVAL_PENDING");
+          const requests = loadedPlugin(server, "signalk-mcp").schema()
+            .properties.readRequests.properties;
+          assert.equal(
+            Object.values(requests)[0].default.operationId,
+            "get.definitions",
+          );
+          assert.equal(Object.values(requests)[0].default.decision, "pending");
         } finally {
           loadedPlugin(server, "signalk-mcp").start(configuration);
         }
-        error(await execute(admin, "get.snooze"), "OPERATION_DISABLED");
+        error(await execute(admin, "get.snooze"), "APPROVAL_PENDING");
         const routes = [
           "/definitions",
           "/occurrences",

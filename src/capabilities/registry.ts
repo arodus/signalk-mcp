@@ -8,6 +8,7 @@ import {
 } from "../auth.js";
 import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
+import { applyReviews, type ApprovalRequests } from "../approvals.js";
 import type { LocalGet } from "./http.js";
 import { getHistory, historyProviders } from "./history.js";
 import { getNotification, listNotifications } from "./notifications.js";
@@ -58,6 +59,7 @@ export class CapabilityRegistry {
     private readonly get: LocalGet = async () => {
       throw new GatewayError("LOCAL_HTTP_UNAVAILABLE");
     },
+    private readonly requests?: ApprovalRequests,
   ) {
     this.core = {
       "signalk.telemetry": {
@@ -347,10 +349,15 @@ export class CapabilityRegistry {
       const document = await this.get(
         `/skServer/openapi/plugins/${encodeURIComponent(plugin.id)}`,
       );
-      const operations = discoverOperations(
-        document,
+      const operations = applyReviews(
+        discoverOperations(
+          document,
+          plugin.id,
+          this.config.pluginOperations ?? [],
+          this.authorize(),
+        ),
         plugin.id,
-        this.config.pluginOperations ?? [],
+        this.config.readRequests ?? {},
         this.authorize(),
       );
       return {
@@ -401,12 +408,25 @@ export class CapabilityRegistry {
     const document = await this.get(
       `/skServer/openapi/plugins/${encodeURIComponent(plugin.id)}`,
     );
-    const target = discoverOperations(
-      document,
+    const target = applyReviews(
+      discoverOperations(
+        document,
+        plugin.id,
+        this.config.pluginOperations ?? [],
+        this.authorize(),
+      ),
       plugin.id,
-      this.config.pluginOperations ?? [],
+      this.config.readRequests ?? {},
       this.authorize(),
     ).find((candidate) => candidate.id === operation);
+    if (target?.reason === "NOT_ALLOWLISTED" && this.requests) {
+      if (!target.input?.safeParse(args).success)
+        throw new GatewayError("INVALID_ARGUMENTS");
+      this.authorize();
+      this.requests.request(plugin.id, target);
+    }
+    if (target?.reason === "APPROVAL_REJECTED")
+      throw new GatewayError("APPROVAL_REJECTED", 403);
     if (!target || !target.enabled)
       throw new GatewayError("OPERATION_DISABLED", 403);
     const route = operationRoute(plugin.id, target, args);

@@ -1,6 +1,6 @@
 # ADR 002: Read-only capability registry and discovery
 
-Date: 2026-10-18. Scope: native telemetry, notification measurements, standardized history, plugin feature/OpenAPI discovery and explicitly approved GET invocation.
+Date: 2026-10-19. Scope: native telemetry, notification measurements, standardized history, plugin feature/OpenAPI discovery and explicitly approved GET invocation.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ Date: 2026-10-18. Scope: native telemetry, notification measurements, standardiz
 
 `getFeatures()` is the public feature inventory. We project API names and plugin IDs/enabled state, exclude our own plugin, bound the inventory, and report discovery failure without disabling core telemetry. Plugin descriptions are loaded on demand from `/skServer/openapi/plugins/:pluginId`. This uses the server's HTTP discovery surface instead of reading `pluginsMap` internals. API names without a dedicated adapter are discoverable but not executable.
 
-An OpenAPI operation is executable only when its plugin is enabled, its operation ID is unique, its schema is supported, and configuration matches the plugin ID, operation ID, GET method and exact path. Duplicate configuration approvals and recursive approvals for this plugin are invalid. Unknown operations, mutation methods and unsupported schema features stay disabled. Documentation is untrusted data, never instructions or proof of read-only behavior. An approval must follow review of the actual handler, including side effects and data-level authorization.
+An OpenAPI operation is executable only when its plugin is enabled, its operation ID is unique, its schema is supported, and configuration matches the plugin ID, operation ID, GET method and exact path. Approval can be an existing exact manual entry or a saved native review matching the operation, input schema and description. Duplicate configuration approvals and recursive approvals for this plugin are invalid. Unknown operations, mutation methods and unsupported schema features stay disabled. Documentation is untrusted data, never instructions or proof of read-only behavior. An approval must follow review of the actual handler, including side effects and data-level authorization.
 
 `src/capabilities/http.ts` only issues bounded GETs back to the socket address/port that accepted the MCP request. It forwards only the original bearer token and an Accept header. It follows no redirects, does not fetch external schema references, ignores OpenAPI `servers`, and never uses caller Host/proxy headers to select a destination. Native plugin-route authorization is therefore exercised as the original caller, without a minted plugin/admin token. TLS verification is never disabled. The optional `localTlsServerName` supplies the TLS verification name and SNI without changing the socket destination. Non-TCP hosting and certificate failures fail closed; see [hosting](hosting.md).
 
@@ -48,3 +48,11 @@ Source inspection: Signal K master `340d5bb62c17ec58d2a3497dbbf081cd87af2a96`; i
 Tests include a synthetic installed native plugin with OpenAPI, readonly/admin/write routes and a registered History API provider. They exercise actual feature discovery, OpenAPI loading, route authentication, caller identity, source ACLs, unapproved/write refusal, external-reference rejection, redirects, schema changes, provider disappearance and conflicting history provenance. Focused tests cover partial discovery, notification filtering, schema ambiguity, traversal, output bounds and revocation during an asynchronous response. These are real integration tests with synthetic providers. A separate [production-plugin compatibility test](plugin-compatibility.md) covers the published `signalk-alert-center@0.4.1` package; neither establishes compatibility with arbitrary production plugins.
 
 The project remains independent; contributing to or depending on another MCP plugin is not part of the current direction. Calculations, Container Manager integration and execution workers are outside the owner-defined fetch-and-forward scope. ADR 001 retains the historical investigation, marked superseded.
+
+## Native approval requests
+
+`execute_capability` queues an eligible unapproved read only after native authentication, enabled-provider discovery, supported OpenAPI validation and argument validation. It returns `APPROVAL_PENDING` without invoking the target. Discovery alone does not queue anything. Only bounded operation metadata is retained, deduplicated across callers; no request arguments, identities, tokens or response data are saved.
+
+The plugin's dynamic JSON schema displays pending and saved reviews in the standard native settings form. The host's existing admin-only configuration route saves decisions and restarts the plugin; the MCP route cannot save or approve them. Unsaved entries are memory-only and may be lost on restart or a stale settings save. Saved pending/rejected/approved entries count toward the 64-entry limit. Removing a saved review from plugin configuration revokes its grant and makes it eligible for another request. Keep manual approvals in mind when removing a review; a matching explicit rejection overrides them.
+
+A SHA-256 key binds plugin ID, operation ID, GET path, parsed input schema and displayed description. This is metadata binding, not proof of a provider's implementation or installed version. Changed schema/route/description requires a separate review. Manual approvals retain their existing compatibility behavior; unsupported schemas and collisions remain disabled for all approval types. Admin-only review permissions never bypass the original caller's native route/data permissions.

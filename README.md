@@ -39,7 +39,7 @@ Older `allowedHosts` and `allowedOrigins` plugin settings are ignored for upgrad
 
 Enable Signal K security and supply an existing user/device token in `Authorization: Bearer <token>` on every request. Guest reads and security-disabled servers are refused. The plugin does not create tokens or read signing secrets. Use Signal K TLS or a trusted TLS reverse proxy for remote access.
 
-The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. It shows the default settings with no approved plugin reads.
+The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. It shows a synthetic plugin read in the native review section.
 
 ![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.jpg)
 
@@ -91,7 +91,18 @@ Values retain native units. Zero and false remain valid; null is `missing`, whil
 
 Plugins appear as `plugin.<plugin-id>`. Describe one to read its OpenAPI operations. Missing documents, disabled plugins, unsupported schemas and unapproved operations are reported explicitly. Other advertised APIs appear as `api.<name>` with `ADAPTER_REQUIRED`; discovery never enables control functions.
 
-All plugin operations start disabled. After reviewing the target implementation for side effects, data authorization and safe inputs/outputs, add an exact allowlist entry. This illustrative entry assumes an installed plugin with that documented operation:
+All plugin operations start disabled. When a client attempts a discovered, supported GET with valid arguments, the read stays blocked with `APPROVAL_PENDING`. The plugin prepares a deduplicated review entry without calling that endpoint or saving configuration.
+
+1. Refresh **Apps & Plugins → Configuration → Signal K MCP**.
+2. Under **Plugin read requests**, review the plugin, operation and endpoint. Provider descriptions are untrusted information; check the handler's side effects and data authorization.
+3. Select **Approve — confirmed read-only** or **Reject**, optionally restrict the read to administrators, then **Save Configuration**.
+4. Ask the client to retry after approval. Approval never bypasses Signal K or provider permissions.
+
+Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay blocked without creating duplicates. The queue holds at most 64 entries, including saved reviews; when full, new requests return `APPROVAL_QUEUE_FULL`. To remove old entries, an administrator can remove the corresponding `readRequests` entries from the saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
+
+Reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Writes, ambiguous operations and unsupported schemas never enter this queue. There is no MCP approval/configuration-write tool.
+
+Existing manual approvals remain supported under **Manual plugin read approvals (advanced)**. This illustrative entry assumes an installed plugin with that documented operation:
 
 ```json
 {

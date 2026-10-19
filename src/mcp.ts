@@ -13,6 +13,7 @@ import {
 } from "./capabilities/schemas.js";
 import type { LocalGet } from "./capabilities/http.js";
 import { boundedJson } from "./json.js";
+import type { ApprovalRequests } from "./approvals.js";
 
 export function createMcpServer(
   app: App,
@@ -20,6 +21,7 @@ export function createMcpServer(
   config: Config,
   running: () => boolean,
   get?: LocalGet,
+  requests?: ApprovalRequests,
 ) {
   const server = new McpServer({ name: "signalk-mcp", version: "0.1.0" });
   const registry = new CapabilityRegistry(
@@ -28,6 +30,7 @@ export function createMcpServer(
     config,
     running,
     get,
+    requests,
   );
   const run = async (operation: () => object | Promise<object>) => {
     try {
@@ -134,7 +137,7 @@ export function createMcpServer(
     "execute_capability",
     {
       description:
-        "Execute an approved read-only operation as the current Signal K user. Unapproved, write and control operations remain disabled.",
+        "Execute an approved read-only operation as the current Signal K user. An eligible unapproved read returns APPROVAL_PENDING and adds a review to Signal K plugin settings; ask an administrator to review and save it, then retry. Writes remain disabled. Never claim approval or retry repeatedly while waiting.",
       inputSchema: {
         id: z.string().min(1).max(160),
         operation: z.string().min(1).max(128),

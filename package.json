@@ -35,7 +35,7 @@
     "lint": "eslint src test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run build && node --test test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs",
+    "test": "npm run build && node --test test/approvals.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs",
     "test:integration": "npm run build && node --test --test-force-exit test/integration.test.cjs test/hosting.test.cjs test/production-plugin.test.cjs test/runtime.test.cjs test/notifications-native.test.cjs test/restart.test.cjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
     "verify:package": "node test/package-smoke.cjs",
