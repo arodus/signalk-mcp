@@ -1,5 +1,9 @@
 # Verification record
 
+## Alpha 2 release preparation (2026-10-19)
+
+`0.1.0-alpha.2` includes the native PUT approval implementation and initial configuration save fix. Local `npm run check` passes on Node **24.22.0** / Signal K **2.33.0**: type checking, lint, formatting, **72 portable tests** and **58 native integration tests**. The two opt-in product clients and production History backend are skipped locally; the Python MCP client is enabled. The release workflow separately gates publication on both CI workflows, the four supported runtime combinations with real isolated History, and verification of the exact commit-stamped package. Publication and remote CI evidence are recorded by that workflow; these local checks do not establish vessel deployment or physical operation.
+
 ## Initial configuration save fix (2026-10-19)
 
 The configurator allows saving defaults without an edit, including when Signal K has no stored configuration. After that first confirmed save it reloads the page so the host shows its native Enabled switch. Later unchanged saves remain available without reloading. Existing enable/logging/debug flags, administrator enforcement, conflict checks and operation approvals are preserved.

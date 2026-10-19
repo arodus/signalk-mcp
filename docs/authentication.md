@@ -1,6 +1,6 @@
 # Signal K authentication compatibility
 
-Scope: the gateway's existing-token authentication and authorization bridge, including individually approved native PUTs from issue #30. Every plugin GET operation and native PUT target needs its own saved administrator approval in addition to native permissions; there is no blanket approval. Built-in data reads use native permissions without that extra review. This does not certify production providers, vessel deployments or every Signal K release. The published first alpha predates native PUT support.
+Scope: the gateway's existing-token authentication and authorization bridge, including individually approved native PUTs from issue #30. Every plugin GET operation and native PUT target needs its own saved administrator approval in addition to native permissions; there is no blanket approval. Built-in data reads use native permissions without that extra review. This does not certify production providers, vessel deployments or every Signal K release. Native PUT support is included starting with `0.1.0-alpha.2`.
 
 ## Supported releases
 

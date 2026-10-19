@@ -8,7 +8,7 @@ A native Signal K plugin for vessel telemetry, capability discovery, approved pl
 
 **Development status:** authenticated reads and individually approved native PUTs are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 on Node 22/24. This is experimental software for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
 
-**Release status:** the published `0.1.0-alpha.1` predates native PUT support. Build the current source to evaluate the features described here; publishing an updated package is a separate step. Plugin POSTs remain disabled.
+**Release status:** `0.1.0-alpha.2` adds individually approved native PUTs and fixes first-time configuration saving. Plugin POSTs remain disabled.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
@@ -26,13 +26,13 @@ The screenshot uses synthetic example plugins and approval requests. It does not
 
 ## Install for evaluation
 
-Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. The published alpha below predates native PUT support. Install it in a test Signal K configuration directory, using its service account, or build the current source for individually approved PUTs:
+Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. Install the alpha in a test Signal K configuration directory, using its service account:
 
 ```sh
-npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0-alpha.1
+npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0-alpha.2
 ```
 
-`signalk-mcp@next` selects the current prerelease. The default `latest` tag is not used for this alpha. To build from source:
+`signalk-mcp@next` selects the current prerelease. Alpha 2 updates `next` and leaves `latest` unchanged. To build from source:
 
 ```sh
 npm ci --ignore-scripts --omit=optional
@@ -43,7 +43,7 @@ npm pack
 Install the tarball in a **test** Signal K 2.32.0 or 2.33.0 configuration directory, using its service account:
 
 ```sh
-npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0-alpha.1.tgz
+npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0-alpha.2.tgz
 ```
 
 Restart Signal K, open the plugin in Plugin Config and click **Save Configuration**. You can save the defaults without editing anything. After the first save, the page refreshes to show Signal K’s **Enabled** switch; use it to enable the plugin:
