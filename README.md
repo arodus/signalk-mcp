@@ -117,6 +117,21 @@ Existing manual approvals remain supported under the expandable **Manual approva
 
 Put entries in `pluginOperations`. Only GET is supported; `readOnly: true` is an explicit assertion by the administrator who reviewed the operation, not a fact inferred from HTTP or OpenAPI. Use `permission: "admin"` to add an admin-only requirement. Review approvals again when providers change.
 
+### How table and manual approvals interact
+
+The table and manual approvals are separate lists; manual entries do not automatically create table rows. The following rules apply to saved entries matching the current supported operation:
+
+| Table decision                | Matching manual approval | Result                                                                                                    |
+| ----------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| Rejected                      | Present or absent        | Blocked; the table rejection wins.                                                                        |
+| Accepted                      | Absent                   | Allowed under the table's access requirement.                                                             |
+| Accepted                      | Present                  | Allowed under the stricter access requirement; if either requires administrators, the read is admin-only. |
+| Pending                       | Present                  | The manual approval applies; pending does not override it.                                                |
+| No matching review            | Present                  | The manual approval applies.                                                                              |
+| Pending or no matching review | Absent                   | Unapproved; a valid attempt remains blocked and queues a request if needed.                               |
+
+Removing a manual approval leaves the table decision unchanged: a rejection still blocks, and an acceptance still applies. Deleting a table row leaves any manual approval unchanged, so that manual approval may still allow the read when the plugin is available again. Save Configuration applies either change. Signal K and provider permissions, enabled-plugin checks and schema validation remain mandatory in every case.
+
 The table uses Signal K’s embedded configurator, plugin inventory and existing admin configuration API. It preserves unrelated settings and newly queued requests, and checks for conflicting edits before saving. Signal K’s configuration API has no atomic compare-and-swap, so avoid simultaneous settings saves. Connection and staleness options remain available under **Connection and data settings**.
 
 Execution forwards the original bearer token to the same Signal K server. Native route checks and the provider's own authorization remain active; even an approved operation can return `UPSTREAM_PERMISSION_DENIED`. The provider must correctly enforce any data-level permissions its endpoint needs. Generic JSON cannot be mapped automatically onto Signal K telemetry ACLs. Approve only endpoints whose authorization and bounded read-only behavior have been reviewed.
