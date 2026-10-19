@@ -1,6 +1,6 @@
 {
   "name": "signalk-mcp",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "description": "Read-only MCP access to Signal K telemetry, notifications, history and approved plugin APIs using native permissions.",
   "license": "MIT",
   "main": "dist/index.js",
