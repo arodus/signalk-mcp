@@ -1,9 +1,11 @@
 import { z } from "zod";
 import { pathSchema } from "../paths.js";
+// Native plugin IDs come from plugin.id, not the npm package name. Preserve
+// mixed case for discovery, routing and exact approval matching.
 export const pluginIdSchema = z
   .string()
   .max(128)
-  .regex(/^(?:@[a-z0-9_-]+\/)?[a-z0-9][a-z0-9._-]*$/)
+  .regex(/^(?:@[A-Za-z0-9_-]+\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/)
   .refine((id) => !id.split("/").some((part) => part === "." || part === ".."));
 export const operationIdSchema = z
   .string()

@@ -12,7 +12,7 @@ Authorization, input/response validation, bounded selection, pagination and MCP 
 
 ## 1. Current implementation
 
-The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy and v2 notification reads, standard v2 history with native permission checks, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection.
+The independent plugin implements authenticated Streamable HTTP, batched telemetry reads, vessel snapshots, legacy and v2 notification reads, standard v2 history with native permission checks, a compact capability registry, public feature discovery and on-demand plugin OpenAPI inspection. Native plugin IDs retain their exact case throughout discovery, routing and approval matching, including mixed-case IDs.
 
 Plugin execution supports explicitly reviewed GET operations and individually reviewed POST operations with a bounded JSON body contract. The development PUT extension uses the same native administrator review/save workflow, binding every action to an exact self-context path, explicit source and reviewed metadata/value contract. There is no blanket PUT grant. Original Signal K bearer identity, native PUT permissions and native route checks remain mandatory. Unknown operations and unsupported plugin mutation methods remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 

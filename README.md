@@ -14,7 +14,7 @@ A native Signal K plugin for vessel telemetry, capability discovery, approved pl
 
 ## What it provides
 
-- Current vessel telemetry and capability discovery using native Signal K permissions.
+- Current vessel telemetry and capability discovery using native Signal K permissions. Native plugin IDs retain their exact case, including mixed-case IDs such as `AdvancedWind`.
 - Notification reads and standard v2 History API results from installed providers.
 - Reviewed plugin GET and POST operations, with Accept/Reject controls and retained decisions in Plugin Config.
 - Native self-context PUT actions, each bound to an individually saved path/source/metadata approval and native PUT permissions. There is no blanket PUT approval.
