@@ -8,6 +8,17 @@ A native, read-only Signal K plugin for vessel telemetry, capability discovery a
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
+## What it provides
+
+- Current vessel telemetry and capability discovery using native Signal K permissions.
+- Read-only notifications and standard v2 History API results from installed providers.
+- Reviewed plugin GET operations, with Accept/Reject controls and retained decisions in Plugin Config.
+- MCP Streamable HTTP through the existing Signal K server; no separate plugin account or data store.
+
+![Signal K MCP settings and plugin read approval table](docs/images/native-plugin-config.jpg)
+
+The screenshot uses synthetic example plugins and approval requests. It does not show live vessel data. Clients need a native Signal K bearer token and a reachable, trusted endpoint. ChatGPT tunnel setup is not yet verified end-to-end; no built-in OAuth login is provided.
+
 ## Install for evaluation
 
 Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. From the repository:
@@ -43,7 +54,7 @@ The native configuration form below was verified with Signal K 2.33.0 and synthe
 
 ![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.jpg)
 
-See [package verification, upgrade/removal and release acceptance](docs/release-readiness.md) before preparing an installation candidate.
+The release pipeline stamps the release commit into the package and verifies npm’s published `gitHead`. Alpha versions use the `next` distribution tag. See [registry score evidence](docs/registry-readiness.md) and [package verification, upgrade/removal and release acceptance](docs/release-readiness.md) before preparing an installation candidate.
 
 ## Connect and discover
 

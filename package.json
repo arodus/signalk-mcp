@@ -1,7 +1,7 @@
 {
   "name": "signalk-mcp",
   "version": "0.1.0",
-  "description": "Native read-only Signal K MCP gateway using existing Signal K identities",
+  "description": "Read-only MCP access to Signal K telemetry, notifications, history and approved plugin APIs using native permissions.",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -19,7 +19,12 @@
     "signalk-node-server-plugin",
     "signalk-category-utility",
     "mcp",
-    "signalk-plugin-configurator"
+    "signalk-plugin-configurator",
+    "signalk",
+    "model-context-protocol",
+    "marine",
+    "vessel-telemetry",
+    "read-only"
   ],
   "signalk": {
     "displayName": "Signal K MCP",
@@ -34,10 +39,10 @@
   "scripts": {
     "build": "tsc && npm run build:ui",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src test ui webpack.config.cjs",
+    "lint": "eslint src test ui scripts webpack.config.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run build && node --test test/approvals.test.cjs test/configuration-ui.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs",
+    "test": "npm run build && node --test test/approvals.test.cjs test/configuration-ui.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs test/release.test.cjs",
     "test:integration": "npm run build && node --test --test-force-exit test/integration.test.cjs test/hosting.test.cjs test/production-plugin.test.cjs test/runtime.test.cjs test/notifications-native.test.cjs test/restart.test.cjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
     "verify:package": "node test/package-smoke.cjs",
@@ -67,9 +72,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+ssh://git@github.com/arodus/signalk-mcp.git"
+    "url": "git+https://github.com/arodus/signalk-mcp.git"
   },
-  "homepage": "https://github.com/arodus/signalk-mcp",
+  "homepage": "https://github.com/arodus/signalk-mcp#readme",
   "bugs": {
     "url": "https://github.com/arodus/signalk-mcp/issues"
   }

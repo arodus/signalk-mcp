@@ -25,7 +25,7 @@ The package has the `signalk-node-server-plugin` discovery keyword, compiled Com
 
 The official plugin CI is separate from the registry harness and our native integration CI. The registry runs its own installation/load/activation checks and the plugin's tests, applies its audit and metadata rules, then associates the published npm `gitHead` with the official CI workflow. A passing PR run alone is not evidence for an eventual release commit. Run the workflow again on the exact commit that will be published.
 
-Local probing with the official registry at `ce1aa8f4a27cb80ef609c3c452ea96663863d355` reports `loads`, `activates` and `hasSchema` as true, but also records invalid-configuration errors and no ready status. Its activation criterion is absence of a thrown exception. That probe predates the removal of plugin-local host lists and must be repeated for the release candidate. The endpoint requires native security; do not weaken authentication to improve scoring. This unsandboxed local probe does not establish full registry sandbox behavior or a 100/100 score.
+The 2026-10-19 local Linux preflight uses official registry detection/scoring code at `8917282` and returns 100/100 with no detection errors, passing portable tests, a clean installed audit, screenshots and changelog present, and no core-range or legacy-library penalties. This is a network-disabled Docker preflight, not the registry's Firejail run or a published score. See [registry readiness](registry-readiness.md). The public result also depends on official CI for the published npm `gitHead`.
 
 Before publication, verify the registry's current source and requirements rather than assuming its score from local tests:
 
@@ -39,7 +39,7 @@ Official references: [registry scoring and sandbox](https://github.com/SignalK/s
 
 ## Upgrade, rollback and removal
 
-The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synthetic admin account: the staleness setting changed from 300 to 600, survived reload, and was restored to 300; disabling showed `Stopped`, and re-enabling restored the ready status. The [captured configuration](images/native-plugin-config.jpg) shows only the complete settings card, including Save Configuration, with no approved plugin reads. The refreshed labels and help text were checked at 1280-pixel desktop and 390-pixel mobile widths; saving 600 seconds, reloading and restoring 300 seconds succeeded. The separate UI fixture installed the optional published admin UI package and linked its hoisted directory into the location expected by the server. This verifies the form workflow, not a live-vessel configuration or the full installation layout of every host.
+The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synthetic admin account: the staleness setting changed from 300 to 600, survived reload, and was restored to 300; disabling showed `Stopped`, and re-enabling restored the ready status. The [captured configuration](images/native-plugin-config.jpg) shows only the complete settings card, including Save Configuration. The current screenshot shows five synthetic example approval rows in the embedded table. The refreshed labels and help text were checked at 1280-pixel desktop and 390-pixel mobile widths; saving 600 seconds, reloading and restoring 300 seconds succeeded. The separate UI fixture installed the optional published admin UI package and linked its hoisted directory into the location expected by the server. This verifies the form workflow, not a live-vessel configuration or the full installation layout of every host.
 
 Before changing an existing installation, save the current package version and the plugin's configuration through the host's normal backup process. Keep provider approvals for review; a provider upgrade can change a route's behavior or permissions.
 
@@ -78,3 +78,13 @@ This procedure is scheduled after the first alpha release, not as a prerequisite
 - [ ] Audit the actual production Signal K host before installation; package audit results do not certify that host.
 
 Full process replacement and synthetic large-value recovery are covered by local native tests; see the resource report for workload-specific limits. No publication or deployment is implied by these checklists.
+
+## Release workflow
+
+The tag-driven workflow follows [arodus/signalk-alert-center](https://github.com/arodus/signalk-alert-center/blob/main/.github/workflows/release.yml). It calls both existing CI workflows before publication, then requires an annotated `v<package version>` tag on a commit contained in `main`, a clean checkout, and matching nonempty `## [<version>] - <date>` changelog notes. No version bump or tag is created automatically.
+
+`scripts/create-release-package.mjs` stamps the actual `git rev-parse HEAD` into the tarball's `package.json.gitHead`, checks the packed value, writes a SHA-256 checksum and restores the tracked manifest. Do not hard-code a commit SHA in the tracked manifest. The workflow installs and tests that exact tarball with native Signal K and both SDK clients, audits it, retains it as a workflow artifact, then publishes it. Prereleases use npm's `next` tag; stable releases use `latest`.
+
+After publishing, the workflow verifies npm's `gitHead` matches the release commit before creating the GitHub release with the tarball, checksum and version-specific changelog notes. A failed verification stops the GitHub release step; it cannot undo an npm publication already completed.
+
+Before the first authorized alpha, configure the GitHub `release` environment and npm publishing access. The workflow supports an `NPM_BOOTSTRAP_TOKEN` environment secret for the first publication. Remove it after configuring npm trusted publishing for this repository's `release.yml` workflow and `release` environment; subsequent releases use OIDC. These account settings and publication have not been performed by adding the workflow.
