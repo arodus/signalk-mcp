@@ -76,6 +76,15 @@ test(
       path.join(dir, "plugin-config-data/mcp-fixture.json"),
       JSON.stringify({ enabled: true, configuration: {} }),
     );
+    fs.symlinkSync(
+      path.join(__dirname, "fixtures/mixed-case-fixture"),
+      path.join(dir, "node_modules/mixed-case-fixture"),
+      "dir",
+    );
+    fs.writeFileSync(
+      path.join(dir, "plugin-config-data/AdvancedWind.json"),
+      JSON.stringify({ enabled: true, configuration: {} }),
+    );
     fs.writeFileSync(
       path.join(dir, "plugin-config-data/signalk-mcp.json"),
       JSON.stringify({
@@ -83,6 +92,13 @@ test(
         configuration: {
           staleAfterSeconds: 300,
           pluginOperations: [
+            {
+              pluginId: "AdvancedWind",
+              operationId: "readApproved",
+              method: "GET",
+              path: "/approved",
+              readOnly: true,
+            },
             {
               pluginId: "mcp-fixture",
               operationId: "readReading",
@@ -584,6 +600,55 @@ test(
           ).value,
           0,
         );
+      },
+    );
+    await t.test(
+      "native mixed-case ID discovery preserves approval and route identity",
+      async () => {
+        const native = await server.app.getFeatures();
+        assert.ok(
+          native.plugins.some(
+            (plugin) => plugin.id === "AdvancedWind" && plugin.enabled,
+          ),
+        );
+        const listing = await client.callTool({
+          name: "list_capabilities",
+          arguments: {},
+        });
+        assert.equal(listing.structuredContent.discovery, "complete");
+        assert.ok(
+          listing.structuredContent.capabilities.some(
+            (cap) =>
+              cap.id === "plugin.AdvancedWind" &&
+              cap.provider === "AdvancedWind",
+          ),
+        );
+        const description = await client.callTool({
+          name: "describe_capability",
+          arguments: { id: "plugin.AdvancedWind" },
+        });
+        assert.equal(description.structuredContent.available, true);
+        const unapproved = description.structuredContent.operations.find(
+          (op) => op.id === "read",
+        );
+        assert.equal(unapproved.enabled, false);
+        assert.equal(unapproved.reason, "NOT_ALLOWLISTED");
+        const provider = loadedPlugin(server, "AdvancedWind");
+        assert.equal(provider.testCalls.reads, 0);
+        const blocked = await cap("read", {}, "plugin.AdvancedWind");
+        assert.equal(blocked.isError, true);
+        assert.equal(blocked.content[0].text, "APPROVAL_PENDING");
+        assert.equal(provider.testCalls.reads, 0);
+        const approved = await cap("readApproved", {}, "plugin.AdvancedWind");
+        assert.equal(approved.isError, undefined, JSON.stringify(approved));
+        assert.deepEqual(approved.structuredContent.data, { value: 0 });
+        assert.equal(provider.testCalls.reads, 1);
+        const wrongCase = await client.callTool({
+          name: "describe_capability",
+          arguments: { id: "plugin.advancedwind" },
+        });
+        assert.equal(wrongCase.isError, true);
+        assert.equal(wrongCase.content[0].text, "CAPABILITY_NOT_FOUND");
       },
     );
     await t.test(

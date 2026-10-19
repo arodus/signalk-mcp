@@ -1,5 +1,15 @@
 # Verification record
 
+## Mixed-case native plugin discovery (2026-10-19)
+
+Read-only inspection of tunaplotter's `/signalk/v2/features` found 47 native plugin entries. Exactly `AdvancedWind` and `SpeedAndCurrent` failed the gateway's lowercase-only plugin-ID validator, causing the whole plugin/API inventory to return `INVALID_FEATURES`. Signal K exposes native `plugin.id` values, which need not match lowercase npm package names. The shared validator now accepts bounded ASCII mixed-case IDs without normalizing them, and its exported JSON Schema retains that accepted character set.
+
+An offline replay of that inventory with synthetic authentication returns `discovery: complete`, 58 capabilities and no next page. This is a replay of discovery metadata, not a deployment or a claim that every plugin's operations are supported. No live operation was executed and the vessel installation was not changed.
+
+`MCP_TEST_PYTHON=/tmp/signalk-mcp-python-client/bin/python npm run check` on Node **24.22.0** / Signal K **2.33.0** passes type checking, lint, formatting, **85 portable tests** and **61 native integration tests**, with three optional product-client/production-History skips. Python MCP interoperability passes. The main native integration file also passes on Node **22.23.3** / Signal K **2.33.0**, Node **24.22.0** / Signal K **2.32.0**, and Node **22.23.3** / Signal K **2.32.0**: 25 passing entries and three optional skips in each combination. `git diff --check` passes.
+
+The new synthetic native plugin uses npm package name `mixed-case-fixture` and native ID `AdvancedWind`. Tests verify complete discovery, on-demand native OpenAPI inspection, an unapproved read returning `APPROVAL_PENDING` without invoking the handler, exact approved native GET forwarding preserving zero, and rejection of differently cased capability lookup. Focused tests additionally verify both affected live IDs, scoped mixed-case IDs, case-distinct approvals, exported JSON Schema, and continued rejection of traversal, URL syntax and oversized IDs. They do not use live credentials or vessel-control hardware.
+
 ## Alpha 2 release preparation (2026-10-19)
 
 `0.1.0-alpha.2` includes the native PUT approval implementation and initial configuration save fix. Local `npm run check` passes on Node **24.22.0** / Signal K **2.33.0**: type checking, lint, formatting, **72 portable tests** and **58 native integration tests**. The two opt-in product clients and production History backend are skipped locally; the Python MCP client is enabled. The release workflow separately gates publication on both CI workflows, the four supported runtime combinations with real isolated History, and verification of the exact commit-stamped package. Publication and remote CI evidence are recorded by that workflow; these local checks do not establish vessel deployment or physical operation.

@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix `INVALID_FEATURES` when native plugin IDs contain uppercase letters, such as `AdvancedWind` and `SpeedAndCurrent`. Preserve exact IDs for discovery, OpenAPI, routing and approval matching while retaining input bounds and path-safety checks.
+
 ## [0.1.0-alpha.3] - 2026-10-19
 
 - Add individually reviewed plugin POST endpoints with bounded JSON inputs through `execute_mutation`. Each endpoint requires its own administrator approval saved through native Plugin Config, plus a native write-capable identity and provider permission checks.
