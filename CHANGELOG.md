@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-10-19
+
+- Add individually reviewed plugin POST endpoints with bounded JSON inputs through `execute_mutation`. Each endpoint requires its own administrator approval saved through native Plugin Config, plus a native write-capable identity and provider permission checks.
+- Bind POST approvals to the reviewed endpoint contract: method, route, inputs and documented meaning. A plugin package version change alone does not invalidate approval.
+- Show POST endpoints as writes in the admin configurator and allow saved approvals to be revoked while the provider remains installed.
+- Preserve provider responses and report uncertain mutation outcomes without automatic retries or claims of physical completion.
+- Verify plugin POST and production-provider integration tests against the exact release tarball before publishing.
+
 ## [0.1.0-alpha.2] - 2026-10-19
 
 - Describe the gateway as permission-aware data access with individually approved actions. Every plugin GET and native PUT starts blocked and needs its own saved administrator approval; there is no blanket approval. Built-in data reads continue to use native Signal K permissions.

@@ -59,7 +59,7 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/release-install" --omit=dev --ignore-scripts "$PWD/$PACKAGE_FILE"
           MCP_TEST_PLUGIN_DIR="$RUNNER_TEMP/release-install/node_modules/signalk-mcp" \
           MCP_TEST_PYTHON="$RUNNER_TEMP/mcp-python/bin/python" \
-          node --test --test-force-exit test/integration.test.cjs test/native-puts.test.cjs
+          node --test --test-force-exit test/integration.test.cjs test/native-puts.test.cjs test/native-posts.test.cjs test/production-plugin.test.cjs
           npm audit --prefix "$RUNNER_TEMP/release-install" --omit=dev
       - name: Extract release notes
         run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" release-notes.md

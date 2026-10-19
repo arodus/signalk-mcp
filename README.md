@@ -8,7 +8,7 @@ A native Signal K plugin for vessel telemetry, capability discovery, approved pl
 
 **Development status:** authenticated reads, individually reviewed plugin POSTs and individually approved native PUTs are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 on Node 22/24. This is experimental software for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
 
-**Release status:** `0.1.0-alpha.2` adds individually approved native PUTs and fixes first-time configuration saving. Individually reviewed plugin POSTs are available in the current source; they are not included in alpha.2.
+**Release status:** `0.1.0-alpha.3` adds individually reviewed plugin POST endpoints. Approvals are bound to the endpoint contract; a package version change alone does not require renewed approval. Native PUTs and first-time configuration saving remain supported.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
@@ -29,10 +29,10 @@ The screenshot uses synthetic example plugins and approval requests. It does not
 Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. Install the alpha in a test Signal K configuration directory, using its service account:
 
 ```sh
-npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0-alpha.2
+npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0-alpha.3
 ```
 
-`signalk-mcp@next` selects the current prerelease. Alpha 2 updates `next` and leaves `latest` unchanged. To build from source:
+`signalk-mcp@next` selects the current prerelease. Alpha 3 updates `next` and leaves `latest` unchanged. To build from source:
 
 ```sh
 npm ci --ignore-scripts --omit=optional
@@ -43,7 +43,7 @@ npm pack
 Install the tarball in a **test** Signal K 2.32.0 or 2.33.0 configuration directory, using its service account:
 
 ```sh
-npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0-alpha.2.tgz
+npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0-alpha.3.tgz
 ```
 
 Restart Signal K, open the plugin in Plugin Config and click **Save Configuration**. You can save the defaults without editing anything. After the first save, the page refreshes to show Signal K’s **Enabled** switch; use it to enable the plugin:
@@ -260,4 +260,4 @@ The initial body subset is an optional or required JSON object with at most 32 d
 
 Each invocation requires a current native `readwrite` or `admin` identity, enabled provider, exact saved approval and the provider's native route/data permissions. Original bearer forwarding uses the accepted server socket and verified TLS; redirects are refused. The gateway does not invent telemetry ACLs for arbitrary provider data, so administrator review must include the provider's authorization behavior.
 
-Results include `statusCode`, unchanged provider `data`, `submitted: true` and `retrySafe: false`. `outcome: responded` means an HTTP response was received, not that an action succeeded physically or semantically. HTTP 202 is `accepted`; inspect the provider's own pending/failure fields. HTTP errors, disconnects, invalid/oversized replies and post-dispatch revocation return `unknown` with sanitized codes. No automatic retry, generic status polling or cancellation guarantee is provided. No updated release or deployment is implied.
+Results include `statusCode`, unchanged provider `data`, `submitted: true` and `retrySafe: false`. `outcome: responded` means an HTTP response was received, not that an action succeeded physically or semantically. HTTP 202 is `accepted`; inspect the provider's own pending/failure fields. HTTP errors, disconnects, invalid/oversized replies and post-dispatch revocation return `unknown` with sanitized codes. No automatic retry, generic status polling or cancellation guarantee is provided. This does not establish vessel deployment or physical operation.
