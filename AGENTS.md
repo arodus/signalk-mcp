@@ -4,14 +4,15 @@
 
 Build the native Signal K MCP gateway described in BRIEF.md. The brief is architectural direction, not proof that an upstream API exists. README.md documents implemented behavior; docs/architecture.md and later ADRs record verified interfaces and gaps.
 
-Keep this project independent. Preserve compatibility with ordinary Signal K installations. The gateway only discovers, fetches and forwards data. Calculations, mathematical analysis, derived metrics, data transformations, sandbox execution and Container Manager integration are outside scope, not deferred features.
+Keep this project independent. Preserve compatibility with ordinary Signal K installations. The gateway discovers, fetches and forwards data and forwards individually approved native PUT actions. Calculations, mathematical analysis, derived metrics, data transformations, sandbox execution and Container Manager integration are outside scope, not deferred features.
 
 ## Security and architecture
 
-- Keep the implemented gateway read-only. Never expose control, configuration writes, arbitrary URLs, files, shell commands or in-process JavaScript execution.
+- Native PUT actions require the same administrator review/save flow as plugin GETs, with approval bound to one exact self-context path, explicit handler source and reviewed metadata/value contract. Never allow all PUTs, wildcard targets or implicit approval from native permissions or `supportsPut`. Plugin POSTs remain disabled until their separate implementation is reviewed. Never expose arbitrary configuration writes, URLs, files, shell commands or in-process JavaScript execution.
 - Reuse Signal K tokens and permissions. Do not create a second authentication system, read signing secrets, mint privileged tokens or bypass the caller's identity.
 - Authorize each invocation and every exposed telemetry path/source. Discovery is not authorization. Unknown plugin operations remain disabled unless explicitly reviewed and allowlisted.
-- Eligible blocked plugin reads may queue bounded in-memory review metadata only. Save approvals through native admin Plugin Config; never grant or persist approvals from MCP. Saved rejection overrides a matching manual approval; schema/route changes cannot inherit a request approval.
+- Eligible blocked plugin reads and native PUTs may queue bounded in-memory review metadata only, without submitted values or tokens. Save approvals through native admin Plugin Config; never grant or persist approvals from MCP. Saved rejection overrides a matching manual approval; target/source/schema/meaning changes cannot inherit a request approval.
+- Require native write-capable identity and exact-source `put` authorization for every PUT, preserving native HTTP route checks and the original bearer. `write` is not a substitute for `put`. Track request status only for gateway-submitted actions owned by the same native identity, with bounded expiry. Never automatically retry a submitted or uncertain mutation or claim that disconnect/cancellation undoes it.
 - Use Signal K’s CORS decision for browser-origin requests; do not reintroduce plugin-local host/origin lists. Preserve bearer authentication, input/output limits, sanitized errors and fail-closed behavior when required adapters are unavailable.
 - Prefer public Signal K interfaces. Isolate version-sensitive internals and document/test their supported versions. Verify uncertain behavior against source and real integration tests.
 - Keep transport, identity, telemetry access, discovery and capability execution separate. Dedicated tools and generic capability calls must use the same authorization/data implementation.

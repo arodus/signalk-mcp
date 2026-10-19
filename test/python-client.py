@@ -15,7 +15,7 @@ async def main():
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 tools = await session.list_tools()
-                assert sorted(tool.name for tool in tools.tools) == ["describe_capability", "execute_capability", "get_history", "get_notification", "get_values", "get_vessel_state", "list_capabilities", "list_notifications", "list_paths"]
+                assert sorted(tool.name for tool in tools.tools) == ["describe_capability", "describe_put", "execute_capability", "execute_mutation", "get_history", "get_notification", "get_put_status", "get_values", "get_vessel_state", "list_capabilities", "list_notifications", "list_paths", "list_put_paths", "put_value"]
                 paths = await session.call_tool("list_paths", {"prefix": "navigation"})
                 assert "navigation.speedOverGround" in json.loads(paths.content[0].text)["paths"]
                 values = await session.call_tool("get_values", {"paths": ["navigation.speedOverGround"]})

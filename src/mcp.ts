@@ -14,6 +14,14 @@ import {
 import type { LocalGet } from "./capabilities/http.js";
 import { boundedJson } from "./json.js";
 import type { ApprovalRequests } from "./approvals.js";
+import type { LocalActions } from "./put-types.js";
+import {
+  NativePuts,
+  describePutInput,
+  putInput,
+  putPathsInput,
+  putStatusInput,
+} from "./puts.js";
 
 export function createMcpServer(
   app: App,
@@ -22,6 +30,8 @@ export function createMcpServer(
   running: () => boolean,
   get?: LocalGet,
   requests?: ApprovalRequests,
+  puts?: NativePuts,
+  actions?: LocalActions,
 ) {
   const server = new McpServer({ name: "signalk-mcp", version: "0.1.0" });
   const registry = new CapabilityRegistry(
@@ -31,13 +41,33 @@ export function createMcpServer(
     running,
     get,
     requests,
+    puts,
+    actions,
   );
-  const run = async (operation: () => object | Promise<object>) => {
+  const run = async (
+    operation: () => object | Promise<object>,
+    mutation = false,
+  ) => {
     try {
       registry.authorize();
-      const data = await operation();
-      registry.authorize();
-      const text = boundedJson(data, 256 * 1024);
+      let data = await operation();
+      // The mutation implementation reauthorizes before dispatch and owns its
+      // outcome. A later denial must not disguise a possibly submitted action
+      // as an ordinary read failure that a client might retry.
+      if (!mutation) registry.authorize();
+      let text: string;
+      try {
+        text = boundedJson(data, 256 * 1024);
+      } catch (error) {
+        if (!mutation) throw error;
+        data = {
+          outcome: "unknown",
+          submitted: true,
+          retrySafe: false,
+          code: "PUT_RESULT_UNAVAILABLE",
+        };
+        text = JSON.stringify(data);
+      }
       return {
         content: [{ type: "text" as const, text }],
         structuredContent: data as Record<string, unknown>,
@@ -69,7 +99,7 @@ export function createMcpServer(
   ) => {
     server.registerTool(
       name,
-      { description, inputSchema: input.shape, annotations },
+      { description, inputSchema: input, annotations },
       (args: Record<string, unknown>) =>
         run(() => registry.execute(capability, name, args)),
     );
@@ -110,6 +140,61 @@ export function createMcpServer(
     "Fetch and forward one authorized v2 notification registry record by its listed ID. No notification lifecycle actions.",
     notificationInput,
   );
+  registerCore(
+    "list_put_paths",
+    "signalk.put",
+    "List permission-filtered native PUT path candidates advertised by metadata for an explicit handler source. No current values or complete handler catalog.",
+    putPathsInput,
+  );
+  registerCore(
+    "describe_put",
+    "signalk.put",
+    "Read a native PUT target's metadata, units and supplied value constraints for an explicit source. Discovery never approves execution or guarantees a registered handler.",
+    describePutInput,
+  );
+  registerCore(
+    "get_put_status",
+    "signalk.put",
+    "Check a native action submitted through this gateway by the same Signal K identity. Expired, foreign and unknown request IDs are unavailable. HTTP success alone is not action success.",
+    putStatusInput,
+  );
+  const mutationAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: true,
+    idempotentHint: false,
+    openWorldHint: true,
+  };
+  server.registerTool(
+    "put_value",
+    {
+      description:
+        "Submit one native Signal K PUT action for an exact path and source. Requires saved administrator approval and native PUT permission. An eligible unapproved target returns APPROVAL_PENDING without dispatch; review it in native Plugin Config. Never retry an unknown/submitted outcome automatically; check the original request status when available. Completion is not physical proof.",
+      inputSchema: putInput,
+      annotations: mutationAnnotations,
+    },
+    (args: Record<string, unknown>) =>
+      run(
+        () => registry.executeMutation("signalk.put", "put_value", args),
+        true,
+      ),
+  );
+  server.registerTool(
+    "execute_mutation",
+    {
+      description:
+        "Execute an individually approved mutation under the caller's Signal K identity. Currently only signalk.put / put_value is supported. Plugin POSTs remain disabled. Never automatically retry a submitted or unknown outcome.",
+      inputSchema: z
+        .object({
+          id: z.string().min(1).max(160),
+          operation: z.string().min(1).max(128),
+          arguments: z.record(z.unknown()).default({}),
+        })
+        .strict(),
+      annotations: mutationAnnotations,
+    },
+    ({ id, operation, arguments: args }) =>
+      run(() => registry.executeMutation(id, operation, args), true),
+  );
   server.registerTool(
     "list_capabilities",
     {
@@ -137,7 +222,7 @@ export function createMcpServer(
     "execute_capability",
     {
       description:
-        "Execute an approved read-only operation as the current Signal K user. An eligible unapproved read returns APPROVAL_PENDING and adds a review to Signal K plugin settings; ask an administrator to review and save it, then retry. Writes remain disabled. Never claim approval or retry repeatedly while waiting.",
+        "Execute a core read or an individually approved plugin GET as the current Signal K user. Every plugin operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require their own individual approval through put_value or execute_mutation; plugin POSTs remain disabled. Never claim approval or retry repeatedly while waiting.",
       inputSchema: {
         id: z.string().min(1).max(160),
         operation: z.string().min(1).max(128),

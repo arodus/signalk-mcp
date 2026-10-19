@@ -353,3 +353,83 @@ test("configuration retires only the old network lists without losing existing a
   assert.equal("allowedHosts" in schema.properties, false);
   assert.equal("allowedOrigins" in schema.properties, false);
 });
+
+test("mutation tools declare side effects, preserve uncertain outcomes and reject input extras", async (t) => {
+  const { app, principal } = fixture();
+  let calls = 0;
+  const puts = {
+    async execute() {
+      calls++;
+      principal.permissions = "unknown";
+      return { submitted: true, outcome: "unknown", retrySafe: false };
+    },
+  };
+  const server = createMcpServer(
+    app,
+    "Bearer token",
+    { staleAfterSeconds: 300, pluginOperations: [], readRequests: {} },
+    () => true,
+    undefined,
+    {},
+    puts,
+    {},
+  );
+  const client = new Client({ name: "mutation-boundary-test", version: "1" });
+  const [clientTransport, serverTransport] =
+    InMemoryTransport.createLinkedPair();
+  await server.connect(serverTransport);
+  await client.connect(clientTransport);
+  t.after(async () => {
+    await client.close();
+    await server.close();
+  });
+  const { tools } = await client.listTools();
+  assert.equal(tools.length, 14);
+  for (const name of ["put_value", "execute_mutation"]) {
+    const tool = tools.find((item) => item.name === name);
+    assert.deepEqual(tool.annotations, {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    });
+    assert.equal(tool.inputSchema.additionalProperties, false);
+  }
+  assert.equal(
+    tools.find((tool) => tool.name === "execute_capability").annotations
+      .readOnlyHint,
+    true,
+  );
+  const args = {
+    path: "electrical.switches.fixture.state",
+    source: "fixture",
+    value: false,
+  };
+  for (const extra of [{ context: "vessels.other" }, { requestId: "extra" }]) {
+    const rejected = await client.callTool({
+      name: "put_value",
+      arguments: { ...args, ...extra },
+    });
+    assert.equal(rejected.isError, true);
+    assert.equal(calls, 0);
+  }
+  const pluginPost = await client.callTool({
+    name: "execute_mutation",
+    arguments: { id: "plugin.fixture", operation: "post", arguments: {} },
+  });
+  assert.equal(pluginPost.content[0].text, "OPERATION_DISABLED");
+  assert.equal(calls, 0);
+  const result = await client.callTool({ name: "put_value", arguments: args });
+  assert.equal(calls, 1);
+  assert.deepEqual(result.structuredContent, {
+    submitted: true,
+    outcome: "unknown",
+    retrySafe: false,
+  });
+  assert.equal(result.isError, undefined);
+  const read = await client.callTool({
+    name: "get_values",
+    arguments: { paths: ["navigation.speed"] },
+  });
+  assert.equal(read.content[0].text, "PERMISSION_DENIED");
+});

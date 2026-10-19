@@ -1,6 +1,6 @@
 # Signal K authentication compatibility
 
-Scope: the read-only gateway's existing-token authentication and authorization bridge. This does not certify production providers, vessel deployments or every Signal K release.
+Scope: the gateway's existing-token authentication and authorization bridge, including individually approved native PUTs from issue #30. Every plugin GET operation and native PUT target needs its own saved administrator approval in addition to native permissions; there is no blanket approval. Built-in data reads use native permissions without that extra review. This does not certify production providers, vessel deployments or every Signal K release. The published first alpha predates native PUT support.
 
 ## Supported releases
 
@@ -19,6 +19,7 @@ Older releases, prereleases and untested future releases are not declared suppor
 - Authentication must explicitly set `skIsAuthenticated` to `true` and provide a nonempty string identifier with a known `readonly`, `readwrite` or `admin` permission. Anonymous `AUTO` identities are rejected.
 - Principal snapshots contain only identifier and permission; they do not copy arbitrary private fields from the native object.
 - `checkACL(identifier, context, path, source, 'read')` must return the boolean `true` to expose a measurement. Truthy objects, strings and promises do not grant access.
+- `checkACL(identifier, 'vessels.self', path, explicitSource, 'put')` must return literal `true` for a native PUT target, alongside a `readwrite`/`admin` principal and saved exact approval. Telemetry `write` permission does not authorize a PUT. Admin does not bypass ACLs.
 
 `anyACLs()` is an additional version-sensitive hook used for history queries without a source filter and notification records without model-resolved source provenance. It must return literal `false`, alongside a native read grant, to allow such a query. Missing hooks, unknown results and configured ACLs fail closed for unfiltered reads. The gateway never reads security configuration or assumes that an admin or wildcard-source check bypasses source rules. Both tested releases exercise this hook and ACL insertion while a request is pending.
 
@@ -57,4 +58,10 @@ Run under the selected Node version. Create the Python environment using the REA
 
 ## Admin settings table
 
-The embedded configuration panel uses the host’s React 19 instance and `serverRoutesPrefix`, reads native `/plugins` metadata, and saves through `/plugins/signalk-mcp/config` with the existing browser session. This admin settings flow is separate from MCP bearer authentication. No new HTTP write route, MCP write tool or credential is introduced. Native tests on both supported server versions verify administrator-only saves and missing-plugin review deletion. The frontend rechecks current configuration and plugin presence before saving, but the host API does not offer atomic conditional writes.
+The embedded configuration panel uses the host’s React 19 instance and `serverRoutesPrefix`, reads native `/plugins` metadata, and saves through `/plugins/signalk-mcp/config` with the existing browser session. This admin settings flow is separate from MCP bearer authentication; no MCP tool can save approvals. Native PUT reviews use the same table as plugin GETs, without a second credential or approval API. The frontend rechecks current configuration and plugin presence before saving, but the host API does not offer atomic conditional writes.
+
+## Native PUT boundary
+
+Signal K 2.32.0/2.33.0's HTTP handler calls `shouldAllowPut` with a null source before choosing `body.source`. The gateway additionally checks the exact handler source through native `put` ACLs, then forwards the original bearer over fixed-local HTTP so native role and route checks remain active. It does not use the public in-process PUT helpers, which dispatch without the inbound authenticated request. Targets and sources never use wildcards, and metadata advertising PUT support never grants permission.
+
+Every PUT requires a saved exact path/source/metadata/value-contract review. Identity and permissions are resolved afresh before dispatch; post-response authorization/binding changes produce an explicit unknown outcome because the action may already have happened. Do not apply the generic read error/retry behavior to these results. Status polling reauthenticates and checks same-identity ownership, original target binding, current metadata, ACLs, approval, one-hour expiry and lifecycle state. The gateway never proxies arbitrary native request IDs; the native status route itself lacks an ownership check in the supported releases. See [native PUT behavior and remaining limits](native-puts.md).

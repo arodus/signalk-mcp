@@ -3,16 +3,19 @@ import type { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { authenticate, GatewayError, type App } from "./auth.js";
 import { configSchema, schema, uiSchema, type Config } from "./config.js";
-import { localGet } from "./capabilities/http.js";
+import { localActions, localGet } from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
 import { boundedJson } from "./json.js";
 import { validateOrigin } from "./origin.js";
 import { ApprovalRequests } from "./approvals.js";
 import { record } from "./data.js";
+import { NativePuts } from "./puts.js";
 
 function pluginFactory(app: App): Plugin {
   let config: Config | undefined;
   const requests = new ApprovalRequests();
+  const puts = new NativePuts(app);
+  let metadataGeneration = 0;
   const active = new Set<ReturnType<typeof createMcpServer>>();
   const pending = new Map<AbortController, Response>();
   const guard = (req: Request, res: Response) => {
@@ -70,6 +73,13 @@ function pluginFactory(app: App): Plugin {
           settings.localTlsServerName,
         ),
         requests,
+        puts,
+        localActions(
+          req,
+          req.get("authorization")!,
+          controller.signal,
+          settings.localTlsServerName,
+        ),
       );
       active.add(server);
       const transport = new StreamableHTTPServerTransport({
@@ -113,7 +123,8 @@ function pluginFactory(app: App): Plugin {
   return {
     id: "signalk-mcp",
     name: "Signal K MCP",
-    description: "Authenticated read-only MCP vessel telemetry",
+    description:
+      "Authenticated MCP telemetry and individually approved native PUT actions",
     schema: () => {
       // A disabled plugin may never have started in this process. Its saved
       // reviews must still be visible/editable in the native configuration UI.
@@ -132,6 +143,7 @@ function pluginFactory(app: App): Plugin {
     uiSchema: () => ({ ...uiSchema, readRequests: requests.uiSchema() }),
     start(options: unknown) {
       config = undefined;
+      puts.reset();
       const parsed = configSchema.safeParse(options);
       if (!parsed.success) {
         app.setPluginError(
@@ -141,12 +153,29 @@ function pluginFactory(app: App): Plugin {
       }
       config = parsed.data;
       requests.reset(config.readRequests);
+      const generation = ++metadataGeneration;
+      // Native metadata-only targets need not exist in the value model. Record
+      // bounded path hints from public deltas and always preserve host delivery.
+      // The native plugin facade removes this hook when the plugin stops.
+      if (typeof app.registerDeltaInputHandler === "function")
+        app.registerDeltaInputHandler((delta, next) => {
+          try {
+            if (config && generation === metadataGeneration)
+              puts.observeDelta(delta);
+          } catch {
+            // Malformed provider metadata must not interrupt Signal K telemetry.
+          } finally {
+            next(delta);
+          }
+        });
       app.setPluginStatus(
-        "Read-only MCP endpoint ready; Signal K token security required",
+        "MCP endpoint ready; reads and individually approved PUTs require Signal K permissions",
       );
     },
     async stop() {
       config = undefined;
+      metadataGeneration++;
+      puts.reset();
       for (const [controller, response] of pending) {
         controller.abort();
         // Closing the MCP transport alone can leave its HTTP response pending.

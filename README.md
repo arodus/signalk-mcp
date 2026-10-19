@@ -1,27 +1,32 @@
 # Signal K MCP
 
-A native, read-only Signal K plugin for vessel telemetry, capability discovery and approved plugin API calls over MCP Streamable HTTP. It runs at `/plugins/signalk-mcp/mcp`, using the existing Signal K server, bearer tokens and permissions. No extra account, key, listener or container is required.
+A native Signal K plugin for vessel telemetry, capability discovery, approved plugin reads and individually approved native PUT actions over MCP Streamable HTTP. It runs at `/plugins/signalk-mcp/mcp`, using the existing Signal K server, bearer tokens and permissions. No extra account, key, listener or container is required.
 
-**Scope:** discover, fetch and forward authorized data. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
+**Individual approval required:** every plugin GET operation and every native PUT target starts blocked and needs its own explicit administrator approval saved in Signal K Plugin Config. There is no allow-all switch. Installing the gateway, discovering an operation or holding a write-capable token does not approve it. Approvals cover an exact operation/target, not every future operation from a plugin; Signal K permissions still apply on every call. Built-in telemetry, history and notification reads use native Signal K permissions without an extra operation review.
 
-**Alpha status (`0.1.0-alpha.1`):** authenticated telemetry and the read-only capability layer are implemented and integration-tested against Signal K 2.32.0 and 2.33.0. This is an experimental release for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
+**Scope:** discover, fetch and forward authorized data and individually approved native actions. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
+
+**Development status:** authenticated reads and individually approved native PUTs are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 on Node 22/24. This is experimental software for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
+
+**Release status:** the published `0.1.0-alpha.1` predates native PUT support. Build the current source to evaluate the features described here; publishing an updated package is a separate step. Plugin POSTs remain disabled.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
 ## What it provides
 
 - Current vessel telemetry and capability discovery using native Signal K permissions.
-- Read-only notifications and standard v2 History API results from installed providers.
+- Notification reads and standard v2 History API results from installed providers.
 - Reviewed plugin GET operations, with Accept/Reject controls and retained decisions in Plugin Config.
+- Native self-context PUT actions, each bound to an individually saved path/source/metadata approval and native PUT permissions. There is no blanket PUT approval.
 - MCP Streamable HTTP through the existing Signal K server; no separate plugin account or data store.
 
-![Signal K MCP settings and plugin read approval table](docs/images/native-plugin-config.jpg)
+![Native Signal K configuration with individually reviewed GET and PUT operations](docs/images/native-put-approvals.png)
 
 The screenshot uses synthetic example plugins and approval requests. It does not show live vessel data. Clients need a native Signal K bearer token and a reachable, trusted endpoint. ChatGPT tunnel setup is not yet verified end-to-end; no built-in OAuth login is provided.
 
 ## Install for evaluation
 
-Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. Install the alpha in a test Signal K configuration directory, using its service account:
+Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. The published alpha below predates native PUT support. Install it in a test Signal K configuration directory, using its service account, or build the current source for individually approved PUTs:
 
 ```sh
 npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0-alpha.1
@@ -56,27 +61,30 @@ Older `allowedHosts` and `allowedOrigins` plugin settings are ignored for upgrad
 
 Enable Signal K security and supply an existing user/device token in `Authorization: Bearer <token>` on every request. Guest reads and security-disabled servers are refused. The plugin does not create tokens or read signing secrets. Use Signal K TLS or a trusted TLS reverse proxy for remote access.
 
-The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. It shows a synthetic plugin read in the native review section.
-
-![Native Signal K plugin configuration with the gateway enabled](docs/images/native-plugin-config.jpg)
+The native configuration form pictured above was verified with Signal K 2.33.0 and synthetic fixtures. It shows one plugin GET and three native PUT review examples; no hardware is connected. The layout was checked at 390-, 1280- and 1920-pixel widths.
 
 The release pipeline stamps the release commit into the package and verifies npm’s published `gitHead`. Alpha versions use the `next` distribution tag. See [registry score evidence](docs/registry-readiness.md) and [package verification, upgrade/removal and release acceptance](docs/release-readiness.md) before preparing an installation candidate.
 
 ## Connect and discover
 
-Configure a Streamable HTTP client with your endpoint, for example `https://boat.example/plugins/signalk-mcp/mcp`, and the bearer header. The nine tools keep discovery separate from execution:
+Configure a Streamable HTTP client with your endpoint, for example `https://boat.example/plugins/signalk-mcp/mcp`, and the bearer header. The fourteen tools keep discovery separate from execution:
 
-| Tool                  | Purpose                                                             |
-| --------------------- | ------------------------------------------------------------------- |
-| `list_paths`          | Discover authorized self-context measurement paths, with pagination |
-| `get_values`          | Read 1–64 paths with native units, timestamps, source and freshness |
-| `get_vessel_state`    | Read a compact navigation and environment snapshot                  |
-| `get_history`         | Fetch standard v2 History results using Signal K permissions        |
-| `list_notifications`  | Fetch authorized v2 notification registry records, with pagination  |
-| `get_notification`    | Fetch one authorized v2 registry record by its listed ID            |
-| `list_capabilities`   | List core capabilities, installed plugins and advertised APIs       |
-| `describe_capability` | Inspect operation inputs, permissions, support and approval state   |
-| `execute_capability`  | Invoke a core or explicitly approved read-only plugin operation     |
+| Tool                  | Purpose                                                              |
+| --------------------- | -------------------------------------------------------------------- |
+| `list_paths`          | Discover authorized self-context measurement paths, with pagination  |
+| `get_values`          | Read 1–64 paths with native units, timestamps, source and freshness  |
+| `get_vessel_state`    | Read a compact navigation and environment snapshot                   |
+| `get_history`         | Fetch standard v2 History results using Signal K permissions         |
+| `list_notifications`  | Fetch authorized v2 notification registry records, with pagination   |
+| `get_notification`    | Fetch one authorized v2 registry record by its listed ID             |
+| `list_capabilities`   | List core capabilities, installed plugins and advertised APIs        |
+| `describe_capability` | Inspect operation inputs, permissions, support and approval state    |
+| `execute_capability`  | Invoke a core read or an individually approved plugin GET            |
+| `list_put_paths`      | Discover metadata-advertised PUT candidates for an explicit source   |
+| `describe_put`        | Read one PUT target's metadata and supplied value constraints        |
+| `put_value`           | Submit one individually approved native action                       |
+| `get_put_status`      | Check a gateway-submitted action owned by the same Signal K identity |
+| `execute_mutation`    | Invoke the same native action through `signalk.put` / `put_value`    |
 
 For telemetry:
 
@@ -94,7 +102,7 @@ The same implementation is available through `execute_capability`:
 }
 ```
 
-Core capabilities are `signalk.telemetry`, `signalk.notifications` and `signalk.history`. `signalk.notifications` retains `list` for legacy `notifications.*` measurements and adds `list_notifications` and `get_notification` for the released server Notifications API. The two new operations are also dedicated MCP tools. This uses `/signalk/v2/api/notifications`, not the proposed `/signalk/v2/api/alerts` subsystem.
+Core capabilities are `signalk.telemetry`, `signalk.notifications`, `signalk.history` and `signalk.put`. `signalk.notifications` retains `list` for legacy `notifications.*` measurements and adds `list_notifications` and `get_notification` for the released server Notifications API. The two notification operations are also dedicated MCP tools. This uses `/signalk/v2/api/notifications`, not the proposed `/signalk/v2/api/alerts` subsystem.
 
 `list_notifications` accepts `offset` (default 0) and `limit` (default 32, maximum 64). It returns `{ "registry": "v2", "notifications": { "<id>": { "context": "...", "path": "...", "value": {} } }, "nextOffset": null }`. Records are sorted by ID and paginated after permission filtering; pages are not stable snapshots. Pass a listed key as `get_notification`'s `id`; it returns `{ "registry": "v2", "id": "...", "notification": { ... } }`. Non-UUID keys are supported when core management is disabled.
 
@@ -111,13 +119,13 @@ Plugins appear as `plugin.<plugin-id>`. Describe one to read its OpenAPI operati
 All plugin operations start disabled. When a client attempts a discovered, supported GET with valid arguments, the read stays blocked with `APPROVAL_PENDING`. The plugin prepares a deduplicated review entry without calling that endpoint or saving configuration.
 
 1. Open **Apps & Plugins → Configuration → Signal K MCP** and click **Refresh**.
-2. In the **Plugin read requests** table, review the plugin, operation and endpoint. Expand the endpoint to read its description. Provider descriptions are untrusted information; check the handler's side effects and data authorization.
-3. Click **Accept** or **Reject**, optionally set **Access** to **Admins only**, then **Save Configuration**. Buttons change the draft; nothing is persisted until you save. **Discard changes** restores the last loaded state.
+2. In the **Operation requests** table, review the plugin, operation and endpoint. Expand the endpoint to read its description. Provider descriptions are untrusted information; check the handler's side effects and data authorization. Native PUT rows additionally identify the exact path/source and show its metadata/value contract.
+3. Check the **Read** or **Write** command type, click **Accept** or **Reject**, then **Save Configuration**. Buttons change the draft; nothing is persisted until you save. **Discard changes** restores the last loaded state. Signal K's native permissions determine who can execute an approved operation.
 4. Ask the client to retry after approval. Approval never bypasses Signal K or provider permissions.
 
 Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay visible and blocked without creating duplicates. To change a rejection later, click **Accept** and **Save Configuration**. The queue holds at most 64 entries, including saved reviews; when full, new requests return `APPROVAL_QUEUE_FULL`. Rows for uninstalled plugins show **Not installed** and a **Delete** button. Click **Delete**, confirm **Delete row**, then **Save Configuration**. Disabled plugins still count as installed and cannot be deleted from this table. Other obsolete entries can be removed from `readRequests` in saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
 
-Reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Writes, ambiguous operations and unsupported schemas never enter this queue. There is no MCP approval/configuration-write tool.
+Plugin GET reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Plugin mutation methods, ambiguous operations and unsupported schemas never enter the plugin-read queue. Native PUTs use the same table with their own exact target binding; a GET approval never grants PUT access. There is no MCP approval/configuration-write tool.
 
 Existing manual approvals remain supported under the expandable **Manual approvals (advanced)** section. This illustrative entry assumes an installed plugin with that documented operation:
 
@@ -150,6 +158,18 @@ The table and manual approvals are separate lists; manual entries do not automat
 Removing a manual approval leaves the table decision unchanged: a rejection still blocks, and an acceptance still applies. Deleting a table row leaves any manual approval unchanged, so that manual approval may still allow the read when the plugin is available again. Save Configuration applies either change. Signal K and provider permissions, enabled-plugin checks and schema validation remain mandatory in every case.
 
 The table uses Signal K’s embedded configurator, plugin inventory and existing admin configuration API. It preserves unrelated settings and newly queued requests, and checks for conflicting edits before saving. Signal K’s configuration API has no atomic compare-and-swap, so avoid simultaneous settings saves. Connection and staleness options remain available under **Connection and data settings**.
+
+## Individually approved native PUTs
+
+Use `list_put_paths` with an explicit handler `source`, then `describe_put` with that source and a path. The gateway forwards native metadata, including `supportsPut`, names, units and supplied enums/constraints. It can discover metadata-only paths observed after startup or previously described explicitly; earlier metadata-only targets may require a known-path `describe_put` first. The native API does not expose a complete handler-source catalog: use the actual provider's source identifier, and do not assume it equals the selected telemetry source. Listed paths are metadata candidates; the native handler decides whether a supplied source is registered.
+
+`put_value` takes `{ "path": "...", "source": "...", "value": ... }`. Each eligible unapproved target remains blocked with `APPROVAL_PENDING`, without invoking a handler. Refresh **Operation requests**, review that exact **Write** row, click **Accept** or **Reject**, and **Save Configuration**. Every approved action still requires a native write-capable identity and exact-source `put` permission. Telemetry `write` permission is different. The table has no role selector: read-only identities cannot write. There is no all-PUT switch, wildcard target, inferred source, or MCP self-approval.
+
+Native PUT approvals share the bounded 64-entry review queue with plugin GETs, survive native configuration saves, and bind context, path, source and reviewed metadata/value contract. Changed metadata or source requires fresh review. **Delete** a PUT review and confirm the removal to revoke it when saving; unlike plugin GET rows, native target revocation does not depend on a plugin being uninstalled. Existing GET approvals and decisions remain compatible.
+
+`execute_mutation` with `{ "id": "signalk.put", "operation": "put_value", "arguments": { ... } }` uses the same implementation. `execute_capability` handles reads and refuses mutation execution. All other mutations, including plugin POSTs, remain disabled.
+
+Native replies preserve request IDs, state and status codes. Check a known `requestId` through `get_put_status`; only actions submitted through this gateway by the same Signal K identity are accessible, with current permissions/approval rechecked. Correlations expire after one hour and clear on plugin restart. A completed response may still contain a failure status code. A timeout, disconnect or invalid response after dispatch can leave the outcome **unknown**: never automatically retry it or assume cancellation stopped the action. Successful completion does not establish physical operation. See [native PUT contracts and limits](docs/native-puts.md).
 
 Execution forwards the original bearer token to the same Signal K server. Native route checks and the provider's own authorization remain active; even an approved operation can return `UPSTREAM_PERMISSION_DENIED`. The provider must correctly enforce any data-level permissions its endpoint needs. Generic JSON cannot be mapped automatically onto Signal K telemetry ACLs. Approve only endpoints whose authorization and bounded read-only behavior have been reviewed.
 
@@ -190,7 +210,7 @@ The MCP endpoint is stateless: GET/DELETE return 405, each POST has an independe
 
 Provider requests derive their destination from the accepted local server socket, never client input or proxy headers. TLS certificate verification remains enabled. Native HTTPS can use `localTlsServerName` to verify a DNS certificate while retaining that fixed destination; private CAs require process-level trust configuration. See [tested TLS/proxy topologies and setup](docs/hosting.md). Non-TCP hosting remains unsupported. Core telemetry remains independent of provider HTTP calls.
 
-Authentication/read authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; the supported release set is Signal K 2.32.0 and 2.33.0 on Node 22 and 24; see the [authentication compatibility record](docs/authentication.md). OAuth interoperability and publishing remain future work. Calculations, sandbox execution, Container Manager integration and writes/control are outside scope.
+Authentication/read/PUT authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; the supported release set is Signal K 2.32.0 and 2.33.0 on Node 22 and 24; see the [authentication compatibility record](docs/authentication.md). OAuth interoperability remains future work. Calculations, sandbox execution, Container Manager integration, arbitrary configuration writes and unreviewed controls are outside scope. Plugin POSTs are a separate follow-up.
 
 ## Development
 

@@ -1,7 +1,7 @@
 {
   "name": "signalk-mcp",
   "version": "0.1.0-alpha.1",
-  "description": "Read-only MCP access to Signal K telemetry, notifications, history and approved plugin APIs using native permissions.",
+  "description": "Native Signal K MCP gateway for telemetry, history and notifications, with individual admin approval for every plugin GET and native PUT, plus native permissions.",
   "license": "MIT",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,12 +24,12 @@
     "model-context-protocol",
     "marine",
     "vessel-telemetry",
-    "read-only"
+    "approved-actions"
   ],
   "signalk": {
     "displayName": "Signal K MCP",
     "screenshots": [
-      "./docs/images/native-plugin-config.jpg"
+      "./docs/images/native-put-approvals.png"
     ]
   },
   "signalk-plugin-enabled-by-default": false,
@@ -42,8 +42,8 @@
     "lint": "eslint src test ui scripts webpack.config.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run build && node --test test/approvals.test.cjs test/configuration-ui.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs test/release.test.cjs",
-    "test:integration": "npm run build && node --test --test-force-exit test/integration.test.cjs test/hosting.test.cjs test/production-plugin.test.cjs test/runtime.test.cjs test/notifications-native.test.cjs test/restart.test.cjs",
+    "test": "npm run build && node --test test/approvals.test.cjs test/configuration-ui.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/notifications.test.cjs test/release.test.cjs test/puts.test.cjs",
+    "test:integration": "npm run build && node --test --test-force-exit test/integration.test.cjs test/hosting.test.cjs test/production-plugin.test.cjs test/runtime.test.cjs test/notifications-native.test.cjs test/restart.test.cjs test/native-puts.test.cjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
     "verify:package": "node test/package-smoke.cjs",
     "prepack": "npm run build",

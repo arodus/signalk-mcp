@@ -99,7 +99,13 @@ export const schema = {
 
 export const uiSchema = {
   pluginOperations: {
+    items: {
+      permission: {
+        "ui:widget": "hidden",
+        "ui:options": { label: false },
+      },
+    },
     "ui:help":
-      "Normally use Plugin read requests above. Existing manual approvals are preserved. A matching rejected request blocks a manual approval too.",
+      "Normally use Operation requests above. This advanced list approves GET reads only. Existing manual approvals are preserved. A matching rejected request blocks a manual approval too.",
   },
 };

@@ -243,7 +243,7 @@ async function main() {
     );
     assert.equal(
       (await send("tools/list", {}).result).body.result.tools.length,
-      9,
+      14,
     );
     assert.equal(
       (await call("get_values", { paths: ["navigation.speedOverGround"] }))

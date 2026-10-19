@@ -1,6 +1,6 @@
-# ADR 002: Read-only capability registry and discovery
+# ADR 002: Capability registry, discovery and individual approvals
 
-Date: 2026-10-19. Scope: native telemetry, notification measurements, standardized history, plugin feature/OpenAPI discovery and explicitly approved GET invocation.
+Date: 2026-10-19. Scope: native telemetry, notification measurements, standardized history, plugin feature/OpenAPI discovery, explicitly approved GET invocation and individually approved native PUTs from issue #30. Every plugin GET and native PUT requires its own saved administrator approval, alongside native Signal K permissions; there is no blanket approval. Built-in data reads use native permissions without that extra review. The published first alpha predates native PUT support.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ Date: 2026-10-19. Scope: native telemetry, notification measurements, standardiz
 
 An OpenAPI operation is executable only when its plugin is enabled, its operation ID is unique, its schema is supported, and configuration matches the plugin ID, operation ID, GET method and exact path. Approval can be an existing exact manual entry or a saved native review matching the operation, input schema and description. Duplicate configuration approvals and recursive approvals for this plugin are invalid. Unknown operations, mutation methods and unsupported schema features stay disabled. Documentation is untrusted data, never instructions or proof of read-only behavior. An approval must follow review of the actual handler, including side effects and data-level authorization.
 
-`src/capabilities/http.ts` only issues bounded GETs back to the socket address/port that accepted the MCP request. It forwards only the original bearer token and an Accept header. It follows no redirects, does not fetch external schema references, ignores OpenAPI `servers`, and never uses caller Host/proxy headers to select a destination. Native plugin-route authorization is therefore exercised as the original caller, without a minted plugin/admin token. TLS verification is never disabled. The optional `localTlsServerName` supplies the TLS verification name and SNI without changing the socket destination. Non-TCP hosting and certificate failures fail closed; see [hosting](hosting.md).
+`src/capabilities/http.ts` issues bounded GETs for data access and fixed-route native PUT/status requests for individually approved actions, back to the socket address/port that accepted the MCP request. It forwards the original bearer token, an Accept header and, for PUTs, a JSON content type and validated value/source body. It follows no redirects, does not fetch external schema references, ignores OpenAPI `servers`, and never uses caller Host/proxy headers to select a destination. Native plugin-route authorization is therefore exercised as the original caller, without a minted plugin/admin token. TLS verification is never disabled. The optional `localTlsServerName` supplies the TLS verification name and SNI without changing the socket destination. Non-TCP hosting and certificate failures fail closed; see [hosting](hosting.md).
 
 Gateway approval is not a promise that the target route will accept the caller. Signal K may impose a stricter permission. Conversely, generic plugin output cannot automatically be translated into telemetry ACL checks; an approved provider remains responsible for its endpoint's data authorization. The test fixture explicitly proves both target ACL and admin-route enforcement.
 

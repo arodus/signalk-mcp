@@ -28,7 +28,7 @@ probe = subprocess.run(
     capture_output=True, text=True, timeout=20,
 )
 assert probe.returncode == 0, "Hermes CLI connection test failed"
-assert "Tools discovered: 9" in probe.stdout, "Hermes CLI did not discover nine tools"
+assert "Tools discovered: 14" in probe.stdout, "Hermes CLI did not discover fourteen tools"
 
 from tools.mcp_tool_discovery import discover_mcp_tools
 from tools.mcp_tool_lifecycle import shutdown_mcp_servers
@@ -37,7 +37,7 @@ from tools.registry import registry
 try:
     for connection in range(2):
         names = discover_mcp_tools(allowed_mcp_names=["signalk_fixture"])
-        assert len(names) == 7, names
+        assert len(names) == 14, names
         name = next(n for n in names if n.endswith("_get_values"))
         result = json.loads(registry.get_entry(name).handler({
             "paths": ["navigation.speedOverGround", "electrical.batteries.house.voltage"]

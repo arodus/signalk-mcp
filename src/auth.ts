@@ -97,6 +97,33 @@ export function canRead(
   );
 }
 
+// Native HTTP authorizes a path before selecting its action source in the
+// supported servers. Check the exact, explicit source here as well; a path or
+// wildcard-source grant is not evidence of access to this action handler.
+export function canPut(
+  app: App,
+  principal: Principal,
+  path: string,
+  source: string,
+  context = "vessels.self",
+): boolean {
+  if (
+    !["readwrite", "admin"].includes(principal.permissions) ||
+    !source ||
+    /[*?[\]]/.test(source)
+  )
+    return false;
+  return (
+    security(app).checkACL(
+      principal.identifier,
+      context,
+      path,
+      source,
+      "put",
+    ) === true
+  );
+}
+
 // Checking an empty/wildcard source does not prove access to all sources: a
 // source-specific rule may precede a path grant. Only a literal native no-ACL
 // result authorizes an unfiltered history query. Never inspect security config.
