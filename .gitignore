@@ -5,3 +5,5 @@ coverage/
 package-verification/
 .DS_Store
 public/
+*.tgz.sha256
+release-notes.md

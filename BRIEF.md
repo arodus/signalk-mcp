@@ -149,7 +149,7 @@ Track the remaining work in [GitHub roadmap #12](https://github.com/arodus/signa
 - Security-boundary and dependency-exposure review is recorded in the resource report; reassess the host server's upstream advisories before release.
 - Validate installed packages, native configuration and user documentation.
 - Use the official Signal K plugin CI for portable platform checks alongside the native integration matrix. Verify registry scoring separately against the published artifact; custom CI success is not a registry score.
-- Prepare a release candidate and verify current npm/AppStore requirements.
+- Prepare a release candidate and verify current npm/AppStore requirements. The tag-driven pipeline gates publication on both CI workflows, stamps/verifies npm `gitHead`, and publishes prereleases under `next`; public registry scoring still requires published-artifact verification.
 - Reproducible installed-tarball checks, native Plugin Config evidence, changelog and the owner-reviewed vessel procedure are described in [release readiness](docs/release-readiness.md). Preparation does not authorize publication or vessel access.
 - Conduct live read-only vessel acceptance after the first alpha release, only with explicit deployment/access authorization; it is not an alpha publication gate.
 - Publish, release or deploy only when separately authorized, and verify each result independently.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add the tag-driven release pipeline used by Alert Center: both CI gates, release-tag and notes checks, commit-stamped tarballs, exact-package integration checks, npm prerelease tags and published `gitHead` verification.
+
+- Refresh the package listing and README with supported reads, the approval-table screenshot and explicit authentication limits. Remove Pi testing from release acceptance and schedule vessel acceptance after the first alpha.
+
 - Replace the long approval form with an embedded table, Accept/Reject buttons, retained rejected rows and deletion for uninstalled plugins. Save through the existing Signal K admin configuration API.
 
 - Queue eligible blocked plugin reads for native admin review, with deduplicated pending requests, saved approve/reject decisions, schema-bound approvals and unchanged Signal K permission enforcement.
@@ -20,4 +24,4 @@ Initial read-only native Signal K MCP gateway; no npm release has been published
 - Verify Signal K 2.32.0/2.33.0, TypeScript/Python MCP clients, unchanged History and Alert Center providers, and opt-in Codex/Hermes product clients.
 - Add official Signal K plugin CI alongside the native integration matrix and record the local ARM64 development benchmark.
 
-Release acceptance remains open for Raspberry Pi hardware, upstream in-process shutdown gaps, installed-host dependency assessment, registry scoring and explicitly authorized vessel acceptance. Full process replacement and ten-minute local load/large-value checks are recorded in the resource report. OAuth is not implemented.
+Alpha acceptance remains open for final package, registry, client and publication checks. Raspberry Pi testing is out of scope. Upstream in-process shutdown is a documented limitation; use full-process restart. Installed-host assessment and explicitly authorized vessel acceptance follow the first alpha. Full process replacement and ten-minute local load/large-value checks are recorded in the resource report. OAuth is not implemented.

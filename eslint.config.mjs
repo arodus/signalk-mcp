@@ -8,6 +8,16 @@ export default tseslint.config(
       globals: { fetch: "readonly", AbortSignal: "readonly" },
     },
   },
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        process: "readonly",
+        console: "readonly",
+        setTimeout: "readonly",
+      },
+    },
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

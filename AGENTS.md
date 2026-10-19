@@ -37,3 +37,10 @@ Keep this project independent. Preserve compatibility with ordinary Signal K ins
 - Test native plugin loading through a real temporary Signal K server with synthetic data. Do not substitute mocks for claims about native routing or authentication.
 - Check `npm pack` when packaging changes. Update README, brief status and verification notes when behavior or limitations change.
 - Distinguish local tests, pushed code, CI, merged state, deployment and physical proof. Do not mark planned work implemented or claim compatibility from type checking alone.
+
+## Release integrity
+
+- Follow the tag-driven release workflow; publication still requires explicit authorization. Use annotated version tags on `main` with matching versioned changelog notes.
+- Stamp `gitHead` into the release tarball from the actual release commit; never hard-code a stale SHA in tracked `package.json`. Verify the packed and npm-published values.
+- Publish alpha/beta/rc versions under `next`, stable versions under `latest`. Preserve the tested tarball and checksum. Both CI workflows must pass before publication.
+- Distinguish local registry preflight scores from the public score, which also depends on the published commit's official CI evidence.
