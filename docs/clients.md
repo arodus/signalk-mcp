@@ -2,7 +2,7 @@
 
 Checked 2026-10-18. The gateway requires an existing Signal K bearer token on every HTTP request. It implements Streamable HTTP and has no OAuth login/discovery flow. SDK tests and product-runtime tests are separate evidence; a desktop application being installed does not establish its connection UI works.
 
-The current catalog contains fourteen tools, including native PUT discovery/status and separate mutation tools. The older product-runtime observations below cover the earlier data-reading catalog; they do not establish mutation approval/confirmation behavior in a desktop client. Mutation annotations declare non-read-only, potentially destructive, non-idempotent external actions, while actual approval and native permission checks stay enforced on the server. Plugin POSTs remain disabled.
+The current catalog contains fourteen tools, including native PUT discovery/status and separate mutation tools. The older product-runtime observations below cover the earlier data-reading catalog; they do not establish mutation approval/confirmation behavior in a desktop client. Mutation annotations declare non-read-only, potentially destructive, non-idempotent external actions, while actual approval and native permission checks stay enforced on the server. Individually approved plugin POSTs are supported starting with `0.1.0-alpha.3`; the older product-runtime tests do not establish POST behavior in those clients.
 
 ## Matrix
 
@@ -15,6 +15,8 @@ The current catalog contains fourteen tools, including native PUT discovery/stat
 | ChatGPT web/plugin connection  | Separate hosted connection surface                                     | Untested. Current public submission documentation says its portal has no bearer-token input. The gateway cannot be configured as unauthenticated to bypass this.                                                                                           |
 
 Official references: [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli), [Hermes MCP configuration](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference), [Claude Code MCP](https://code.claude.com/docs/en/mcp), [OpenAI public submission authentication limitations](https://developers.openai.com/plugins/deploy/submission#authentication-limitations). Product versions, account surfaces and requirements can change; re-test the actual intended client before deployment.
+
+For token creation and first-use prompts, see the [README](../README.md#create-a-signal-k-token).
 
 ## Codex
 

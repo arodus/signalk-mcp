@@ -1,6 +1,6 @@
 # Reviewed plugin POST contracts
 
-The POST extension uses `execute_mutation` and the existing native Plugin Config Accept/Reject/Save workflow. Plugin PUT/PATCH/DELETE and arbitrary HTTP/configuration access remain excluded. See the [usage and limits](../README.md#individually-approved-plugin-posts).
+The POST extension uses `execute_mutation` and the existing native Plugin Config Accept/Reject/Save workflow. Plugin PUT/PATCH/DELETE and arbitrary HTTP/configuration access remain excluded. See the [usage and limits](reference.md#individually-approved-plugin-posts).
 
 ## Contract identity
 

@@ -54,7 +54,7 @@ MCP_TEST_PYTHON=/tmp/signalk-mcp-python/bin/python \
 npm run check
 ```
 
-Run under the selected Node version. Create the Python environment using the README instructions first. Without `MCP_TEST_SERVER_DIR`, the harness uses the project's pinned server dependency. `MCP_TEST_PLUGIN_DIR` can independently select an installed gateway tarball; the server and plugin package selections are separate.
+Run under the selected Node version. Create the Python environment using the [development instructions](development.md#checks-and-integration-tests) first. Without `MCP_TEST_SERVER_DIR`, the harness uses the project's pinned server dependency. `MCP_TEST_PLUGIN_DIR` can independently select an installed gateway tarball; the server and plugin package selections are separate.
 
 ## Admin settings table
 
