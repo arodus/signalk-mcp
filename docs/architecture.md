@@ -2,7 +2,7 @@
 
 Date: 2026-10-18. Status: initial proof of concept implemented; extended by [ADR 002](capabilities.md). Vessel and publication acceptance remain pending.
 
-The owner extended the scope on 2026-10-19 in issue #30: individually approved native PUTs follow the existing plugin GET review/save workflow. The published first alpha remains read-only; see [native PUT architecture, permission gaps and limits](native-puts.md) for the development extension. Plugin POSTs remain a subsequent change. The historical read-only and sandbox assessments below describe the original proof of concept.
+The owner extended the scope on 2026-10-19 in issue #30: individually approved native PUTs follow the existing plugin GET review/save workflow. Each plugin GET operation and native PUT target starts blocked and needs its own saved administrator approval, alongside native permissions. There is no blanket approval. The published first alpha predates native PUT support; see [native PUT architecture, permission gaps and limits](native-puts.md). Plugin POSTs remain a subsequent change. The historical data-access and sandbox assessments below describe the original proof of concept.
 
 ## Confirmed interfaces
 

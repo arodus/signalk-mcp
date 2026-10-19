@@ -16,7 +16,7 @@ The independent plugin implements authenticated Streamable HTTP, batched telemet
 
 Plugin execution remains limited to explicitly reviewed GET operations. The development PUT extension uses the same native administrator review/save workflow, binding every action to an exact self-context path, explicit source and reviewed metadata/value contract. There is no blanket PUT grant. Original Signal K bearer identity, native PUT permissions and native route checks remain mandatory. Unknown operations and plugin POSTs remain disabled. History and OpenAPI coverage are deliberately limited and documented in README.md.
 
-The released `0.1.0-alpha.1` remains read-only. The issue #30 development extension requires separate release and deployment authorization; local implementation is not published functionality.
+Every plugin GET operation and native PUT target starts blocked and requires an individual administrator approval saved through native Plugin Config. There is no blanket plugin or PUT approval, and native Signal K permissions remain mandatory on every call. Built-in data reads use native permissions without that extra operation review. The published `0.1.0-alpha.1` predates native PUT support; publishing or deploying the current implementation requires separate authorization.
 
 Authenticated reads, standard v2 history and reviewed plugin reads are verified under Signal K 2.32.0/2.33.0 on Node 22/24. The unchanged published packages `signalk-to-influxdb` 1.11.0 and `signalk-alert-center` 0.4.1 are exercised with synthetic data; see [history verification](docs/history-providers.md) and [plugin compatibility](docs/plugin-compatibility.md). Product-client connections, live vessel acceptance and publication remain unverified.
 
@@ -27,7 +27,7 @@ README.md and docs describe implemented behavior and verification. This brief de
 - Install as a native Signal K plugin, with npm/AppStore distribution as the release target.
 - Expose MCP Streamable HTTP through the existing Signal K server.
 - Reuse existing Signal K identities, bearer tokens and permissions.
-- Discover and fetch authorized current telemetry, history and supported read-only APIs.
+- Discover and fetch authorized current telemetry, history and supported data APIs.
 - Discover installed plugin capabilities through public features, OpenAPI and explicit adapters where needed.
 - Forward approved third-party API reads under the original caller's identity.
 - Forward individually approved native self-context PUTs under the original caller's identity, using native metadata for discovery and description. Add reviewed plugin POSTs only in a subsequent change.
@@ -46,7 +46,7 @@ Native Signal K MCP endpoint
     |
     | authenticate, validate and authorize each invocation
     v
-Read-only capability layer
+Permission-aware capability layer
     |
     +-- current Signal K telemetry
     +-- standardized History API providers
@@ -95,7 +95,7 @@ Use the official MCP TypeScript SDK and stateless Streamable HTTP where supporte
 | `get_notification`    | Fetch one authorized v2 notification record                    |
 | `list_capabilities`   | Discover core and installed-plugin capabilities                |
 | `describe_capability` | Describe schemas, permissions, availability and approval state |
-| `execute_capability`  | Invoke a supported authorized read-only operation              |
+| `execute_capability`  | Invoke a core read or an individually approved plugin GET      |
 | `list_put_paths`      | Discover PUT candidates for an explicit source                 |
 | `describe_put`        | Describe one path/source using native metadata                 |
 | `put_value`           | Submit one individually approved native PUT                    |
@@ -135,7 +135,7 @@ Use the compact capability interface rather than generating hundreds of MCP tool
 
 ## 8. Implementation and release sequence
 
-The original read-only roadmap is recorded in [#12](https://github.com/arodus/signalk-mcp/issues/12). Track the subsequent individually approved PUT extension and later plugin POST work in [#30](https://github.com/arodus/signalk-mcp/issues/30).
+The original data-access roadmap is recorded in [#12](https://github.com/arodus/signalk-mcp/issues/12). Track the subsequent individually approved PUT extension and later plugin POST work in [#30](https://github.com/arodus/signalk-mcp/issues/30).
 
 ### Compatibility and acceptance
 
@@ -145,7 +145,7 @@ The original read-only roadmap is recorded in [#12](https://github.com/arodus/si
 - Native TLS and reverse-proxy hosting are covered by isolated real-server tests; see [hosting configuration and limits](docs/hosting.md). Certificate verification and fixed local destinations remain enforced.
 - Codex and Hermes product runtimes are tested with native bearer authentication; see the [client matrix](docs/clients.md). Desktop/web UI acceptance remains untested, and [ADR 002](docs/decisions/002-client-authentication.md) records the blockers to identity-preserving OAuth.
 
-### Read-only coverage
+### Data-access coverage
 
 - V2 notification registry reads use the released `/signalk/v2/api/notifications` endpoint with native context/path/source permission checks. Forward records unchanged; omit records whose source access cannot be verified. This does not implement the proposed alerts subsystem.
 - Keep acknowledge, silence, raise, clear and other mutations outside scope.

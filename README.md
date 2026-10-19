@@ -2,29 +2,31 @@
 
 A native Signal K plugin for vessel telemetry, capability discovery, approved plugin reads and individually approved native PUT actions over MCP Streamable HTTP. It runs at `/plugins/signalk-mcp/mcp`, using the existing Signal K server, bearer tokens and permissions. No extra account, key, listener or container is required.
 
-**Scope:** discover, fetch and forward authorized data. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
+**Individual approval required:** every plugin GET operation and every native PUT target starts blocked and needs its own explicit administrator approval saved in Signal K Plugin Config. There is no allow-all switch. Installing the gateway, discovering an operation or holding a write-capable token does not approve it. Approvals cover an exact operation/target, not every future operation from a plugin; Signal K permissions still apply on every call. Built-in telemetry, history and notification reads use native Signal K permissions without an extra operation review.
 
-**Alpha status (`0.1.0-alpha.1`):** authenticated telemetry and the read-only capability layer are implemented and integration-tested against Signal K 2.32.0 and 2.33.0. This is an experimental release for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
+**Scope:** discover, fetch and forward authorized data and individually approved native actions. The gateway does not calculate, aggregate, transform or infer data values and does not provide code execution. Provider-computed results may be fetched and forwarded without being recomputed.
 
-**Development change:** this branch adds individually approved native PUTs as described below. The published alpha remains read-only until a separate release. Plugin POSTs remain disabled.
+**Development status:** authenticated reads and individually approved native PUTs are implemented and integration-tested against Signal K 2.32.0 and 2.33.0 on Node 22/24. This is experimental software for evaluation; vessel acceptance, public registry indexing/score and end-to-end ChatGPT tunnel verification remain outstanding. See [compatibility verification](docs/verification.md) for the exact test fixtures and limits.
+
+**Release status:** the published `0.1.0-alpha.1` predates native PUT support. Build the current source to evaluate the features described here; publishing an updated package is a separate step. Plugin POSTs remain disabled.
 
 [Project brief](BRIEF.md) · [Working instructions](AGENTS.md) · [Architecture](docs/architecture.md) · [Capability design](docs/capabilities.md) · [Verification](docs/verification.md)
 
 ## What it provides
 
 - Current vessel telemetry and capability discovery using native Signal K permissions.
-- Read-only notifications and standard v2 History API results from installed providers.
+- Notification reads and standard v2 History API results from installed providers.
 - Reviewed plugin GET operations, with Accept/Reject controls and retained decisions in Plugin Config.
 - Native self-context PUT actions, each bound to an individually saved path/source/metadata approval and native PUT permissions. There is no blanket PUT approval.
 - MCP Streamable HTTP through the existing Signal K server; no separate plugin account or data store.
 
-![Signal K MCP settings and plugin read approval table](docs/images/native-plugin-config.jpg)
+![Native Signal K configuration with individually reviewed GET and PUT operations](docs/images/native-put-approvals.png)
 
 The screenshot uses synthetic example plugins and approval requests. It does not show live vessel data. Clients need a native Signal K bearer token and a reachable, trusted endpoint. ChatGPT tunnel setup is not yet verified end-to-end; no built-in OAuth login is provided.
 
 ## Install for evaluation
 
-Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. Install the alpha in a test Signal K configuration directory, using its service account:
+Use Node.js 24 (Signal K's recommended major); Node 22 or later is required. The published alpha below predates native PUT support. Install it in a test Signal K configuration directory, using its service account, or build the current source for individually approved PUTs:
 
 ```sh
 npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0-alpha.1
@@ -59,9 +61,7 @@ Older `allowedHosts` and `allowedOrigins` plugin settings are ignored for upgrad
 
 Enable Signal K security and supply an existing user/device token in `Authorization: Bearer <token>` on every request. Guest reads and security-disabled servers are refused. The plugin does not create tokens or read signing secrets. Use Signal K TLS or a trusted TLS reverse proxy for remote access.
 
-The native configuration form below was verified with Signal K 2.33.0 and synthetic fixtures. It shows one plugin GET and three native PUT review examples; no hardware is connected. The layout was checked at 390-, 1280- and 1920-pixel widths.
-
-![Native Signal K configuration with individually reviewed GET and PUT operations](docs/images/native-put-approvals.png)
+The native configuration form pictured above was verified with Signal K 2.33.0 and synthetic fixtures. It shows one plugin GET and three native PUT review examples; no hardware is connected. The layout was checked at 390-, 1280- and 1920-pixel widths.
 
 The release pipeline stamps the release commit into the package and verifies npm’s published `gitHead`. Alpha versions use the `next` distribution tag. See [registry score evidence](docs/registry-readiness.md) and [package verification, upgrade/removal and release acceptance](docs/release-readiness.md) before preparing an installation candidate.
 
@@ -79,7 +79,7 @@ Configure a Streamable HTTP client with your endpoint, for example `https://boat
 | `get_notification`    | Fetch one authorized v2 registry record by its listed ID             |
 | `list_capabilities`   | List core capabilities, installed plugins and advertised APIs        |
 | `describe_capability` | Inspect operation inputs, permissions, support and approval state    |
-| `execute_capability`  | Invoke a core or explicitly approved read-only plugin operation      |
+| `execute_capability`  | Invoke a core read or an individually approved plugin GET            |
 | `list_put_paths`      | Discover metadata-advertised PUT candidates for an explicit source   |
 | `describe_put`        | Read one PUT target's metadata and supplied value constraints        |
 | `put_value`           | Submit one individually approved native action                       |
@@ -167,7 +167,7 @@ Use `list_put_paths` with an explicit handler `source`, then `describe_put` with
 
 Native PUT approvals share the bounded 64-entry review queue with plugin GETs, survive native configuration saves, and bind context, path, source and reviewed metadata/value contract. Changed metadata or source requires fresh review. **Delete** a PUT review and confirm the removal to revoke it when saving; unlike plugin GET rows, native target revocation does not depend on a plugin being uninstalled. Existing GET approvals and decisions remain compatible.
 
-`execute_mutation` with `{ "id": "signalk.put", "operation": "put_value", "arguments": { ... } }` uses the same implementation. The read-only `execute_capability` refuses mutation execution. All other mutations, including plugin POSTs, remain disabled.
+`execute_mutation` with `{ "id": "signalk.put", "operation": "put_value", "arguments": { ... } }` uses the same implementation. `execute_capability` handles reads and refuses mutation execution. All other mutations, including plugin POSTs, remain disabled.
 
 Native replies preserve request IDs, state and status codes. Check a known `requestId` through `get_put_status`; only actions submitted through this gateway by the same Signal K identity are accessible, with current permissions/approval rechecked. Correlations expire after one hour and clear on plugin restart. A completed response may still contain a failure status code. A timeout, disconnect or invalid response after dispatch can leave the outcome **unknown**: never automatically retry it or assume cancellation stopped the action. Successful completion does not establish physical operation. See [native PUT contracts and limits](docs/native-puts.md).
 

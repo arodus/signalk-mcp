@@ -222,7 +222,7 @@ export function createMcpServer(
     "execute_capability",
     {
       description:
-        "Execute an approved read-only operation as the current Signal K user. An eligible unapproved read returns APPROVAL_PENDING and adds a review to Signal K plugin settings; ask an administrator to review and save it, then retry. Writes remain disabled. Never claim approval or retry repeatedly while waiting.",
+        "Execute a core read or an individually approved plugin GET as the current Signal K user. Every plugin operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require their own individual approval through put_value or execute_mutation; plugin POSTs remain disabled. Never claim approval or retry repeatedly while waiting.",
       inputSchema: {
         id: z.string().min(1).max(160),
         operation: z.string().min(1).max(128),

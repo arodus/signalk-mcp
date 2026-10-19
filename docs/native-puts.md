@@ -1,6 +1,6 @@
 # Individually approved native PUTs
 
-This describes the issue #30 development extension. The published `0.1.0-alpha.1` remains read-only. Plugin POSTs are a separate follow-up and stay disabled.
+Every native PUT target starts blocked and requires its own explicit administrator approval saved in Signal K Plugin Config, in addition to the caller's native permissions. There is no allow-all switch, and discovery never enables execution. This describes the issue #30 implementation; the published `0.1.0-alpha.1` predates it. Plugin POSTs are a separate follow-up and stay disabled.
 
 ## Discovery and meaning
 

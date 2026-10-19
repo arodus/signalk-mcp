@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Describe the gateway as permission-aware data access with individually approved actions. Every plugin GET and native PUT starts blocked and needs its own saved administrator approval; there is no blanket approval. Built-in data reads continue to use native Signal K permissions.
+
 - Add individually approved native self-context PUTs using the existing Plugin Config review table, exact path/source/metadata binding and native PUT permissions. There is no blanket PUT grant; plugin POSTs remain disabled.
 - Add bounded metadata-driven PUT discovery, explicit source selection, owned request-status tracking and truthful uncertain outcomes without automatic mutation retries. Preserve existing reads, plugin GET reviews and native configuration saves.
 
@@ -19,7 +21,7 @@
 - Stop oversized JSON request/result serialization at the byte budget; verify client reconnection and permissions across full native server process restarts.
 - Add read-only v2 notification registry list/get tools with native context/path/source permissions, unchanged record forwarding, and support for disabled core notification management. No dependency on the proposed alerts subsystem.
 
-First alpha of the read-only native Signal K MCP gateway.
+First alpha of the native Signal K MCP gateway, initially providing data reads.
 
 - Serve nine MCP tools through the existing Signal K HTTP server using native bearer identities and path/source permissions.
 - Discover and forward current telemetry, legacy notification values, v2 notification records, standard v2 History results and explicitly approved plugin GET responses.

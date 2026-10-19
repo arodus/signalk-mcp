@@ -1,6 +1,6 @@
 # Registry and listing readiness
 
-The package listing includes a read-only description, Signal K and MCP discovery keywords, public repository/homepage/issue links, a settings screenshot and the changelog. The README describes supported telemetry, notification, History and approved plugin reads, and labels the screenshot's synthetic examples. No live compatibility or publication claim is inferred from these metadata fields.
+The package listing describes native Signal K MCP data access and individually approved native PUT actions, with Signal K and MCP discovery keywords, public repository/homepage/issue links, a settings screenshot and the changelog. Every plugin GET operation and native PUT target starts blocked and requires its own saved administrator approval; no blanket approval is available, and Signal K permissions still apply on every call. Built-in data reads use native permissions without that extra review. The README describes telemetry, notification and History reads plus individually approved plugin GETs and native PUTs, and labels the screenshot's synthetic examples. No live compatibility or publication claim is inferred from these metadata fields.
 
 ## Local scoring preflight (2026-10-19)
 

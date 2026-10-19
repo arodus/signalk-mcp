@@ -43,7 +43,7 @@ The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synt
 
 Before changing an existing installation, save the current package version and the plugin's configuration through the host's normal backup process. Keep provider approvals for review; a provider upgrade can change a route's behavior or permissions.
 
-Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, Signal K’s browser-origin policy, security-enabled state and reviewed GET approvals before enabling. Repeat one allowed read, one denied-path read and a write-refusal check. The plugin stores no historical values or private account database to migrate.
+Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, Signal K’s browser-origin policy, security-enabled state and each individually reviewed plugin GET/native PUT approval before enabling. There is no blanket approval; native permissions remain mandatory. Repeat one allowed read, one denied-path read and an unapproved-action refusal check using an isolated synthetic target. Live PUT acceptance requires separate authorization. The plugin stores no historical values or private account database to migrate.
 
 For rollback, disable the plugin, reinstall the previously retained tarball/version with scripts disabled, restore its compatible configuration and restart. Recheck permissions before enabling. Do not assume a changed schema or provider approval remains compatible.
 
