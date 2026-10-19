@@ -51,3 +51,21 @@ To verify an installed tarball, set `MCP_TEST_PLUGIN_DIR` to the installed packa
 ## Release evidence
 
 The release pipeline stamps the release commit into the package and verifies npm’s published `gitHead`. Alpha versions use the `next` distribution tag. See [registry score evidence](registry-readiness.md), [package verification and release acceptance](release-readiness.md), and the [verification report](verification.md). Publication requires explicit authorization.
+
+## Reproduce installed-client tests
+
+Build the plugin and explicitly select installed client paths:
+
+```sh
+npm run build
+MCP_TEST_CODEX_BIN=/absolute/path/to/codex \
+MCP_TEST_HERMES_DIR=/absolute/path/to/hermes-agent \
+MCP_TEST_HERMES_PYTHON=/absolute/path/to/hermes-managed/python3 \
+node --test --test-force-exit test/integration.test.cjs
+```
+
+The existing native server fixture creates an isolated configuration, short-lived synthetic tokens and synthetic telemetry. Codex's child process disables existing MCP servers, apps, plugins and hooks through command-line overrides and verifies only the fixture is enabled before connecting. Its test threads are ephemeral. User configuration is never changed. Hermes uses a temporary `HERMES_HOME`; its existing profile and real credentials are not used. The token is passed in child process memory/environment, never written into the config or command line.
+
+The Hermes script uses the selected installation's bootstrap/dependencies, CLI discovery and actual registered handlers. It does not implement an alternative MCP client. Pin the installed version/commit when repeating it: these product interfaces can change. No model request or real external notification is made. A fresh Codex thread and Hermes shutdown/re-discovery check explicit reconnect; abrupt network loss and interactive UI recovery remain untested.
+
+These checks are opt-in because the products are not CI dependencies. Missing `MCP_TEST_CODEX_BIN` or `MCP_TEST_HERMES_DIR` is reported as a skipped product test. Normal CI continues to run both pinned SDK clients and real provider tests. Follow [ADR 002](decisions/002-client-authentication.md) for the OAuth decision and unresolved native contract.

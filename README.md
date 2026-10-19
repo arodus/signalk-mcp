@@ -67,27 +67,23 @@ Use an agent that supports **MCP Streamable HTTP** and a bearer token. In its MC
 
 Use the client’s secret storage or environment-variable support for the token. Signal K MCP does not provide an OAuth login flow. Clients that only offer OAuth cannot connect directly through that flow.
 
-### Codex
+Choose your client’s instructions; the configuration keys and token syntax differ:
 
-Add this to `~/.codex/config.toml`:
+| Client                        | Setup guide                                                                            |
+| ----------------------------- | -------------------------------------------------------------------------------------- |
+| Codex                         | [CLI and desktop configuration](docs/clients.md#codex)                                 |
+| Claude Code                   | [HTTP server configuration](docs/clients.md#claude-code)                               |
+| Claude Desktop / web / Cowork | [Custom connector with a bearer header](docs/clients.md#claude-desktop-web-and-cowork) |
+| Cursor                        | [MCP configuration](docs/clients.md#cursor)                                            |
+| VS Code / GitHub Copilot      | [Setup with a hidden token prompt](docs/clients.md#vs-code--github-copilot)            |
+| GitHub Copilot CLI            | [Interactive setup](docs/clients.md#github-copilot-cli)                                |
+| Gemini CLI                    | [Streamable HTTP configuration](docs/clients.md#gemini-cli)                            |
+| Hermes                        | [Profile configuration](docs/clients.md#hermes)                                        |
+| OpenCode                      | [Remote server configuration](docs/clients.md#opencode)                                |
+| Windsurf / Cascade            | [Cascade configuration](docs/clients.md#windsurf--cascade)                             |
+| ChatGPT                       | [Desktop and hosted connection limits](docs/clients.md#chatgpt)                        |
 
-```toml
-[mcp_servers.signalk]
-url = "https://boat.example/plugins/signalk-mcp/mcp"
-bearer_token_env_var = "SIGNALK_MCP_TOKEN"
-```
-
-Make the token available to the Codex process as `SIGNALK_MCP_TOKEN`. For a terminal session in Bash or Zsh, run the following, paste the token at the hidden prompt and press Enter:
-
-```sh
-read -r -s SIGNALK_MCP_TOKEN
-export SIGNALK_MCP_TOKEN
-codex
-```
-
-In Codex CLI, use `/mcp` to check the connection. An already-running app will need its own launch environment configured and a restart to receive the variable. This setup uses a bearer token; `codex mcp login` is for OAuth servers. See the [official Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp).
-
-For **Hermes** and **Claude Code** configuration examples, see the [agent connection guide](docs/clients.md). That guide distinguishes tested CLI connections from untested desktop/web clients, including ChatGPT.
+These recipes follow official client documentation. The [verification status](docs/clients.md#verification-status) distinguishes tested runtimes from documentation-only guidance. Cloud-hosted connectors must be able to reach your server from their own network; access from your laptop alone is not sufficient.
 
 ### Try it in a chat
 
