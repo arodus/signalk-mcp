@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## [Unreleased]
+
+## [0.1.0-alpha.1] - 2026-10-19
 
 - Add the tag-driven release pipeline used by Alert Center: both CI gates, release-tag and notes checks, commit-stamped tarballs, exact-package integration checks, npm prerelease tags and published `gitHead` verification.
 
@@ -14,7 +16,7 @@
 - Stop oversized JSON request/result serialization at the byte budget; verify client reconnection and permissions across full native server process restarts.
 - Add read-only v2 notification registry list/get tools with native context/path/source permissions, unchanged record forwarding, and support for disabled core notification management. No dependency on the proposed alerts subsystem.
 
-Initial read-only native Signal K MCP gateway; no npm release has been published.
+First alpha of the read-only native Signal K MCP gateway.
 
 - Serve nine MCP tools through the existing Signal K HTTP server using native bearer identities and path/source permissions.
 - Discover and forward current telemetry, legacy notification values, v2 notification records, standard v2 History results and explicitly approved plugin GET responses.
@@ -24,4 +26,4 @@ Initial read-only native Signal K MCP gateway; no npm release has been published
 - Verify Signal K 2.32.0/2.33.0, TypeScript/Python MCP clients, unchanged History and Alert Center providers, and opt-in Codex/Hermes product clients.
 - Add official Signal K plugin CI alongside the native integration matrix and record the local ARM64 development benchmark.
 
-Alpha acceptance remains open for final package, registry, client and publication checks. Raspberry Pi testing is out of scope. Upstream in-process shutdown is a documented limitation; use full-process restart. Installed-host assessment and explicitly authorized vessel acceptance follow the first alpha. Full process replacement and ten-minute local load/large-value checks are recorded in the resource report. OAuth is not implemented.
+Known alpha limitations: the public registry score and ChatGPT/Codex tunnel connection remain to be verified end-to-end. Raspberry Pi testing is out of scope. Upstream in-process shutdown is a documented limitation; use full-process restart. Installed-host assessment and explicitly authorized vessel acceptance follow the first alpha. Full process replacement and ten-minute local load/large-value checks are recorded in the resource report. OAuth is not implemented.

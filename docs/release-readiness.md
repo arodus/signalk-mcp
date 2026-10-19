@@ -1,6 +1,6 @@
 # Release readiness
 
-This is preparation for the first release, not authorization or evidence of npm publication, AppStore indexing or vessel deployment. Version `0.1.0` remains unreleased. Track acceptance in issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8).
+The owner authorized the first alpha, `0.1.0-alpha.1`, on 2026-10-19. The release workflow provides publication evidence; these instructions alone do not establish npm publication, AppStore indexing or vessel deployment. Track acceptance in issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8).
 
 ## Package verification
 
@@ -19,7 +19,7 @@ Require a clean-source receipt for the final candidate. An earlier receipt does 
 
 ## Registry and publishing status
 
-On 2026-10-18, npm's public metadata request for `signalk-mcp` returned E404 and this repository had no GitHub releases. That establishes absence of a public package/release at that time, not ownership, name reservation, account authentication or publication rights. Verify the publishing account and permitted package name immediately before any authorized publish.
+On 2026-10-19, npm metadata confirms the owner-created `signalk-mcp@0.0.0-stage` placeholder. The owner reports trusted publishing is configured. Publish the authorized alpha under `next`, preserving `latest`; verify npm metadata and the downloaded artifact after the workflow succeeds.
 
 The package has the `signalk-node-server-plugin` discovery keyword, compiled CommonJS entry, Node >=22 requirement, MIT license, repository link and disabled-by-default declaration. The tarball includes README, brief, working instructions, changelog and compatibility documentation. It has no install-time build hook; AppStore installation must work with scripts disabled.
 
@@ -66,10 +66,10 @@ This procedure is scheduled after the first alpha release, not as a prerequisite
 - [ ] Verify the final clean-commit tarball on supported runtimes and retain its receipt.
 - [ ] Verify current npm publishing access, metadata and registry requirements; rerun the registry harness on the candidate.
 - [ ] Verify official CI on the exact release commit and reassess dependency advisories.
-- [ ] Verify the intended ChatGPT/Codex tunnel connection end-to-end with a restricted Signal K token, including allowed reads and permission denials. Static local token injection is source-verified only; it uses one shared Signal K identity per configured token.
+- [ ] Follow up after alpha: verify the intended ChatGPT/Codex tunnel connection end-to-end with a restricted Signal K token, including allowed reads and permission denials. Static local token injection is source-verified only; it uses one shared Signal K identity per configured token.
 - [x] Record the upstream in-process shutdown limitation and the tested full-process restart procedure. Upstream repair is not an alpha prerequisite.
 - [x] Remove Raspberry Pi testing from release acceptance per the owner's 2026-10-19 decision; retain local ARM64 evidence without claiming Pi compatibility.
-- [ ] Obtain explicit authorization for alpha npm publication and a GitHub release.
+- [x] Obtain explicit authorization for alpha npm publication and a GitHub release (owner request, 2026-10-19).
 - [ ] After publication, verify the downloaded artifact and AppStore/registry indexing.
 
 ## After the first alpha
@@ -87,4 +87,4 @@ The tag-driven workflow follows [arodus/signalk-alert-center](https://github.com
 
 After publishing, the workflow verifies npm's `gitHead` matches the release commit before creating the GitHub release with the tarball, checksum and version-specific changelog notes. A failed verification stops the GitHub release step; it cannot undo an npm publication already completed.
 
-Before the first authorized alpha, configure the GitHub `release` environment and npm publishing access. The workflow supports an `NPM_BOOTSTRAP_TOKEN` environment secret for the first publication. Remove it after configuring npm trusted publishing for this repository's `release.yml` workflow and `release` environment; subsequent releases use OIDC. These account settings and publication have not been performed by adding the workflow.
+The owner has configured npm trusted publishing. The publish job uses OIDC from this repository's `release.yml` workflow and `release` environment; no bootstrap token is used. If npm rejects the identity, inspect that configuration instead of introducing a stored publication token.

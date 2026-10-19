@@ -81,10 +81,6 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
       - name: Publish to npm
-        env:
-          # Used only to bootstrap a brand-new npm package. Remove this secret
-          # after configuring the package trusted publisher; npm then uses OIDC.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: npm publish "${{ steps.package.outputs.package-file }}" --access public --tag "${{ steps.channel.outputs.tag }}"
       - name: Verify published release commit
         run: node scripts/verify-published-release.mjs
