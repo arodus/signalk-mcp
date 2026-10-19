@@ -1,5 +1,15 @@
 # Verification record
 
+## Native PUT schema diagnostics and declared choices (2026-10-19)
+
+`describe_put` now reports the first schema problem with its code, field and explanation, schema provenance, exact approval status, whether that approval is saved, submission eligibility/block reason and an explicit unverified handler-source flag. Pending in-memory requests remain distinct from saved decisions. Discovery itself does not queue reviews or invoke handlers, and approved metadata does not establish handler registration or physical operation.
+
+Native scalar `possibleValues` supply exact reviewed enum values, including native `type: "multiple"`. String, number, boolean and null values retain their types without coercion. Malformed, duplicate, oversized or conflicting choices remain blocked. Explicit schemas retain precedence, other declared constraints remain enforced and changes to choices or their labels require fresh review. Existing approval binding and native permissions remain mandatory.
+
+On Node **24.22.0** / Signal K **2.33.0**, `MCP_TEST_PYTHON=/tmp/signalk-mcp-python-client/bin/python npm run check` passes type checking, ESLint, formatting, **88 portable tests** and **61 native integration tests**, with three optional installed-product-client/production-History skips. Python interoperability passes. The focused native PUT suite passes all **17 entries without skips** on Node **22.23.3** / Signal K **2.33.0**, Node **24.22.0** / Signal K **2.32.0**, and Node **22.23.3** / Signal K **2.32.0** as well. `git diff --check` passes.
+
+The synthetic native test covers metadata-only discovery, generic/dedicated description parity, required and queued/saved pending decisions, native administrator approval/rejection, exact string and zero forwarding, invalid-value refusal before queueing, source/role denials and renewed approval after changed choices. Portable tests additionally cover mixed scalar types, malformed choices, conflicting declarations (including duplicate enum entries), explicit-schema precedence, nested diagnostics, and changed labels. No live credentials, controls or hardware were used for these tests. This checkpoint is local verification, not CI, publication or deployment.
+
 ## Alpha 2 release preparation (2026-10-19)
 
 `0.1.0-alpha.2` includes the native PUT approval implementation and initial configuration save fix. Local `npm run check` passes on Node **24.22.0** / Signal K **2.33.0**: type checking, lint, formatting, **72 portable tests** and **58 native integration tests**. The two opt-in product clients and production History backend are skipped locally; the Python MCP client is enabled. The release workflow separately gates publication on both CI workflows, the four supported runtime combinations with real isolated History, and verification of the exact commit-stamped package. Publication and remote CI evidence are recorded by that workflow; these local checks do not establish vessel deployment or physical operation.

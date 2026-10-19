@@ -81,7 +81,7 @@ Configure a Streamable HTTP client with your endpoint, for example `https://boat
 | `describe_capability` | Inspect operation inputs, permissions, support and approval state    |
 | `execute_capability`  | Invoke a core read or an individually approved plugin GET            |
 | `list_put_paths`      | Discover metadata-advertised PUT candidates for an explicit source   |
-| `describe_put`        | Read one PUT target's metadata and supplied value constraints        |
+| `describe_put`        | Inspect PUT constraints, schema diagnostics and exact approval state |
 | `put_value`           | Submit one individually approved native action                       |
 | `get_put_status`      | Check a gateway-submitted action owned by the same Signal K identity |
 | `execute_mutation`    | Invoke the same native action through `signalk.put` / `put_value`    |
@@ -161,7 +161,7 @@ The table uses Signal K’s embedded configurator, plugin inventory and existing
 
 ## Individually approved native PUTs
 
-Use `list_put_paths` with an explicit handler `source`, then `describe_put` with that source and a path. The gateway forwards native metadata, including `supportsPut`, names, units and supplied enums/constraints. It can discover metadata-only paths observed after startup or previously described explicitly; earlier metadata-only targets may require a known-path `describe_put` first. The native API does not expose a complete handler-source catalog: use the actual provider's source identifier, and do not assume it equals the selected telemetry source. Listed paths are metadata candidates; the native handler decides whether a supplied source is registered.
+Use `list_put_paths` with an explicit handler `source`, then `describe_put` with that source and a path. The gateway forwards native metadata, including `supportsPut`, names, units and supplied enums/constraints. `describe_put` explains missing or unsupported schemas and reports exact approval state, whether that decision is saved, and the unverified handler-source boundary. Explicit native `possibleValues` become reviewed exact scalar choices, including for `type: "multiple"`; values are never coerced or inferred. It can discover metadata-only paths observed after startup or previously described explicitly; earlier metadata-only targets may require a known-path `describe_put` first. The native API does not expose a complete handler-source catalog: use the actual provider's source identifier, and do not assume it equals the selected telemetry source. Listed paths are metadata candidates; the native handler decides whether a supplied source is registered.
 
 `put_value` takes `{ "path": "...", "source": "...", "value": ... }`. Each eligible unapproved target remains blocked with `APPROVAL_PENDING`, without invoking a handler. Refresh **Operation requests**, review that exact **Write** row, click **Accept** or **Reject**, and **Save Configuration**. Every approved action still requires a native write-capable identity and exact-source `put` permission. Telemetry `write` permission is different. The table has no role selector: read-only identities cannot write. There is no all-PUT switch, wildcard target, inferred source, or MCP self-approval.
 

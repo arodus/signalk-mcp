@@ -89,6 +89,11 @@ test(
         assert.equal(description.source, "public");
         assert.equal(description.metadata.supportsPut, true);
         assert.equal(description.nativeHandlerValidation, true);
+        assert.equal(description.schemaDiagnostics[0].code, "NO_INPUT_TYPE");
+        assert.equal(description.approvalStatus, "required");
+        assert.equal(description.approvalSaved, false);
+        assert.equal(description.enabled, false);
+        assert.equal(description.sourceVerified, false);
         assert.equal(
           description.sourceVerification,
           "native-handler-on-dispatch",
@@ -509,6 +514,86 @@ test(
           values.measurements[0].timestamp,
           "2026-10-19T10:00:00.000Z",
         );
+      },
+    );
+
+    await t.test(
+      "native value choices require saved approval and preserve exact raw values",
+      async () => {
+        const selected = target(paths.choices);
+        const describe = async () =>
+          success(await f.call("describe_put", selected));
+        const before = provider.testCalls.length;
+        let description = await describe();
+        assert.equal(description.schemaStatus, "available");
+        assert.equal(description.schemaSource, "native-possible-values");
+        assert.deepEqual(description.inputSchema.enum, ["off", "on"]);
+        assert.equal(description.approvalStatus, "required");
+        const originalReviews = JSON.stringify(f.reviews());
+        await describe();
+        assert.equal(JSON.stringify(f.reviews()), originalReviews);
+        error(await put("OFF", paths.choices), "INVALID_PUT_VALUE");
+        assert.equal(JSON.stringify(f.reviews()), originalReviews);
+        error(await put("off", paths.choices), "APPROVAL_PENDING");
+        description = await describe();
+        assert.equal(description.approvalStatus, "pending");
+        assert.equal(description.approvalSaved, false);
+        assert.equal(description.reason, "APPROVAL_PENDING");
+        assert.equal(provider.testCalls.length, before);
+        await f.decide(selected, "pending");
+        description = await describe();
+        assert.equal(description.approvalStatus, "pending");
+        assert.equal(description.approvalSaved, true);
+        assert.equal(description.enabled, false);
+        await f.decide(selected);
+        description = await describe();
+        assert.equal(description.approvalStatus, "approved");
+        assert.equal(description.approvalSaved, true);
+        assert.equal(description.enabled, true);
+        assert.equal(description.sourceVerified, false);
+        assert.equal(description.reason, null);
+        const generic = success(
+          await f.call("execute_capability", {
+            id: "signalk.put",
+            operation: "describe_put",
+            arguments: selected,
+          }),
+        );
+        assert.deepEqual(generic, description);
+        assert.equal(
+          success(await put("off", paths.choices)).outcome,
+          "completed",
+        );
+        assert.equal(provider.testCalls.at(-1).value, "off");
+        error(await put(0, paths.choices), "INVALID_PUT_VALUE");
+        error(await put("off", paths.choices, "private"), "PERMISSION_DENIED");
+        error(
+          await put("off", paths.choices, "public", "reader"),
+          "PERMISSION_DENIED",
+        );
+        assert.equal(provider.testCalls.length, before + 1);
+        provider.setMetadata(paths.choices, {
+          supportsPut: true,
+          type: "multiple",
+          possibleValues: [
+            { title: "Off", value: "off" },
+            { title: "Zero", value: 0 },
+          ],
+        });
+        description = await describe();
+        assert.equal(description.approvalStatus, "required");
+        assert.equal(description.enabled, false);
+        error(await put(0, paths.choices), "APPROVAL_PENDING");
+        await f.decide(selected);
+        assert.equal(success(await put(0, paths.choices)).outcome, "completed");
+        assert.equal(provider.testCalls.at(-1).value, 0);
+        error(await put("0", paths.choices), "INVALID_PUT_VALUE");
+        await f.decide(selected, "rejected");
+        description = await describe();
+        assert.equal(description.approvalStatus, "rejected");
+        assert.equal(description.reason, "APPROVAL_REJECTED");
+        error(await put("off", paths.choices), "APPROVAL_REJECTED");
+        assert.equal(provider.testCalls.length, before + 2);
       },
     );
 

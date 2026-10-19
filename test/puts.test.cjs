@@ -109,6 +109,208 @@ test("native PUT discovery exposes metadata-only candidates with exact source AC
   }
 });
 
+test("PUT descriptions explain schema gaps, saved approvals and unverified handler sources without queueing", () => {
+  const f = fixture();
+  const describe = () =>
+    f.puts.describe(f.authorize, { path, source }, f.config.readRequests);
+  const queueBefore = JSON.stringify(f.requests.schema());
+  let result = describe();
+  assert.equal(result.schemaDiagnostics[0].code, "NO_INPUT_TYPE");
+  assert.equal(result.schemaDiagnostics[0].field, "metadata.type");
+  assert.equal(result.schemaSource, "native-metadata");
+  assert.equal(result.approvalStatus, "approved");
+  assert.equal(result.enabled, true);
+  assert.equal(result.reason, null);
+  assert.equal(result.sourceVerified, false);
+  const review = Object.values(f.config.readRequests)[0];
+  review.decision = "pending";
+  assert.equal(describe().approvalStatus, "pending");
+  assert.equal(describe().enabled, false);
+  review.decision = "rejected";
+  assert.equal(describe().approvalStatus, "rejected");
+  assert.equal(describe().reason, "APPROVAL_REJECTED");
+  f.config.readRequests = {};
+  assert.equal(describe().approvalStatus, "required");
+  assert.equal(describe().reason, "NOT_ALLOWLISTED");
+  f.state.metadata = { supportsPut: true, type: "multiple" };
+  result = describe();
+  assert.equal(result.schemaStatus, "unsupported");
+  assert.equal(result.schemaDiagnostics[0].code, "UNSUPPORTED_INPUT_TYPE");
+  assert.match(result.schemaDiagnostics[0].message, /multiple/);
+  assert.equal(result.enabled, false);
+  assert.equal(result.reason, "UNSUPPORTED_PUT_SCHEMA");
+  assert.equal(JSON.stringify(f.requests.schema()), queueBefore);
+  assert.equal(f.state.calls.length, 0);
+});
+
+test("native possibleValues supply exact enum constraints without coercion or automatic approval", async () => {
+  for (const values of [
+    ["on", "off", "charger only"],
+    [0, 1, 4],
+    [false, true],
+    [null, false, 0, "0"],
+  ]) {
+    const metadata = {
+      supportsPut: true,
+      type: "multiple",
+      possibleValues: values.map((value) => ({
+        title: "Untrusted display label",
+        value,
+      })),
+    };
+    const f = fixture(metadata);
+    const description = f.puts.describe(
+      f.authorize,
+      { path, source },
+      f.config.readRequests,
+    );
+    assert.equal(description.schemaStatus, "available");
+    assert.equal(description.schemaSource, "native-possible-values");
+    assert.deepEqual(description.schemaDiagnostics, []);
+    assert.deepEqual(description.inputSchema, { enum: values });
+    assert.deepEqual(description.metadata, metadata);
+    for (const value of values) {
+      await f.puts.execute(f.context, { path, source, value });
+      assert.deepEqual(f.state.calls.at(-1).body, { value, source });
+    }
+    const count = f.state.calls.length;
+    for (const value of ["OFF", "false", "unlisted", {}, []])
+      await assert.rejects(
+        f.puts.execute(f.context, { path, source, value }),
+        /INVALID_PUT_VALUE/,
+      );
+    assert.equal(f.state.calls.length, count);
+    f.config.readRequests = {};
+    await assert.rejects(
+      f.puts.execute(f.context, { path, source, value: values[0] }),
+      /APPROVAL_PENDING/,
+    );
+    assert.equal(f.state.calls.length, count);
+    assert.equal(Object.keys(f.requests.schema().properties).length, 1);
+    f.state.allowed = false;
+    await assert.rejects(
+      f.puts.execute(f.context, { path, source, value: values[0] }),
+      /PERMISSION_DENIED/,
+    );
+    assert.equal(f.state.calls.length, count);
+  }
+});
+
+test("malformed, ambiguous or conflicting native choices cannot queue or dispatch", async () => {
+  for (const metadata of [
+    { possibleValues: [] },
+    { possibleValues: "off" },
+    { possibleValues: ["off"] },
+    { possibleValues: [{ title: "off" }] },
+    { possibleValues: [{ value: {} }] },
+    { possibleValues: [{ value: [] }] },
+    { possibleValues: [{ value: "off" }, { value: "off" }] },
+    { possibleValues: Array.from({ length: 129 }, (_, value) => ({ value })) },
+    { enum: ["on"], possibleValues: [{ value: "off" }] },
+    { enum: [0, 0], possibleValues: [{ value: 0 }, { value: 1 }] },
+    { type: "range", possibleValues: [{ value: 0 }] },
+    { type: "number", possibleValues: [{ value: "off" }] },
+    { minimum: 1, possibleValues: [{ value: 0 }] },
+  ]) {
+    const f = fixture({ supportsPut: true, type: "multiple", ...metadata });
+    f.config.readRequests = {};
+    const description = f.puts.describe(
+      f.authorize,
+      { path, source },
+      f.config.readRequests,
+    );
+    assert.equal(description.schemaStatus, "unsupported");
+    assert.match(
+      description.schemaDiagnostics[0].code,
+      /NATIVE_CHOICES|UNSUPPORTED_INPUT_TYPE/,
+    );
+    await assert.rejects(
+      f.puts.execute(f.context, { path, source, value: "off" }),
+      /UNSUPPORTED_PUT_SCHEMA/,
+    );
+    assert.equal(Object.keys(f.requests.schema().properties).length, 0);
+    assert.equal(f.state.calls.length, 0);
+  }
+});
+
+test("explicit schemas retain precedence and nested diagnostics; native choices never drop declared constraints", async () => {
+  const explicit = fixture({
+    supportsPut: true,
+    schema: { type: "string", pattern: "^off$" },
+    type: "multiple",
+    possibleValues: [{ value: "off" }],
+  });
+  const description = explicit.puts.describe(explicit.authorize, {
+    path,
+    source,
+  });
+  assert.equal(description.schemaSource, "explicit-schema");
+  assert.equal(description.schemaDiagnostics[0].field, "schema.pattern");
+  await assert.rejects(
+    explicit.puts.execute(explicit.context, { path, source, value: "off" }),
+    /UNSUPPORTED_PUT_SCHEMA/,
+  );
+  const nested = fixture({
+    supportsPut: true,
+    schema: { type: "object", properties: { mode: { type: "multiple" } } },
+  });
+  assert.equal(
+    nested.puts.describe(nested.authorize, { path, source })
+      .schemaDiagnostics[0].field,
+    "schema.properties.mode.type",
+  );
+  const constrained = fixture({
+    supportsPut: true,
+    type: "integer",
+    minimum: 0,
+    maximum: 4,
+    possibleValues: [{ value: 0 }, { value: 4 }],
+  });
+  assert.deepEqual(
+    constrained.puts.describe(constrained.authorize, { path, source })
+      .inputSchema,
+    { type: "integer", minimum: 0, maximum: 4, enum: [0, 4] },
+  );
+  await assert.rejects(
+    constrained.puts.execute(constrained.context, { path, source, value: 1 }),
+    /INVALID_PUT_VALUE/,
+  );
+  await constrained.puts.execute(constrained.context, {
+    path,
+    source,
+    value: 0,
+  });
+});
+
+test("changed native choices or meaning require a new exact saved review", async () => {
+  const f = fixture({
+    supportsPut: true,
+    type: "multiple",
+    possibleValues: [{ title: "Off", value: "off" }],
+  });
+  f.state.metadata.possibleValues.push({ title: "On", value: "on" });
+  assert.equal(
+    f.puts.describe(f.authorize, { path, source }, f.config.readRequests)
+      .approvalStatus,
+    "required",
+  );
+  await assert.rejects(
+    f.puts.execute(f.context, { path, source, value: "on" }),
+    /APPROVAL_PENDING/,
+  );
+  assert.equal(f.state.calls.length, 0);
+  const target = f.puts.describe(f.authorize, { path, source });
+  const review = { ...putReview(target), decision: "approved" };
+  f.config.readRequests[reviewKey(review)] = review;
+  await f.puts.execute(f.context, { path, source, value: "on" });
+  f.state.metadata.possibleValues[0].title = "Different meaning";
+  await assert.rejects(
+    f.puts.execute(f.context, { path, source, value: "off" }),
+    /APPROVAL_PENDING/,
+  );
+  assert.equal(f.state.calls.length, 1);
+});
+
 test("metadata observation indexes only bounded self paths, including targets without telemetry", () => {
   const f = fixture();
   f.app.getPath = () => ({});

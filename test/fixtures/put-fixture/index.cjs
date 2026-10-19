@@ -50,6 +50,7 @@ module.exports = (app) => {
     held: `${prefix}.held`,
     timeout: `${prefix}.timeout`,
     constrained: `${prefix}.constrained`,
+    choices: `${prefix}.choices`,
     unsupported: `${prefix}.unsupported`,
     missing: `${prefix}.missing`,
     writeOnly: `${prefix}.writeOnly`,
@@ -153,6 +154,15 @@ module.exports = (app) => {
           supportsPut: key !== "unsupported",
           displayName: `Synthetic ${key} command`,
           description: "Integration fixture metadata; no physical device",
+          ...(key === "choices"
+            ? {
+                type: "multiple",
+                possibleValues: [
+                  { title: "Off", value: "off" },
+                  { title: "On", value: "on" },
+                ],
+              }
+            : {}),
           ...(key === "constrained"
             ? { type: "number", enum: [0, 1, 2], minimum: 0, maximum: 2 }
             : {}),
