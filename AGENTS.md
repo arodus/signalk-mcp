@@ -11,6 +11,7 @@ Keep this project independent. Preserve compatibility with ordinary Signal K ins
 - Keep the implemented gateway read-only. Never expose control, configuration writes, arbitrary URLs, files, shell commands or in-process JavaScript execution.
 - Reuse Signal K tokens and permissions. Do not create a second authentication system, read signing secrets, mint privileged tokens or bypass the caller's identity.
 - Authorize each invocation and every exposed telemetry path/source. Discovery is not authorization. Unknown plugin operations remain disabled unless explicitly reviewed and allowlisted.
+- Eligible blocked plugin reads may queue bounded in-memory review metadata only. Save approvals through native admin Plugin Config; never grant or persist approvals from MCP. Saved rejection overrides a matching manual approval; schema/route changes cannot inherit a request approval.
 - Use Signal K’s CORS decision for browser-origin requests; do not reintroduce plugin-local host/origin lists. Preserve bearer authentication, input/output limits, sanitized errors and fail-closed behavior when required adapters are unavailable.
 - Prefer public Signal K interfaces. Isolate version-sensitive internals and document/test their supported versions. Verify uncertain behavior against source and real integration tests.
 - Keep transport, identity, telemetry access, discovery and capability execution separate. Dedicated tools and generic capability calls must use the same authorization/data implementation.
@@ -32,6 +33,7 @@ Keep this project independent. Preserve compatibility with ordinary Signal K ins
 - Keep `npm test` portable for official Signal K plugin CI and the registry harness. Native server/provider tests belong to `npm run test:integration`; `npm run check` must continue to include both suites. Do not remove permission checks or conceal security-bridge warnings to improve a registry score.
 - Avoid duplicate feature-branch push and PR CI runs. The official workflow owns portable tests and formatting; our workflow keeps one blocking type/lint job plus the native runtime and installed-package matrix. Upstream lint is advisory, so it cannot replace our blocking lint check.
 - For two-client testing, install `test/python-requirements.txt` in an isolated Python environment and set `MCP_TEST_PYTHON` to its Python executable.
+- Build the embedded admin configurator with the host’s shared React instance; include `public/remoteEntry.js` and its chunks in the npm artifact. Admin saves must continue to use the native configuration API.
 - Test native plugin loading through a real temporary Signal K server with synthetic data. Do not substitute mocks for claims about native routing or authentication.
 - Check `npm pack` when packaging changes. Update README, brief status and verification notes when behavior or limitations change.
 - Distinguish local tests, pushed code, CI, merged state, deployment and physical proof. Do not mark planned work implemented or claim compatibility from type checking alone.

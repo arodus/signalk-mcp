@@ -25,7 +25,7 @@ The package has the `signalk-node-server-plugin` discovery keyword, compiled Com
 
 The official plugin CI is separate from the registry harness and our native integration CI. The registry runs its own installation/load/activation checks and the plugin's tests, applies its audit and metadata rules, then associates the published npm `gitHead` with the official CI workflow. A passing PR run alone is not evidence for an eventual release commit. Run the workflow again on the exact commit that will be published.
 
-Local probing with the official registry at `ce1aa8f4a27cb80ef609c3c452ea96663863d355` reports `loads`, `activates` and `hasSchema` as true, but also records invalid-configuration errors and no ready status. Its activation criterion is absence of a thrown exception. Our endpoint still requires explicit trusted hosts and native security; do not loosen those requirements to improve scoring. This unsandboxed local probe does not establish full registry sandbox behavior or a 100/100 score.
+Local probing with the official registry at `ce1aa8f4a27cb80ef609c3c452ea96663863d355` reports `loads`, `activates` and `hasSchema` as true, but also records invalid-configuration errors and no ready status. Its activation criterion is absence of a thrown exception. That probe predates the removal of plugin-local host lists and must be repeated for the release candidate. The endpoint requires native security; do not weaken authentication to improve scoring. This unsandboxed local probe does not establish full registry sandbox behavior or a 100/100 score.
 
 Before publication, verify the registry's current source and requirements rather than assuming its score from local tests:
 

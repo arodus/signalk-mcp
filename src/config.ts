@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { isIP } from "node:net";
 import { approvalSchema } from "./capabilities/schemas.js";
+import { reviewsSchema } from "./approvals.js";
 export { pathSchema } from "./paths.js";
 export const configSchema = z.preprocess(
   (options) => {
@@ -17,6 +18,7 @@ export const configSchema = z.preprocess(
   z
     .object({
       pluginOperations: z.array(approvalSchema).max(64).default([]),
+      readRequests: reviewsSchema.default({}),
       localTlsServerName: z
         .string()
         .max(253)
@@ -51,7 +53,7 @@ export const schema = {
   properties: {
     pluginOperations: {
       type: "array",
-      title: "Approved plugin reads",
+      title: "Manual plugin read approvals (advanced)",
       default: [],
       maxItems: 64,
       items: {
@@ -98,6 +100,6 @@ export const schema = {
 export const uiSchema = {
   pluginOperations: {
     "ui:help":
-      "Add only plugin endpoints you have reviewed as read-only. Leave empty to disable plugin reads.",
+      "Normally use Plugin read requests above. Existing manual approvals are preserved. A matching rejected request blocks a manual approval too.",
   },
 };

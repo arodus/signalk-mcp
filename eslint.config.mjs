@@ -1,11 +1,17 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 export default tseslint.config(
-  { ignores: ["dist/**", "node_modules/**"] },
+  { ignores: ["dist/**", "public/**", "node_modules/**"] },
+  {
+    files: ["ui/**/*.mjs"],
+    languageOptions: {
+      globals: { fetch: "readonly", AbortSignal: "readonly" },
+    },
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["test/**/*.cjs"],
+    files: ["test/**/*.cjs", "webpack.config.cjs"],
     languageOptions: {
       globals: {
         __dirname: "readonly",
