@@ -4,7 +4,7 @@ Connect an AI agent to your boat’s Signal K data. Ask for current readings, av
 
 Signal K MCP runs as a plugin inside your existing Signal K server. It uses Signal K’s accounts and permissions, with no separate server or account to manage.
 
-**Alpha software:** use a test installation for evaluation. Supported versions are Signal K **2.32.0 and 2.33.0**, with Node.js **22 or 24**. Live vessel acceptance and end-to-end ChatGPT connection testing remain outstanding.
+Supported versions are Signal K **2.32.0 and 2.33.0**, with Node.js **22 or 24**. Node.js **24** is recommended. See [compatibility and limits](#compatibility-and-limits) for the scope of testing.
 
 ## What you can do
 
@@ -18,10 +18,10 @@ The plugin fetches and forwards data. It does not calculate derived values or ru
 ## Install and enable
 
 1. Use Node.js 24 for the recommended setup and enable [Signal K security](https://demo.signalk.org/documentation/Security.html#enabling-security). MCP connections always need a token, even if Signal K allows guest reads.
-2. In your **test Signal K configuration directory**, run this command as the account that runs Signal K:
+2. In your **Signal K configuration directory** (usually `~/.signalk`), run this command as the account that runs Signal K:
 
    ```sh
-   npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0-alpha.3
+   npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0
    ```
 
 3. Restart Signal K and open **Apps & Plugins → Configuration → Signal K MCP**.
@@ -119,6 +119,20 @@ _The screenshot uses synthetic example requests, not live vessel data._
 Saved approvals survive restarts and allow later calls while Signal K permissions still apply. The plugin does not ask for confirmation on every call; configure your agent to ask before changing state. Changed operation contracts require a new review. Unsaved requests disappear on restart, so refresh the table before reviewing and saving.
 
 If a submitted action times out or loses its connection, its outcome may be unknown. Do not retry automatically. A successful response alone does not prove that physical equipment acted.
+
+## Upgrading
+
+Back up your Signal K configuration and record the installed plugin version. Disable the plugin, install `signalk-mcp@0.1.0` with the command above, and restart the Signal K server process. Review the saved operation approvals and native permissions before re-enabling it. See the [upgrade and rollback procedure](docs/release-readiness.md#upgrade-rollback-and-removal).
+
+Version 0.1.0 includes the earlier alpha features plus mixed-case plugin discovery, clearer native PUT diagnostics and support for explicitly declared input choices. Existing approvals still require the same reviewed operation contract; the version change does not grant any new permissions.
+
+## Compatibility and limits
+
+- Native server and installed-package tests cover Signal K **2.32.0/2.33.0** on Node.js **22/24**, including TypeScript and Python MCP clients. Other server versions need separate verification.
+- Product-client coverage varies. Earlier Codex and Hermes runtime checks covered reads; the current full tool catalog, desktop/web interfaces and ChatGPT tunnel connection are not all verified. Check the [client evidence](docs/clients.md#verification-status) before choosing a setup.
+- History requires a compatible provider and is subject to the [documented path and source restrictions](docs/history-providers.md). Plugin operations require supported API descriptions and individual review.
+- Restart the full Signal K process when upgrading. In-process whole-server shutdown has a documented upstream cleanup limitation.
+- Local ARM64 tests do not establish Raspberry Pi compatibility or physical equipment operation. Complete vessel acceptance and public registry scoring are separate from automated test results.
 
 ## Troubleshooting
 
