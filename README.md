@@ -21,7 +21,7 @@ The plugin fetches and forwards data. It does not calculate derived values or ru
 2. In your **Signal K configuration directory** (usually `~/.signalk`), run this command as the account that runs Signal K:
 
    ```sh
-   npm install --omit=dev --ignore-scripts signalk-mcp@0.1.0
+   npm install --omit=dev --ignore-scripts signalk-mcp@0.1.1
    ```
 
 3. Restart Signal K and open **Apps & Plugins → Configuration → Signal K MCP**.
@@ -122,7 +122,7 @@ If a submitted action times out or loses its connection, its outcome may be unkn
 
 ## Upgrading
 
-Back up your Signal K configuration and record the installed plugin version. Disable the plugin, install `signalk-mcp@0.1.0` with the command above, and restart the Signal K server process. Review the saved operation approvals and native permissions before re-enabling it. See the [upgrade and rollback procedure](docs/release-readiness.md#upgrade-rollback-and-removal).
+Back up your Signal K configuration and record the installed plugin version. Disable the plugin, install `signalk-mcp@0.1.1` with the command above, and restart the Signal K server process. Review the saved operation approvals and native permissions before re-enabling it. See the [upgrade and rollback procedure](docs/release-readiness.md#upgrade-rollback-and-removal).
 
 Version 0.1.0 includes the earlier alpha features plus mixed-case plugin discovery, clearer native PUT diagnostics and support for explicitly declared input choices. Existing approvals still require the same reviewed operation contract; the version change does not grant any new permissions.
 
