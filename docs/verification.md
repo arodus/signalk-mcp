@@ -1,5 +1,13 @@
 # Verification record
 
+## Stable 0.1.0 preparation (2026-10-20)
+
+The release preparation sets both package manifests to `0.1.0`, consolidates the changelog into one dated version entry, and updates installation, upgrade and compatibility guidance. Runtime code and dependencies are unchanged. The release checklist distinguishes preparation from publication and retains outstanding product-client, complete vessel-acceptance and public registry evidence.
+
+On Node **24.22.0** / Signal K **2.33.0**, `MCP_TEST_PYTHON=/tmp/signalk-mcp-python-client/bin/python npm run check` passes type checking, ESLint, formatting, **90 portable tests** and **62 native integration tests**. Python MCP interoperability passes. Three optional installed-product-client/production-History checks are skipped locally; no current product-client or real History acceptance is inferred from this run. CI separately exercises real isolated History across the four supported Node/Signal K combinations.
+
+The release-note extractor accepts `v0.1.0`; manifest versions, the single changelog version section, local documentation links and `git diff --check` pass. Exact clean-commit package evidence and preparation-PR CI results are recorded with the candidate artifact and PR. The final merged/tagged commit must pass the release workflow again before publication. This checkpoint does not establish stable publication, deployment or physical operation.
+
 ## Native PUT schema diagnostics and declared choices (2026-10-19)
 
 `describe_put` now reports the first schema problem with its code, field and explanation, schema provenance, exact approval status, whether that approval is saved, submission eligibility/block reason and an explicit unverified handler-source flag. Pending in-memory requests remain distinct from saved decisions. Discovery itself does not queue reviews or invoke handlers, and approved metadata does not establish handler registration or physical operation.

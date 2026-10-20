@@ -1,6 +1,8 @@
 # Release readiness
 
-The owner authorized `0.1.0-alpha.1`, `0.1.0-alpha.2` and `0.1.0-alpha.3` on 2026-10-19. Alpha 2 includes individually approved native PUTs and the first-time configuration save fix. Alpha 3 adds individually reviewed plugin POST endpoints; package version changes alone do not invalidate their approvals. The release workflow provides publication evidence; these instructions alone do not establish npm publication, AppStore indexing or vessel deployment. Track acceptance in issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8).
+Version `0.1.0` is prepared as the first stable release, consolidating the alpha features, mixed-case plugin discovery, native PUT diagnostics and declared input choices. This preparation does not authorize or establish publication, deployment or completion of vessel acceptance. The release workflow must run on the final annotated tag after the release commit is merged to `main`.
+
+On 2026-10-20, GitHub confirms all three alpha releases, and both CI workflows pass on the current pre-preparation `main` commit `872b389`. npm reports `latest` as `0.1.0-alpha.1` and `next` as `0.1.0-alpha.3`. Stable publication must move `latest` to `0.1.0`; verify the registry again after publishing. Historical acceptance issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8) are closed, but their old checklists are not proof that every acceptance step ran.
 
 ## Package verification
 
@@ -19,7 +21,7 @@ Require a clean-source receipt for the final candidate. An earlier receipt does 
 
 ## Registry and publishing status
 
-On 2026-10-19, npm metadata confirms the owner-created `signalk-mcp@0.0.0-stage` placeholder. The owner reports trusted publishing is configured. Publish the authorized alpha under `next`, preserving `latest`; verify npm metadata and the downloaded artifact after the workflow succeeds.
+The alpha release workflows successfully published through npm trusted publishing. The same tag-driven workflow selects `latest` for stable versions and `next` for prereleases. Verify npm metadata and the downloaded artifact after the stable workflow succeeds; earlier alpha evidence does not validate the stable artifact.
 
 The package has the `signalk-node-server-plugin` discovery keyword, compiled CommonJS entry, Node >=22 requirement, MIT license, repository link and disabled-by-default declaration. The tarball includes README, brief, working instructions, changelog and compatibility documentation. It has no install-time build hook; AppStore installation must work with scripts disabled.
 
@@ -43,15 +45,15 @@ The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synt
 
 Before changing an existing installation, save the current package version and the plugin's configuration through the host's normal backup process. Keep provider approvals for review; a provider upgrade can change a route's behavior or permissions.
 
-Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, Signal K’s browser-origin policy, security-enabled state and each individually reviewed plugin GET/native PUT approval before enabling. There is no blanket approval; native permissions remain mandatory. Repeat one allowed read, one denied-path read and an unapproved-action refusal check using an isolated synthetic target. Live PUT acceptance requires separate authorization. The plugin stores no historical values or private account database to migrate.
+Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, Signal K’s browser-origin policy, security-enabled state and each individually reviewed plugin GET/POST/native PUT approval before enabling. There is no blanket approval; native permissions remain mandatory. Repeat one allowed read, one denied-path read and an unapproved-action refusal check using an isolated synthetic target. Live PUT acceptance requires separate authorization. The plugin stores no historical values or private account database to migrate.
 
 For rollback, disable the plugin, reinstall the previously retained tarball/version with scripts disabled, restore its compatible configuration and restart. Recheck permissions before enabling. Do not assume a changed schema or provider approval remains compatible.
 
 For removal, disable the plugin, run `npm uninstall signalk-mcp` in the Signal K configuration directory and restart. Confirm the MCP endpoint is no longer available. Signal K may retain its plugin settings; remove those only if intentionally discarding the saved configuration. Remove the client connection and revoke its native token only if that token was dedicated to this client and is no longer needed.
 
-## Post-alpha vessel acceptance procedure
+## Vessel acceptance procedure
 
-This procedure is scheduled after the first alpha release, not as a prerequisite for alpha publication. It is prepared only. Do not connect to a vessel or install the package without explicit access/deployment authorization.
+The complete procedure remains a separate acceptance check; automated integration tests and partial installation/discovery checks do not establish completion. Do not connect to a vessel or install the package without explicit access/deployment authorization.
 
 1. Record the approved vessel/server, exact package hash, Signal K/Node versions, client and permitted read-only time window. Confirm existing native security and a dedicated least-privilege token without exposing it in logs or screenshots.
 2. Configure Signal K’s browser-origin policy and trusted TLS. Start with no generic plugin GET approvals.
@@ -61,23 +63,23 @@ This procedure is scheduled after the first alpha release, not as a prerequisite
 6. Check server responsiveness, client disconnect/reconnect and gateway disable/re-enable. Stop on new errors or telemetry disruption and roll back the package/configuration if required.
 7. Record actual observations, omissions and errors. Successful reads do not prove sensor health, notification delivery or physical equipment operation.
 
-## First alpha checklist
+## Stable release checklist
 
-- [ ] Verify the final clean-commit tarball on supported runtimes and retain its receipt.
-- [ ] Verify current npm publishing access, metadata and registry requirements; rerun the registry harness on the candidate.
-- [ ] Verify official CI on the exact release commit and reassess dependency advisories.
-- [ ] Follow up after alpha: verify the intended ChatGPT/Codex tunnel connection end-to-end with a restricted Signal K token, including allowed reads and permission denials. Static local token injection is source-verified only; it uses one shared Signal K identity per configured token.
-- [x] Record the upstream in-process shutdown limitation and the tested full-process restart procedure. Upstream repair is not an alpha prerequisite.
-- [x] Remove Raspberry Pi testing from release acceptance per the owner's 2026-10-19 decision; retain local ARM64 evidence without claiming Pi compatibility.
-- [x] Obtain explicit authorization for alpha npm publication and a GitHub release (owner request, 2026-10-19).
-- [ ] After publication, verify the downloaded artifact and AppStore/registry indexing.
+- [ ] Review and merge the `0.1.0` preparation PR, with one dated changelog entry and current README/install instructions.
+- [ ] Verify the final clean-commit tarball on supported runtimes; retain the exact artifact, checksum and receipt.
+- [ ] Pass both CI workflows on the final release commit and reassess production dependency advisories.
+- [ ] Recheck current registry requirements and run the registry preflight on the candidate; keep local scoring distinct from the public result.
+- [ ] Obtain explicit publication authorization, then create the annotated `v0.1.0` tag on the reviewed `main` commit.
+- [ ] After publication, verify npm `latest`, downloaded package integrity and `gitHead`, the GitHub release assets, and AppStore/registry indexing.
 
-## After the first alpha
+## Separate acceptance and known limits
 
-- [ ] Obtain explicit vessel access/deployment authorization and run the vessel procedure above.
-- [ ] Audit the actual production Signal K host before installation; package audit results do not certify that host.
+- Product-client checks need refreshing for the full current tool catalog; earlier Codex/Hermes evidence covered a smaller read catalog. Desktop/web and intended tunnel connections remain unverified. See the [client matrix](clients.md#verification-status).
+- Complete the vessel procedure above only with access/deployment authorization, including an audit of the actual production host. Package audit results do not certify that host.
+- Raspberry Pi testing is outside release acceptance per the owner's 2026-10-19 decision; local ARM64 evidence does not establish Pi compatibility.
+- Upstream in-process shutdown remains unsupported as a verified cleanup path. Full server process replacement and synthetic large-value recovery are tested; see the [resource report](resource-validation.md) for workload-specific limits.
 
-Full process replacement and synthetic large-value recovery are covered by local native tests; see the resource report for workload-specific limits. No publication or deployment is implied by these checklists.
+These limitations remain explicit for `0.1.0`; preparing the stable version does not mark them resolved.
 
 ## Release workflow
 

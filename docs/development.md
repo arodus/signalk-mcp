@@ -15,7 +15,7 @@ npm pack
 Install the resulting tarball in a test Signal K configuration directory, using its service account:
 
 ```sh
-npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0-alpha.3.tgz
+npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.1.0.tgz
 ```
 
 Restart Signal K, save the default plugin configuration and enable the plugin as described in the README.
@@ -50,7 +50,7 @@ To verify an installed tarball, set `MCP_TEST_PLUGIN_DIR` to the installed packa
 
 ## Release evidence
 
-The release pipeline stamps the release commit into the package and verifies npm’s published `gitHead`. Alpha versions use the `next` distribution tag. See [registry score evidence](registry-readiness.md), [package verification and release acceptance](release-readiness.md), and the [verification report](verification.md). Publication requires explicit authorization.
+The release pipeline stamps the release commit into the package and verifies npm’s published `gitHead`. Stable versions use `latest`; prereleases use `next`. See [registry score evidence](registry-readiness.md), [package verification and release acceptance](release-readiness.md), and the [verification report](verification.md). Publication requires explicit authorization.
 
 ## Reproduce installed-client tests
 

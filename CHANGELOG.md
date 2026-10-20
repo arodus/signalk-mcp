@@ -1,51 +1,37 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.0] - 2026-10-20
 
-- Explain native PUT schema gaps with field-specific diagnostics and report exact approval state, saved versus queued decisions and unverified handler sources without queueing during discovery.
-- Support explicit native scalar `possibleValues` as exact reviewed input choices, including `type: "multiple"`, while preserving original metadata, values, constraints, native permissions and fresh-review requirements.
+Initial stable release of the native Signal K MCP gateway, consolidating the alpha releases.
 
-- Fix `INVALID_FEATURES` when native plugin IDs contain uppercase letters, such as `AdvancedWind` and `SpeedAndCurrent`. Preserve exact IDs for discovery, OpenAPI, routing and approval matching while retaining input bounds and path-safety checks.
+### Data access
 
-## [0.1.0-alpha.3] - 2026-10-19
+- Connect MCP agents through Streamable HTTP inside an existing Signal K server, using native bearer tokens and permissions.
+- Discover and fetch current telemetry, vessel snapshots, notifications and standard v2 History API results, preserving provider values, units, timestamps, sources and missing values.
+- Discover installed plugin capabilities and inspect their OpenAPI descriptions, preserving native plugin IDs including mixed-case names.
+- Provide fourteen tools for data access, discovery, reviewed plugin operations and native PUT actions. The gateway does not calculate derived values or execute agent-written code.
 
-- Add individually reviewed plugin POST endpoints with bounded JSON inputs through `execute_mutation`. Each endpoint requires its own administrator approval saved through native Plugin Config, plus a native write-capable identity and provider permission checks.
-- Bind POST approvals to the reviewed endpoint contract: method, route, inputs and documented meaning. A plugin package version change alone does not invalidate approval.
-- Show POST endpoints as writes in the admin configurator and allow saved approvals to be revoked while the provider remains installed.
-- Preserve provider responses and report uncertain mutation outcomes without automatic retries or claims of physical completion.
-- Verify plugin POST and production-provider integration tests against the exact release tarball before publishing.
+### Individually approved operations
 
-## [0.1.0-alpha.2] - 2026-10-19
+- Require a separate administrator review for each plugin GET, plugin POST and native self-context PUT action, saved through native Plugin Config. Native permissions remain mandatory on every call; there is no blanket approval.
+- Queue eligible blocked requests for review without dispatching them or retaining submitted values or tokens. The embedded approval table supports acceptance, rejection and review of the exact operation contract.
+- Bind native PUT approvals to an exact path, explicit source and reviewed metadata/value contract. Explain unsupported schemas, distinguish queued requests from saved decisions, and support explicitly declared scalar input choices without coercion.
+- Bind plugin POST approvals to the method, route, supported JSON inputs and documented meaning. Package version changes alone do not invalidate an unchanged POST contract.
+- Forward approved actions with the original caller's identity, preserve provider responses, and track gateway-submitted native PUT requests by owner. Report uncertain outcomes without automatic retries or claims of physical completion.
 
-- Describe the gateway as permission-aware data access with individually approved actions. Every plugin GET and native PUT starts blocked and needs its own saved administrator approval; there is no blanket approval. Built-in data reads continue to use native Signal K permissions.
+### Installation and reliability
 
-- Add individually approved native self-context PUTs using the existing Plugin Config review table, exact path/source/metadata binding and native PUT permissions. There is no blanket PUT grant; plugin POSTs remain disabled.
-- Add bounded metadata-driven PUT discovery, explicit source selection, owned request-status tracking and truthful uncertain outcomes without automatic mutation retries. Preserve existing reads, plugin GET reviews and native configuration saves.
+- Support Signal K 2.32.0 and 2.33.0 on Node.js 22 and 24, with native server and installed-package CI coverage, TypeScript/Python MCP clients and isolated History and plugin providers.
+- Ship the compiled plugin and embedded admin configurator; installation does not require build scripts. Allow unchanged defaults to be saved on first setup before enabling the plugin.
+- Use Signal K's browser-origin policy and support tested native TLS and reverse-proxy hosting.
+- Bound requests, responses, discovery, concurrency and provider deadlines. Cover cancellation, plugin stop/start, full server process replacement and client reconnection with synthetic integration tests.
+- Document installation, standard Signal K token creation, major agent-client setup, approval workflows, upgrades, rollback and troubleshooting.
+- Provide tag-driven release checks, commit-stamped tarballs, retained checksums and published npm commit verification.
 
-- Allow saving unchanged default configuration on first setup and refresh the native admin page so Enable becomes available. Preserve host flags and require native administrator authorization without granting operation approvals.
+### Known limits
 
-## [0.1.0-alpha.1] - 2026-10-19
-
-- Add the tag-driven release pipeline used by Alert Center: both CI gates, release-tag and notes checks, commit-stamped tarballs, exact-package integration checks, npm prerelease tags and published `gitHead` verification.
-
-- Refresh the package listing and README with supported reads, the approval-table screenshot and explicit authentication limits. Remove Pi testing from release acceptance and schedule vessel acceptance after the first alpha.
-
-- Replace the long approval form with an embedded table, Accept/Reject buttons, retained rejected rows and deletion for uninstalled plugins. Save through the existing Signal K admin configuration API.
-
-- Queue eligible blocked plugin reads for native admin review, with deduplicated pending requests, saved approve/reject decisions, schema-bound approvals and unchanged Signal K permission enforcement.
-
-- Remove plugin-local host/browser-origin settings and use Signal K’s CORS policy; preserve existing configuration on upgrade. Clarify the HTTPS certificate hostname and refresh the settings-only screenshot.
-- Stop oversized JSON request/result serialization at the byte budget; verify client reconnection and permissions across full native server process restarts.
-- Add read-only v2 notification registry list/get tools with native context/path/source permissions, unchanged record forwarding, and support for disabled core notification management. No dependency on the proposed alerts subsystem.
-
-First alpha of the native Signal K MCP gateway, initially providing data reads.
-
-- Serve nine MCP tools through the existing Signal K HTTP server using native bearer identities and path/source permissions.
-- Discover and forward current telemetry, legacy notification values, v2 notification records, standard v2 History results and explicitly approved plugin GET responses.
-- Preserve provider values and metadata without domain calculations or inferred substitutes.
-- Support tested native TLS and reverse-proxy configurations with certificate validation and fixed local destinations.
-- Bound requests, responses, provider deadlines, discovery and concurrent requests; close pending MCP connections on shutdown and disconnect.
-- Verify Signal K 2.32.0/2.33.0, TypeScript/Python MCP clients, unchanged History and Alert Center providers, and opt-in Codex/Hermes product clients.
-- Add official Signal K plugin CI alongside the native integration matrix and record the local ARM64 development benchmark.
-
-Known alpha limitations: the public registry score and ChatGPT/Codex tunnel connection remain to be verified end-to-end. Raspberry Pi testing is out of scope. Upstream in-process shutdown is a documented limitation; use full-process restart. Installed-host assessment and explicitly authorized vessel acceptance follow the first alpha. Full process replacement and ten-minute local load/large-value checks are recorded in the resource report. OAuth is not implemented.
+- OAuth is not implemented. Clients must support Streamable HTTP with an existing Signal K bearer token.
+- Product-client evidence varies; earlier Codex/Hermes runtime checks cover a smaller read catalog. The current full catalog, desktop/web interfaces and ChatGPT tunnel connection are not all verified.
+- History and plugin API support have documented schema, identifier and authorization limits; unsupported operations remain blocked.
+- Supported Signal K versions have an upstream in-process shutdown limitation. Use full server process replacement for the tested restart behavior.
+- Local ARM64 measurements do not certify Raspberry Pi hardware. Complete vessel acceptance, physical operation and public AppStore/registry scoring are separate from automated test results.
