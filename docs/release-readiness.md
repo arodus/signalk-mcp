@@ -1,8 +1,10 @@
 # Release readiness
 
-Version `0.1.0` is prepared as the first stable release, consolidating the alpha features, mixed-case plugin discovery, native PUT diagnostics and declared input choices. This preparation does not authorize or establish publication, deployment or completion of vessel acceptance. The release workflow must run on the final annotated tag after the release commit is merged to `main`.
+Version `0.1.0` was published on 2026-10-20 from `eb1f732` after both CI gates passed. The [release workflow](https://github.com/arodus/signalk-mcp/actions/runs/39402601687) completed successfully, npm `latest` points to `0.1.0`, and its published `gitHead` matches that commit. The [GitHub release](https://github.com/arodus/signalk-mcp/releases/tag/v0.1.0) contains the tarball and checksum.
 
-On 2026-10-20, GitHub confirms all three alpha releases, and both CI workflows pass on the current pre-preparation `main` commit `872b389`. npm reports `latest` as `0.1.0-alpha.1` and `next` as `0.1.0-alpha.3`. Stable publication must move `latest` to `0.1.0`; verify the registry again after publishing. Historical acceptance issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8) are closed, but their old checklists are not proof that every acceptance step ran.
+Version `0.1.1` fixes release-test isolation: spawned packaging scripts use a writable fixture-local `GITHUB_OUTPUT`, rather than inheriting the registry workflow's read-only path. Runtime code and dependencies are unchanged. The owner authorized the fix and patch release on 2026-10-20; the tag-driven workflow must still pass on the final commit before publication. A new public registry result is required before claiming that the score has recovered.
+
+Historical acceptance issues [#7](https://github.com/arodus/signalk-mcp/issues/7) and [#8](https://github.com/arodus/signalk-mcp/issues/8) are closed, but their old checklists are not proof that every acceptance step ran.
 
 ## Package verification
 
@@ -65,11 +67,11 @@ The complete procedure remains a separate acceptance check; automated integratio
 
 ## Stable release checklist
 
-- [ ] Review and merge the `0.1.0` preparation PR, with one dated changelog entry and current README/install instructions.
+- [ ] Review and merge the `0.1.1` fix PR, with dated changelog notes and current README/install instructions.
 - [ ] Verify the final clean-commit tarball on supported runtimes; retain the exact artifact, checksum and receipt.
 - [ ] Pass both CI workflows on the final release commit and reassess production dependency advisories.
 - [ ] Recheck current registry requirements and run the registry preflight on the candidate; keep local scoring distinct from the public result.
-- [ ] Obtain explicit publication authorization, then create the annotated `v0.1.0` tag on the reviewed `main` commit.
+- [ ] Create the annotated `v0.1.1` tag on the reviewed `main` commit after passing checks; the owner has authorized publication.
 - [ ] After publication, verify npm `latest`, downloaded package integrity and `gitHead`, the GitHub release assets, and AppStore/registry indexing.
 
 ## Separate acceptance and known limits
@@ -79,7 +81,7 @@ The complete procedure remains a separate acceptance check; automated integratio
 - Raspberry Pi testing is outside release acceptance per the owner's 2026-10-19 decision; local ARM64 evidence does not establish Pi compatibility.
 - Upstream in-process shutdown remains unsupported as a verified cleanup path. Full server process replacement and synthetic large-value recovery are tested; see the [resource report](resource-validation.md) for workload-specific limits.
 
-These limitations remain explicit for `0.1.0`; preparing the stable version does not mark them resolved.
+These limitations remain explicit for the stable releases; publishing a version does not mark them resolved.
 
 ## Release workflow
 

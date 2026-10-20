@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-10-20
+
+- Isolate release-packaging tests from the parent workflow's `GITHUB_OUTPUT` by giving each fixture its own writable temporary output file. This prevents test failures when the Signal K registry sandbox exposes the inherited workflow path as read-only.
+- Add regression coverage for a read-only inherited output file and verify that packaging still emits the expected artifact and checksum outputs without changing the parent's file.
+- Runtime behavior, dependencies and authorization rules are unchanged. Public registry scoring requires a new registry run against this release.
+
 ## [0.1.0] - 2026-10-20
 
 Initial stable release of the native Signal K MCP gateway, consolidating the alpha releases.

@@ -1,5 +1,13 @@
 # Verification record
 
+## Release-test output isolation and 0.1.1 (2026-10-20)
+
+The release-test helper inherited `GITHUB_OUTPUT` from its parent workflow. The packaging script correctly appends artifact paths there during a real release, but the registry sandbox can expose the inherited file as read-only. A local reproduction failed at that write with `EACCES`; a read-only filesystem mount would instead return `EROFS`. The helper now supplies a writable output path inside each temporary fixture, without changing the production packaging script.
+
+The regression fails before the fix and passes afterward, runs the packaging test with a read-only inherited output file, and confirms that the parent's contents remain unchanged. The packaging test also checks both expected outputs in the fixture-local file. All five release tests pass on Node **22.23.3** and **24.22.0**.
+
+With a read-only `GITHUB_OUTPUT` inherited by the entire `npm run check`, Node **24.22.0** / Signal K **2.33.0** passes type checking, lint, formatting, **91 portable tests** and **62 native integration tests**, including Python MCP. Three optional installed-product-client/production-History checks are skipped locally. The parent's output remains unchanged and `git diff --check` passes. Public registry execution and scoring must be verified independently after publication.
+
 ## Stable 0.1.0 preparation (2026-10-20)
 
 The release preparation sets both package manifests to `0.1.0`, consolidates the changelog into one dated version entry, and updates installation, upgrade and compatibility guidance. Runtime code and dependencies are unchanged. The release checklist distinguishes preparation from publication and retains outstanding product-client, complete vessel-acceptance and public registry evidence.

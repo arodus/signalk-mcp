@@ -46,20 +46,27 @@ function fixture(t) {
   git("init", "-b", "main");
   git("add", ".");
   git("commit", "-m", "fixture");
+  const githubOutput = path.join(cwd, "github-output");
   const run = (script, args = [], env = {}) =>
     spawnSync(process.execPath, [path.join(cwd, "scripts", script), ...args], {
       cwd,
       encoding: "utf8",
-      env: { ...process.env, ...env },
+      // The registry sandbox can inherit a read-only workflow output path.
+      env: { ...process.env, ...env, GITHUB_OUTPUT: githubOutput },
     });
-  return { cwd, git, run };
+  return { cwd, git, run, githubOutput };
 }
 
 test("release tarball stamps actual commit, checksums it and restores manifest even after pack failure", async (t) => {
-  const { cwd, git, run } = fixture(t);
+  const { cwd, git, run, githubOutput } = fixture(t);
   const original = fs.readFileSync(path.join(cwd, "package.json"), "utf8");
   const r = run("create-release-package.mjs");
   assert.equal(r.status, 0, r.stderr);
+  assert.equal(
+    fs.readFileSync(githubOutput, "utf8"),
+    "package-file=mcp-release-fixture-0.1.0-alpha.1.tgz\n" +
+      "checksum-file=mcp-release-fixture-0.1.0-alpha.1.tgz.sha256\n",
+  );
   const artifact = path.join(cwd, "mcp-release-fixture-0.1.0-alpha.1.tgz");
   const { readPackageManifest } = await import(
     pathToFileURL(path.resolve("scripts/package-archive.mjs"))
@@ -86,6 +93,40 @@ test("release tarball stamps actual commit, checksums it and restores manifest e
     fs.readFileSync(path.join(cwd, "package.json"), "utf8"),
     original,
   );
+});
+
+test("release fixture isolates a read-only inherited GitHub output file", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcp-workflow-output-"));
+  const output = path.join(dir, "output");
+  const original = "parent-workflow-output\n";
+  fs.writeFileSync(output, original);
+  fs.chmodSync(output, 0o444);
+  t.after(() => {
+    fs.chmodSync(output, 0o600);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--test",
+      "--test-name-pattern=^release tarball",
+      path.join(__dirname, "release.test.cjs"),
+    ],
+    {
+      cwd: path.resolve(__dirname, ".."),
+      env: {
+        ...process.env,
+        // Start an independent runner rather than inheriting its child mode.
+        NODE_TEST_CONTEXT: undefined,
+        GITHUB_OUTPUT: output,
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /release tarball stamps actual commit/);
+  assert.equal(fs.readFileSync(output, "utf8"), original);
 });
 
 test("published commit verification retries propagation and rejects mismatched gitHead", (t) => {
