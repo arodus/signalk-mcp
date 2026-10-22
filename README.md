@@ -20,7 +20,7 @@ The plugin fetches and forwards data. It does not calculate derived values or ru
 
 ## Recommended plugins
 
-These optional plugins have been exercised with actual providers. They are also listed in the AppStore's `signalk.recommends` metadata; installing Signal K MCP does not install them automatically.
+These optional plugins have been tested with Signal K MCP. The table lists the tested versions and operations. Signal K's AppStore also lists them as recommendations; installing Signal K MCP does not install them automatically.
 
 | Plugin                                                                                           | Use                                                    | Tested coverage                                                                                                  |
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
