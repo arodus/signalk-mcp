@@ -28,6 +28,7 @@
   ],
   "signalk": {
     "displayName": "Signal K MCP",
+    "appIcon": "./docs/images/signalk-mcp-icon.png",
     "screenshots": [
       "./docs/images/native-put-approvals.png"
     ]
