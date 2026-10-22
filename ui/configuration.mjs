@@ -59,13 +59,32 @@ export async function loadConfiguration(fetcher = nativeFetch) {
             !object(review.metadata) ||
             !object(review.inputSchema) ||
             "permission" in review
-          : review.kind === "post"
-            ? review.method !== "POST" ||
-              typeof review.pluginId !== "string" ||
+          : review.kind === "resource"
+            ? !["POST", "PUT", "DELETE"].includes(review.method) ||
+              ![
+                "routes",
+                "waypoints",
+                "regions",
+                "notes",
+                "charts",
+                "logentries",
+              ].includes(review.collection) ||
+              typeof review.provider !== "string" ||
+              !review.provider ||
+              review.path !==
+                `/signalk/v2/api/resources/${review.collection}${review.method === "POST" ? "" : "/{id}"}` ||
+              typeof review.description !== "string" ||
               !object(review.inputSchema) ||
               typeof review.contractHash !== "string" ||
+              !/^[a-f0-9]{64}$/.test(review.contractHash) ||
               "permission" in review
-            : "kind" in review || typeof review.pluginId !== "string"),
+            : review.kind === "post"
+              ? review.method !== "POST" ||
+                typeof review.pluginId !== "string" ||
+                !object(review.inputSchema) ||
+                typeof review.contractHash !== "string" ||
+                "permission" in review
+              : "kind" in review || typeof review.pluginId !== "string"),
     )
   )
     throw new Error(

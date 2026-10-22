@@ -16,12 +16,12 @@ Configure a Streamable HTTP client with your endpoint, for example `https://boat
 | `get_notification`    | Fetch one authorized v2 registry record by its listed ID             |
 | `list_capabilities`   | List core capabilities, installed plugins and advertised APIs        |
 | `describe_capability` | Inspect operation inputs, permissions, support and approval state    |
-| `execute_capability`  | Invoke a core read or an individually approved plugin GET            |
+| `execute_capability`  | Invoke core/Resources reads or an approved plugin GET                |
 | `list_put_paths`      | Discover metadata-advertised PUT candidates for an explicit source   |
 | `describe_put`        | Inspect PUT constraints, schema diagnostics and exact approval state |
 | `put_value`           | Submit one individually approved native action                       |
 | `get_put_status`      | Check a gateway-submitted action owned by the same Signal K identity |
-| `execute_mutation`    | Invoke an approved native PUT or plugin POST                         |
+| `execute_mutation`    | Invoke an approved native PUT, plugin POST or resource write         |
 
 For telemetry:
 
@@ -163,10 +163,16 @@ Use `describe_capability` for the installed plugin, then `execute_mutation` for 
 
 This action suppresses notifications, including emergency alerts; the example is not an approval or a request to run it. Path/query parameters remain top-level arguments; `body` is the JSON request body. A valid unapproved call from a write-capable identity returns `APPROVAL_PENDING` without dispatch. In native Plugin Config, inspect the **Plugin POST / Write** row, accept or reject it, then **Save Configuration**. Only that save persists approval. There is no extra confirmation on every later invocation.
 
-Reviews bind plugin ID, operation ID, POST method, route, supported inputs and the endpoint's resolved OpenAPI contract, including descriptions and referenced schemas. Changed endpoint contracts require renewed review. Package/document version changes and unrelated endpoints alone do not. Undocumented implementation changes cannot be detected from OpenAPI; review provider changes as needed. GET/manual approvals never enable a POST. Delete a POST review and save to revoke it even while the plugin remains installed. GET, POST and native PUT reviews share the 64-entry queue; submitted values and tokens are never retained there.
+Reviews bind plugin ID, operation ID, POST method, route, supported inputs and the endpoint's resolved OpenAPI contract, including descriptions and referenced schemas. Changed endpoint contracts require renewed review. Package/document version changes and unrelated endpoints alone do not. Undocumented implementation changes cannot be detected from OpenAPI; review provider changes as needed. GET/manual approvals never enable a POST. Delete a POST review and save to revoke it even while the plugin remains installed. GET, POST, native PUT and Resources write reviews share the 64-entry queue; submitted values and tokens are never retained there.
 
 The initial body subset is an optional or required JSON object with at most 32 declared primitive string, number, integer or boolean fields. Supported bounds/enums are enforced, unknown fields rejected, and defaults are not inserted. Local component references are supported within bounded contracts. Nested objects, arrays, null/nullable, composition, unsupported constraints, multipart and uploads remain disabled. Configuration routes and credential, URL, file or command fields are excluded. No general HTTP executor is exposed.
 
 Each invocation requires a current native `readwrite` or `admin` identity, enabled provider, exact saved approval and the provider's native route/data permissions. Original bearer forwarding uses the accepted server socket and verified TLS; redirects are refused. The gateway does not invent telemetry ACLs for arbitrary provider data, so administrator review must include the provider's authorization behavior.
 
 Results include `statusCode`, unchanged provider `data`, `submitted: true` and `retrySafe: false`. `outcome: responded` means an HTTP response was received, not that an action succeeded physically or semantically. HTTP 202 is `accepted`; inspect the provider's own pending/failure fields. HTTP errors, disconnects, invalid/oversized replies and post-dispatch revocation return `unknown` with sanitized codes. No automatic retry, generic status polling or cancellation guarantee is provided. This does not establish vessel deployment or physical operation.
+
+## Resources
+
+`api.resources` supports routes, waypoints, regions, notes, chart metadata and logentries. Use `list_collections`, `list_resource_providers`, `list_resources`, `get_resource`, `list_logentries` and `list_logentry_dates` through `execute_capability`. Reads use native Resources permissions and return provider data unchanged.
+
+`describe_resource` takes an exact collection/provider pair and exposes the supported write contracts and approval state. `create_resource`, `put_resource` (upsert) and `delete_resource` use `execute_mutation`, each with its own saved administrator review. Reviews bind method, collection, provider, route and input contract; they never contain submitted values. Native Resources write permissions still apply. See [arguments, limits and examples](resources.md).

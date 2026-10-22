@@ -191,7 +191,7 @@ export default function Configuration() {
     h(
       "p",
       { className: "mcp-help" },
-      "Review each GET, POST or native PUT before accepting it. Writes can change vessel state: check the target, meaning, input constraints and provider permissions. Signal K permissions still apply. Changes take effect when you save.",
+      "Review each plugin operation, native PUT or resource write before accepting it. Check the target, meaning, input constraints and provider permissions. Signal K permissions still apply. Changes take effect when you save.",
     ),
     error
       ? h("div", { role: "alert", className: "mcp-notice mcp-error" }, error)
@@ -211,7 +211,7 @@ export default function Configuration() {
               className: "mcp-table-wrap",
               tabIndex: 0,
               role: "region",
-              "aria-label": "GET, POST and PUT approvals",
+              "aria-label": "Operation approvals",
             },
             h(
               "table",
@@ -234,12 +234,17 @@ export default function Configuration() {
                   ? rows.map(([key, item]) => {
                       const put = item.kind === "put";
                       const post = item.kind === "post";
-                      const write = put || post;
+                      const resource = item.kind === "resource";
+                      const write = put || post || resource;
                       const absent =
-                        !put && !base.installed.includes(item.pluginId);
-                      const label = put
-                        ? `PUT ${item.context}:${item.path} source ${item.source}`
-                        : `${item.pluginId}: ${item.operationId}`;
+                        !put &&
+                        !resource &&
+                        !base.installed.includes(item.pluginId);
+                      const label = resource
+                        ? `${item.method} ${item.collection} provider ${item.provider}`
+                        : put
+                          ? `PUT ${item.context}:${item.path} source ${item.source}`
+                          : `${item.pluginId}: ${item.operationId}`;
                       const description = put
                         ? item.metadata.description
                         : item.description;
@@ -249,13 +254,23 @@ export default function Configuration() {
                         h(
                           "td",
                           { className: "mcp-operation" },
-                          h("strong", null, put ? item.path : item.operationId),
+                          h(
+                            "strong",
+                            null,
+                            resource
+                              ? `${item.method} ${item.collection}`
+                              : put
+                                ? item.path
+                                : item.operationId,
+                          ),
                           h(
                             "small",
                             null,
-                            put
-                              ? `Native PUT · ${item.context}`
-                              : `Plugin ${post ? "POST" : "GET"} · ${item.pluginId}`,
+                            resource
+                              ? `Resources · ${item.provider}`
+                              : put
+                                ? `Native PUT · ${item.context}`
+                                : `Plugin ${post ? "POST" : "GET"} · ${item.pluginId}`,
                             absent ? " · Not installed" : "",
                           ),
                           put
@@ -269,7 +284,7 @@ export default function Configuration() {
                               null,
                               put
                                 ? "Meaning and value constraints"
-                                : `${post ? "POST" : "GET"} ${item.path}`,
+                                : `${resource ? item.method : post ? "POST" : "GET"} ${item.path}`,
                             ),
                             h(
                               "p",
@@ -294,6 +309,9 @@ export default function Configuration() {
                                         : {
                                             method: item.method,
                                             path: item.path,
+                                            ...(resource
+                                              ? { provider: item.provider }
+                                              : {}),
                                           },
                                       null,
                                       2,
@@ -302,9 +320,11 @@ export default function Configuration() {
                                   h(
                                     "p",
                                     null,
-                                    post
-                                      ? "Accepted input schema (body is sent as JSON)"
-                                      : "Accepted value schema",
+                                    resource && item.method === "DELETE"
+                                      ? "Accepted target schema"
+                                      : post || resource
+                                        ? "Accepted input schema (body is sent as JSON)"
+                                        : "Accepted value schema",
                                   ),
                                   h(
                                     "pre",
@@ -318,7 +338,9 @@ export default function Configuration() {
                               null,
                               put
                                 ? "Accept only this exact path and source after checking what it controls. Metadata and schema changes require a new review."
-                                : "Check the provider's implementation for side effects and data permissions.",
+                                : resource
+                                  ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
+                                  : "Check the provider's implementation for side effects and data permissions.",
                             ),
                           ),
                         ),
@@ -340,7 +362,7 @@ export default function Configuration() {
                               className: `mcp-badge mcp-${write ? "write" : "read"}`,
                               title: put
                                 ? "Requires native Signal K PUT permission"
-                                : post
+                                : post || resource
                                   ? "Requires a write-capable Signal K identity and provider permission"
                                   : "Requires native Signal K read permission",
                             },
@@ -412,7 +434,7 @@ export default function Configuration() {
                       h(
                         "td",
                         { colSpan: 4 },
-                        "No requests yet. Refresh after a client attempts an unapproved plugin GET, POST or native PUT.",
+                        "No requests yet. Refresh after a client attempts an unapproved plugin operation, native PUT or resource write.",
                       ),
                     ),
               ),
@@ -424,7 +446,7 @@ export default function Configuration() {
               className: "mcp-help",
               style: { marginTop: 10, marginBottom: 0 },
             },
-            "Rejected requests stay in this list. Delete a POST or native PUT review to revoke its approval; plugin GET reviews can be deleted when the plugin is no longer installed. Save to apply changes.",
+            "Rejected requests stay in this list. Delete a write review to revoke its approval; plugin GET reviews can be deleted when the plugin is no longer installed. Save to apply changes.",
           ),
           h(
             "details",

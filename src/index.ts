@@ -3,7 +3,12 @@ import type { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { authenticate, GatewayError, type App } from "./auth.js";
 import { configSchema, schema, uiSchema, type Config } from "./config.js";
-import { localActions, localGet, localPost } from "./capabilities/http.js";
+import {
+  localActions,
+  localGet,
+  localPost,
+  localResourceMutation,
+} from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
 import { boundedJson } from "./json.js";
 import { validateOrigin } from "./origin.js";
@@ -81,6 +86,12 @@ function pluginFactory(app: App): Plugin {
           settings.localTlsServerName,
         ),
         localPost(
+          req,
+          req.get("authorization")!,
+          controller.signal,
+          settings.localTlsServerName,
+        ),
+        localResourceMutation(
           req,
           req.get("authorization")!,
           controller.signal,

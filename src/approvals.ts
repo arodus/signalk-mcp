@@ -107,13 +107,90 @@ const postReviewSchema = z
       return false;
     }
   });
+const resourceCollectionSchema = z.enum([
+  "routes",
+  "waypoints",
+  "regions",
+  "notes",
+  "charts",
+  "logentries",
+]);
+interface ResourceReviewTarget {
+  collection: z.infer<typeof resourceCollectionSchema>;
+  provider: string;
+  method: "POST" | "PUT" | "DELETE";
+  path: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+}
+const resourceReviewSchema = z
+  .object({
+    kind: z.literal("resource"),
+    collection: resourceCollectionSchema,
+    provider: pluginIdSchema,
+    method: z.enum(["POST", "PUT", "DELETE"]),
+    path: routeSchema,
+    description: z.string().min(1).max(4096),
+    inputSchema: z.record(z.unknown()),
+    contractHash: z.string().regex(/^[a-f0-9]{64}$/),
+    decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
+  })
+  .strict()
+  .refine((review) => {
+    try {
+      return (
+        review.path ===
+          `/signalk/v2/api/resources/${review.collection}${review.method === "POST" ? "" : "/{id}"}` &&
+        review.contractHash === resourceBinding(review)
+      );
+    } catch {
+      return false;
+    }
+  }, "Invalid resource route or contract binding");
+export type ResourceReview = z.infer<typeof resourceReviewSchema>;
+function resourceBinding(review: ResourceReviewTarget): string {
+  return putBinding(
+    {
+      collection: review.collection,
+      provider: review.provider,
+      method: review.method,
+      path: review.path,
+      description: review.description,
+    },
+    review.inputSchema,
+  );
+}
+
+export function resourceReview(target: ResourceReviewTarget): ResourceReview {
+  try {
+    const metadata = {
+      collection: target.collection,
+      provider: target.provider,
+      method: target.method,
+      path: target.path,
+      description: target.description,
+      inputSchema: structuredClone(target.inputSchema),
+    };
+    return resourceReviewSchema.parse({
+      ...metadata,
+      kind: "resource",
+      contractHash: resourceBinding(metadata),
+      decision: "pending",
+    });
+  } catch {
+    throw new GatewayError("OPERATION_DISABLED", 403);
+  }
+}
 export const reviewSchema = z.union([
   readReviewSchema,
   putReviewSchema,
   postReviewSchema,
+  resourceReviewSchema,
 ]);
 export type Review = z.infer<typeof reviewSchema>;
 export function reviewKey(review: Review): string {
+  if ("kind" in review && review.kind === "resource")
+    return digest(["RESOURCE", review.contractHash]);
   if ("kind" in review && review.kind === "post")
     return digest([
       "POST",
@@ -221,6 +298,14 @@ export class ApprovalRequests {
   pendingPut(target: PutTarget): boolean {
     return this.reviews[reviewKey(putReview(target))]?.decision === "pending";
   }
+  requestResource(target: ResourceReview): never {
+    return this.enqueue(resourceReview(target));
+  }
+  pendingResource(target: ResourceReview): boolean {
+    return (
+      this.reviews[reviewKey(resourceReview(target))]?.decision === "pending"
+    );
+  }
   private enqueue(review: Review): never {
     const key = reviewKey(review);
     if (!this.reviews[key]) {
@@ -241,20 +326,24 @@ export class ApprovalRequests {
       title: "Operation requests",
       additionalProperties: false,
       description:
-        "Refresh this page after a blocked MCP request. Review each GET, POST or exact native PUT target, select Accept or Reject, then Save Configuration. PUTs can change vessel state; check the source, meaning and value constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
+        "Refresh this page after a blocked MCP request. Review each plugin operation, exact native PUT target or resource write, select Accept or Reject, then Save Configuration. Check the target, provider, meaning and input constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
       properties: Object.fromEntries(
         Object.entries(this.reviews).map(([key, review]) => [
           key,
           {
             type: "object",
             title:
-              "kind" in review && review.kind === "put"
-                ? `Native PUT: ${review.path}`
-                : `${review.pluginId}: ${review.operationId}`,
+              "kind" in review && review.kind === "resource"
+                ? `Resource ${review.method}: ${review.collection} (${review.provider})`
+                : "kind" in review && review.kind === "put"
+                  ? `Native PUT: ${review.path}`
+                  : `${review.pluginId}: ${review.operationId}`,
             description:
-              "kind" in review && review.kind === "put"
-                ? `PUT ${review.context}:${review.path} — source ${review.source}. Metadata: ${canonicalJson(review.metadata)}. Value constraints: ${canonicalJson(review.inputSchema)}`
-                : `${"kind" in review ? "POST" : "GET"} ${review.path}${review.description ? ` — ${review.description}` : ""}${"kind" in review ? `; input ${canonicalJson(review.inputSchema)}` : ""}`,
+              "kind" in review && review.kind === "resource"
+                ? `${review.method} ${review.path} — provider ${review.provider}. ${review.description}; input ${canonicalJson(review.inputSchema)}`
+                : "kind" in review && review.kind === "put"
+                  ? `PUT ${review.context}:${review.path} — source ${review.source}. Metadata: ${canonicalJson(review.metadata)}. Value constraints: ${canonicalJson(review.inputSchema)}`
+                  : `${"kind" in review ? "POST" : "GET"} ${review.path}${review.description ? ` — ${review.description}` : ""}${"kind" in review ? `; input ${canonicalJson(review.inputSchema)}` : ""}`,
             default: structuredClone(review),
             additionalProperties: false,
             required: Object.keys(review),

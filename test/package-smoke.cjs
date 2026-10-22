@@ -101,6 +101,7 @@ try {
       "test/integration.test.cjs",
       "test/native-puts.test.cjs",
       "test/native-posts.test.cjs",
+      "test/resources-native.test.cjs",
       "test/production-plugin.test.cjs",
     ],
     {

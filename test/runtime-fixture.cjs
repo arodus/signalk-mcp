@@ -35,7 +35,13 @@ async function start(gateway = true, { manageNotifications = true } = {}) {
   for (const [id, root, config] of [
     ["mcp-fixture", path.join(__dirname, "fixtures/mcp-fixture"), {}],
     ...(gateway
-      ? [["signalk-mcp", path.resolve(__dirname, ".."), configuration]]
+      ? [
+          [
+            "signalk-mcp",
+            process.env.MCP_TEST_PLUGIN_DIR || path.resolve(__dirname, ".."),
+            configuration,
+          ],
+        ]
       : []),
   ]) {
     dependencies[id] = "0.1.0";

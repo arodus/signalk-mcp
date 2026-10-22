@@ -13,7 +13,8 @@ Supported versions are Signal K **2.32.0 and 2.33.0**, with Node.js **22 or 24**
 - Read current vessel measurements, including their units, timestamps and sources.
 - Discover available data and installed plugin capabilities.
 - Read notifications and historical data from an installed History API provider.
-- Use selected plugin operations and native control actions after an administrator approves each one.
+- Read routes, waypoints, regions, notes, chart metadata and logbook entries through the [Resources API](docs/resources.md).
+- Create, save or delete resources, and use selected plugin operations and native control actions, after an administrator approves each operation.
 
 The plugin fetches and forwards data. It does not calculate derived values or run agent-written code. Data availability depends on your sensors, installed providers and Signal K permissions.
 
@@ -99,13 +100,15 @@ Once connected, ask your agent:
 
 > Check whether a history provider is available. If it is, fetch the last hour of speed-over-ground history.
 
+> Check the available resource collections, then show my 20 most recent logbook entries.
+
 The agent discovers and calls the tools; you do not need to write JSON requests. A useful instruction for your agent is:
 
 > Discover available paths and capabilities before using them. Preserve units, timestamps and missing values. Ask me before any action that changes state. If an action has an unknown outcome, do not retry it automatically.
 
 ## Approve plugin operations and actions
 
-Built-in telemetry, history and notification reads use your Signal K permissions immediately. **Every plugin read, plugin POST and native PUT action needs its own saved administrator approval.** There is no allow-all setting, and an agent cannot approve itself.
+Built-in telemetry, history, notification and resource reads use your Signal K permissions immediately. **Every plugin read, plugin POST, native PUT action and resource write needs its own saved administrator approval.** There is no allow-all setting, and an agent cannot approve itself.
 
 When an agent attempts an eligible operation that has not been approved, it receives `APPROVAL_PENDING`. The operation has not run.
 
