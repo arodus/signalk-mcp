@@ -12,9 +12,10 @@ Supported versions are Signal K **2.32.0 and 2.33.0**, with Node.js **22 or 24**
 
 - Read current vessel measurements, including their units, timestamps and sources.
 - Discover available data and installed plugin capabilities.
+- Work with most plugins that describe their JSON APIs through Signal K's OpenAPI interface, without a separate adapter for each plugin.
 - Read notifications and historical data from an installed History API provider.
 - Read routes, waypoints, regions, notes, chart metadata and logbook entries through the [Resources API](docs/resources.md).
-- Create, save or delete resources, and use selected plugin operations and native control actions, after an administrator approves each operation.
+- Create, save or delete resources, call plugin operations and send native Signal K PUT actions after an administrator approves each operation.
 
 The plugin fetches and forwards data. It does not calculate derived values or run agent-written code. Data availability depends on your sensors, installed providers and Signal K permissions.
 
@@ -135,6 +136,8 @@ _The screenshot uses synthetic example requests, not live vessel data._
 
 The generic JSON executor supports GET, POST, PUT, PATCH and DELETE described by the plugin’s OpenAPI. PATCH is for partial updates; PUT follows the endpoint’s documented save or replacement behavior. See the [cross-plugin schema audit and author guidance](docs/plugin-schema-audit.md) for supported contracts and remaining gaps.
 
+Native Signal K PUT actions remain supported for exact `vessels.self` paths and handler sources, with their own saved approvals and native `put` permissions. See [native control actions](docs/native-puts.md).
+
 Saved approvals survive restarts and allow later calls while Signal K permissions still apply. The plugin does not ask for confirmation on every call; configure your agent to ask before changing state. Changed operation contracts require a new review. Unsaved requests disappear on restart, so refresh the table before reviewing and saving.
 
 If a submitted action times out or loses its connection, its outcome may be unknown. Do not retry automatically. A successful response alone does not prove that physical equipment acted.
@@ -147,6 +150,7 @@ Version 0.1.0 includes the earlier alpha features plus mixed-case plugin discove
 
 ## Compatibility and limits
 
+- The shared parser accepts 87 of 100 operations across seven audited plugin API documents. This checks their contracts; it does not mean every operation was executed. Plugins need a discoverable OpenAPI description for generic execution. Uploads, binary responses, event streams, configuration writes and routes outside the plugin namespace remain excluded; see the [schema audit](docs/plugin-schema-audit.md).
 - Native server and installed-package tests cover Signal K **2.32.0/2.33.0** on Node.js **22/24**, including TypeScript and Python MCP clients. Other server versions need separate verification.
 - Product-client coverage varies. Earlier Codex and Hermes runtime checks covered reads; the current full tool catalog, desktop/web interfaces and ChatGPT tunnel connection are not all verified. Check the [client evidence](docs/clients.md#verification-status) before choosing a setup.
 - History requires a compatible provider and is subject to the [documented path and source restrictions](docs/history-providers.md). Plugin operations require supported API descriptions and individual review.
