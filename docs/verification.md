@@ -1,5 +1,11 @@
 # Verification record
 
+## Stable 0.3.0 preparation (2026-10-22)
+
+The release candidate contains the merged generic native API discovery, reviewed execution and lifecycle caching changes. Release preparation updates versioned manifests, changelog and installation guidance without changing runtime code or dependencies.
+
+`npm run check` passes on Node **24.22.0** / Signal K **2.33.0**, including TypeScript, ESLint, formatting, **128 portable tests** and **67 native integration tests**, with three existing optional product-client/production-History skips. Python MCP interoperability passes and `git diff --check` is clean. The release PR and tag workflow retain final-commit package and remote CI evidence; publication and deployment are separate from these local source checks.
+
 ## Stable 0.2.0 preparation (2026-10-22)
 
 The release candidate combines the merged native Resources and reviewed plugin HTTP changes. Versioned manifests, changelog, installation examples and release guidance now identify `0.2.0`; the release preparation changes no runtime code or dependencies.

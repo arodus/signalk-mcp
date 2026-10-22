@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.0] - 2026-10-22
+
+- Discover and execute supported Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors API operations through the shared OpenAPI pipeline, without separate adapters for each API. Availability depends on the installed Signal K version and providers.
+- Require individual saved administrator review for each native API operation, bound to its method, route, input contract and documented meaning. Forward the original bearer token and preserve native route authorization.
+- Cache static native API descriptions after their first successful fetch for the plugin lifecycle, sharing concurrent requests and retrying failed discovery. Permissions, saved approvals and provider results remain live.
+- Extend bounded JSON schema support for annotated local references, scalar alternatives, duration strings and safe patterns. Unsupported schemas, configuration writes, binary transfers and streams remain blocked.
+- Add native API approval controls and real Signal K integration coverage, including installed-package checks across the supported runtime matrix.
+
+Existing saved approvals retain their reviewed scope; upgrading grants no additional permissions. Supported runtimes remain Signal K 2.32.0/2.33.0 on Node.js 22/24.
+
 ## [0.2.0] - 2026-10-22
 
 - Add native v2 Resources API reads for routes, waypoints, regions, notes, chart metadata and logbook entries, with explicit provider selection and bounded provider-side queries.

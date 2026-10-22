@@ -1,6 +1,6 @@
 # Release readiness
 
-Version `0.2.0` is being prepared from the merged Resources and plugin HTTP changes. It adds native Resources reads and individually reviewed writes, plugin PUT/PATCH/DELETE operations, broader JSON contracts, and AppStore metadata. The owner authorized this stable release on 2026-10-22. Publication requires the checks below on the final release commit; deployment and physical acceptance remain separate.
+Version `0.3.0` is being prepared from the merged native API changes. It adds generic discovery and individually reviewed execution for seven native API namespaces, lifecycle caching of static API descriptions and broader bounded JSON contracts. The owner authorized this stable release on 2026-10-22. Publication requires the checks below on the final release commit; deployment and physical acceptance remain separate.
 
 Earlier releases `0.1.0` and `0.1.1` were published on 2026-10-20. Version `0.1.1` fixed release-test isolation from inherited `GITHUB_OUTPUT`. Its npm publication succeeded, but the workflow's registry-visibility check timed out; the GitHub release was completed after independently verifying the published artifact. Check npm metadata and the release assets for publication evidence rather than treating that workflow's final status as a failed publish.
 
@@ -67,11 +67,11 @@ The complete procedure remains a separate acceptance check; automated integratio
 
 ## Stable release checklist
 
-- [ ] Review and merge the `0.2.0` release PR, with dated changelog notes and current README/install instructions.
+- [ ] Review and merge the `0.3.0` release PR, with dated changelog notes and current README/install instructions.
 - [ ] Verify the final clean-commit tarball on supported runtimes; retain the exact artifact, checksum and receipt.
 - [ ] Pass both CI workflows on the final release commit and reassess production dependency advisories.
 - [ ] Recheck current registry requirements and run the registry preflight on the candidate; keep local scoring distinct from the public result.
-- [ ] Create the annotated `v0.2.0` tag on the reviewed `main` commit after passing checks; the owner has authorized publication.
+- [ ] Create the annotated `v0.3.0` tag on the reviewed `main` commit after passing checks; the owner has authorized publication.
 - [ ] After publication, verify npm `latest`, downloaded package integrity and `gitHead`, the GitHub release assets, and AppStore/registry indexing.
 
 ## Separate acceptance and known limits
