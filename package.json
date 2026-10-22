@@ -1,6 +1,6 @@
 {
   "name": "signalk-mcp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Native Signal K MCP gateway for telemetry, history, notifications and resources, with individual admin approval for plugin operations, native PUTs and resource writes.",
   "license": "MIT",
   "main": "dist/index.js",
