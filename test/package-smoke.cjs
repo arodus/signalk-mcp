@@ -51,6 +51,7 @@ try {
     "docs/images/native-plugin-config.jpg",
     "docs/images/native-put-approvals.png",
     "docs/images/plugin-post-approvals.png",
+    "docs/images/signalk-mcp-icon.png",
   ])
     assert.ok(
       packed.files.some(({ path: file }) => file === required),

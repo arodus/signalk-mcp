@@ -1,5 +1,7 @@
 # Signal K MCP
 
+<img src="docs/images/signalk-mcp-icon.png" alt="Signal K MCP: a connection hub above an ocean wave" width="160" height="160">
+
 Connect an AI agent to your boat’s Signal K data. Ask for current readings, available sensors, notifications or recorded history, and let the agent use MCP tools to fetch the information.
 
 Signal K MCP runs as a plugin inside your existing Signal K server. It uses Signal K’s accounts and permissions, with no separate server or account to manage.
