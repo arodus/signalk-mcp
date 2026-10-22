@@ -18,6 +18,18 @@ Supported versions are Signal K **2.32.0 and 2.33.0**, with Node.js **22 or 24**
 
 The plugin fetches and forwards data. It does not calculate derived values or run agent-written code. Data availability depends on your sensors, installed providers and Signal K permissions.
 
+## Recommended plugins
+
+These optional plugins have been tested with Signal K MCP. The table lists the tested versions and operations. Signal K's AppStore also lists them as recommendations; installing Signal K MCP does not install them automatically.
+
+| Plugin                                                                                           | Use                                                    | Tested coverage                                                                                                  |
+| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| [Alert Center](https://github.com/arodus/signalk-alert-center) (`signalk-alert-center`)          | Persistent alerts, delivery history and policy control | Published 0.4.1: native reads, snooze POST, policy PATCH and DELETE/reset with external services disabled        |
+| [Logbook](https://github.com/meri-imperiumi/signalk-logbook) (`@meri-imperiumi/signalk-logbook`) | Vessel log entries                                     | Published 0.14.3 provider/storage: Resources create, read, filter, update and delete with synthetic entries      |
+| Stowage (`signalk-stowage-mgmt`)                                                                 | Inventory and storage locations                        | 1.3.0 category reads and creation through MCP; 35 of 36 documented operation contracts pass offline schema tests |
+
+See the [plugin schema audit](docs/plugin-schema-audit.md), [Resources checks](docs/verification.md#native-resources-reads-and-reviewed-writes--2026-10-22) for the exact scope. Schema checks for other plugins are documented separately; they do not establish execution against those providers.
+
 ## Install and enable
 
 1. Use Node.js 24 for the recommended setup and enable [Signal K security](https://demo.signalk.org/documentation/Security.html#enabling-security). MCP connections always need a token, even if Signal K allows guest reads.
@@ -108,7 +120,7 @@ The agent discovers and calls the tools; you do not need to write JSON requests.
 
 ## Approve plugin operations and actions
 
-Built-in telemetry, history, notification and resource reads use your Signal K permissions immediately. **Every plugin read, plugin POST, native PUT action and resource write needs its own saved administrator approval.** There is no allow-all setting, and an agent cannot approve itself.
+Built-in telemetry, history, notification and resource reads use your Signal K permissions immediately. **Every plugin read, plugin mutation (POST, PUT, PATCH or DELETE), native PUT action and resource write needs its own saved administrator approval.** There is no allow-all setting, and an agent cannot approve itself.
 
 When an agent attempts an eligible operation that has not been approved, it receives `APPROVAL_PENDING`. The operation has not run.
 
@@ -120,6 +132,8 @@ When an agent attempts an eligible operation that has not been approved, it rece
 ![Signal K MCP operation approval table with example requests](docs/images/plugin-post-approvals.png)
 
 _The screenshot uses synthetic example requests, not live vessel data._
+
+The generic JSON executor supports GET, POST, PUT, PATCH and DELETE described by the plugin’s OpenAPI. PATCH is for partial updates; PUT follows the endpoint’s documented save or replacement behavior. See the [cross-plugin schema audit and author guidance](docs/plugin-schema-audit.md) for supported contracts and remaining gaps.
 
 Saved approvals survive restarts and allow later calls while Signal K permissions still apply. The plugin does not ask for confirmation on every call; configure your agent to ask before changing state. Changed operation contracts require a new review. Unsaved requests disappear on restart, so refresh the table before reviewing and saving.
 
@@ -156,7 +170,7 @@ Upgrading from plugin-local `allowedHosts` or `allowedOrigins` settings? Those f
 
 - [Agent connection examples and compatibility](docs/clients.md)
 - [Tool reference, approval rules and limits](docs/reference.md)
-- [Native control actions](docs/native-puts.md) and [plugin POST operations](docs/plugin-posts.md)
+- [Native control actions](docs/native-puts.md) and [reviewed plugin HTTP operations](docs/plugin-posts.md)
 - [Installation upgrades, rollback and removal](docs/release-readiness.md#upgrade-rollback-and-removal)
 - [Changelog](CHANGELOG.md)
 - [Developer guide](docs/development.md) and [verification details](docs/verification.md)

@@ -1,0 +1,2104 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Stowage Management",
+    "description": "Inventory manager for Signal K Server: organize items into containers and storage spaces, track actual vs. target quantities, attach photos and markdown notes, and map storage spaces to areas on an SVG floorplan.",
+    "version": "0.5.3",
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "/plugins/signalk-stowage-mgmt"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Locations",
+      "description": "Storage spaces and containers (a shared hierarchy)"
+    },
+    {
+      "name": "Items",
+      "description": "Inventory items"
+    },
+    {
+      "name": "Categories",
+      "description": "Tags that can be attached to items"
+    },
+    {
+      "name": "Floorplans",
+      "description": "Uploaded SVG floorplans and their area-to-storage-space mappings"
+    },
+    {
+      "name": "Item Log",
+      "description": "Audit log of item creation, quantity changes, and deletion"
+    }
+  ],
+  "paths": {
+    "/locations": {
+      "get": {
+        "tags": ["Locations"],
+        "summary": "List all locations",
+        "responses": {
+          "200": {
+            "description": "All storage spaces and containers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Location"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Locations"],
+        "summary": "Create a storage space or container",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "type"],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["storage_space", "container"]
+                  },
+                  "parent_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Parent location id. Required for containers to nest inside something (omit for a top-level storage space)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing/invalid name or type, or parent_id does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/locations/{id}": {
+      "patch": {
+        "tags": ["Locations"],
+        "summary": "Rename a location",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LocationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Locations"],
+        "summary": "Delete a location",
+        "description": "Only succeeds if the location has no child locations and no items directly in it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LocationId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "Location is not empty",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/locations/{id}/move": {
+      "patch": {
+        "tags": ["Locations"],
+        "summary": "Re-parent a location",
+        "description": "Moves a container under another container or storage space, or makes a location top-level by omitting/nulling parent_id. Rejects moves that would create a cycle.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LocationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "parent_id": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "parent_id does not exist, is the location itself, or would create a cycle",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/locations/{id}/svg-mapping": {
+      "patch": {
+        "tags": ["Locations"],
+        "summary": "Assign or clear a storage space's floorplan area",
+        "description": "Only valid on locations of type storage_space. Pass null/omit both fields to clear the mapping.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/LocationId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "floorplan_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "svg_element_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "The id attribute of the SVG shape representing this storage space."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Location"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a storage_space, or floorplan_id does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items": {
+      "get": {
+        "tags": ["Items"],
+        "summary": "List all items",
+        "responses": {
+          "200": {
+            "description": "All items, each with a categories array",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Case-insensitive substring match against item name only (not notes). Returns all matches, unbounded."
+          }
+        ]
+      },
+      "post": {
+        "tags": ["Items"],
+        "summary": "Create an item",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "actual_quantity": {
+                    "type": "integer",
+                    "default": 1
+                  },
+                  "target_quantity": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "notes": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "location_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "category_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Optional note recorded in the item log for the initial quantity."
+                  },
+                  "expires_at": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true
+                  },
+                  "acquired_date": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true
+                  },
+                  "price_paid": {
+                    "type": "number",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing name, or location_id/category_id does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}": {
+      "patch": {
+        "tags": ["Items"],
+        "summary": "Update item properties",
+        "description": "Partial update. target_quantity and notes support an explicit null to clear them, distinct from omitting the key (which leaves the current value unchanged). If the item is split across locations, actual_quantity cannot be set here — use POST /items/:id/split instead; name/notes/target_quantity remain editable normally.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "actual_quantity": {
+                    "type": "integer"
+                  },
+                  "target_quantity": {
+                    "type": "integer",
+                    "nullable": true
+                  },
+                  "notes": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Optional note recorded in the item log if actual_quantity and/or target_quantity change in this request."
+                  },
+                  "expires_at": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true
+                  },
+                  "default_location_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Only settable on a split item, and only to a location_id matching one of its current placements (400 otherwise). Null clears it."
+                  },
+                  "acquired_date": {
+                    "type": "string",
+                    "format": "date",
+                    "nullable": true
+                  },
+                  "price_paid": {
+                    "type": "number",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Items"],
+        "summary": "Delete an item",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": ["Items"],
+        "summary": "Get a single item",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/thumbnail": {
+      "patch": {
+        "tags": ["Items"],
+        "summary": "Set or clear an item's photo",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "thumbnail": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "A data: URI (e.g. a JPEG data URI), or null/omitted to remove the thumbnail."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "thumbnail was not a string",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/move": {
+      "patch": {
+        "tags": ["Items"],
+        "summary": "Move an item to a different location",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "location_id": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Omit/null to unassign the item (no location)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "location_id does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Moves a whole (unsplit) item to a different location. Rejected with 400 if the item is currently split across locations — move a specific placement via PATCH /items/:id/placements/:placementId/move instead."
+      }
+    },
+    "/items/{id}/categories": {
+      "post": {
+        "tags": ["Items"],
+        "summary": "Add a category to an item",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["category_id"],
+                "properties": {
+                  "category_id": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Category added (or already present)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "category_id does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Item not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/categories/{categoryId}": {
+      "delete": {
+        "tags": ["Items"],
+        "summary": "Remove a category from an item",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          },
+          {
+            "name": "categoryId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Category removed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Item not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/locate": {
+      "get": {
+        "tags": ["Items"],
+        "summary": "Find the mapped storage space for an item",
+        "description": "Walks up the item's location chain until it finds a storage space mapped to a floorplan area, so a client knows which SVG element to highlight. Works no matter how deeply the item is nested in containers.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A mapped storage space was found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item_id": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "floorplan_id": {
+                      "type": "string"
+                    },
+                    "svg_element_id": {
+                      "type": "string"
+                    },
+                    "storage_space": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Item has no location, or no mapped storage space was found in its location chain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "tags": ["Categories"],
+        "summary": "List all categories",
+        "responses": {
+          "200": {
+            "description": "All categories",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Category"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Categories"],
+        "summary": "Create a category",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Category"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A category with this name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/categories/{id}": {
+      "patch": {
+        "tags": ["Categories"],
+        "summary": "Rename a category",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Category"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "A category with this name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Categories"],
+        "summary": "Delete a category",
+        "description": "Also removes this category from every item that had it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/floorplans": {
+      "get": {
+        "tags": ["Floorplans"],
+        "summary": "List floorplans",
+        "description": "Returns id/name/uploaded_at only (not the SVG content); ordered newest first.",
+        "responses": {
+          "200": {
+            "description": "All floorplans",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FloorplanSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Floorplans"],
+        "summary": "Upload a floorplan",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "svg_content"],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "svg_content": {
+                    "type": "string",
+                    "description": "Raw SVG markup as text."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FloorplanSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing name/svg_content, or svg_content is not valid SVG",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/floorplans/{id}": {
+      "get": {
+        "tags": ["Floorplans"],
+        "summary": "Get one floorplan including its SVG content",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The floorplan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Floorplan"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Floorplans"],
+        "summary": "Delete a floorplan",
+        "description": "Only succeeds if no storage space is still mapped to it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "400": {
+            "description": "Floorplan is still mapped to storage spaces",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/item-log": {
+      "get": {
+        "tags": ["Item Log"],
+        "summary": "List item log entries",
+        "description": "Returns raw log rows for item creation, actual/target quantity changes, and deletion (item moves are not logged). Optionally filtered to a date range; start/end are inclusive date strings (e.g. 2026-06-01).",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Inclusive start date"
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Inclusive end date"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log entries, oldest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ItemLogEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/placements": {
+      "get": {
+        "tags": ["Items"],
+        "summary": "List an item's placements",
+        "description": "Empty array means the item is not split.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Placements",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ItemPlacement"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/placements/{placementId}/move": {
+      "patch": {
+        "tags": ["Items"],
+        "summary": "Move one placement of a split item",
+        "description": "Not logged, same as an ordinary item move.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          },
+          {
+            "name": "placementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "location_id": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "location_id does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Item or placement not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/split": {
+      "post": {
+        "tags": ["Items"],
+        "summary": "Split an item's stock across locations",
+        "description": "Moves `quantity` units from from_location_id to to_location_id, splitting the item across locations if it wasn't already split. from/to may be omitted/null for \"no location\". If the item wasn't split yet, from_location_id must match its current location_id. If splitting collapses the item back down to a single location (e.g. moving everything back together), it automatically reverts to the plain (unsplit) representation. Always logged as a 'split' event, regardless of the resulting state.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["quantity"],
+                "properties": {
+                  "from_location_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "to_location_id": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated item, including its new placements array",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid quantity, same from/to, location doesn't exist, from_location_id doesn't match where the item currently is, or insufficient quantity at from_location_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/placements/{placementId}": {
+      "patch": {
+        "tags": ["Items"],
+        "summary": "Set one placement's quantity directly",
+        "description": "The split-item equivalent of PATCH /items/:id { actual_quantity }. The item's overall actual_quantity is kept in sync (it's always the sum of its placements) and the change is logged as an ordinary 'actual_quantity' event, exactly like editing a normal item's quantity — this is a real stock change, not a reallocation between locations, so it is deliberately not a 'split' event. Setting a placement to 0 removes it; if that leaves only one placement, the item automatically reverts to the plain (unsplit) representation.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          },
+          {
+            "name": "placementId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["quantity"],
+                "properties": {
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "note": {
+                    "type": "string",
+                    "nullable": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated item, including its new placements array",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Item"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "quantity is not a non-negative integer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Item or placement not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/attachments": {
+      "get": {
+        "tags": ["Items"],
+        "summary": "List an item's attachments",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ItemAttachment"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Items"],
+        "summary": "Upload an attachment for an item",
+        "description": "The request body is the raw file bytes (not JSON) — there's no size limit and no file-type restriction, and files are stored on disk rather than in the database. Set Content-Type to the file's MIME type, and pass the original filename URI-encoded in the X-Filename header.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemAttachment"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/items/{id}/attachments/{attachmentId}": {
+      "get": {
+        "tags": ["Items"],
+        "summary": "Download/view an attachment",
+        "description": "Serves the raw file with its original Content-Type and Content-Disposition, so the browser renders it natively (PDFs/images inline, everything else downloads).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The raw file"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": ["Items"],
+        "summary": "Delete an attachment",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ItemId"
+          },
+          {
+            "name": "attachmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/export": {
+      "get": {
+        "tags": ["Backup"],
+        "summary": "Export a full inventory snapshot",
+        "description": "Categories, locations (with hierarchy and floorplan mappings), and items (with their categories, placements, and attachment metadata). Excludes floorplan SVG content, attachment file contents, and Store Log history.",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/import": {
+      "post": {
+        "tags": ["Backup"],
+        "summary": "Restore from a full inventory snapshot",
+        "description": "Restores or merges a snapshot (same shape GET /export returns), controlled by the payload's optional `mode` field (default \"replace\"). `mode: \"replace\"` replaces categories/locations/items entirely with the given snapshot (a restore, not a merge). `mode: \"merge\"` (#26) instead adds the snapshot's rows alongside what's already there: an id from the payload is kept unless it collides with an existing row, in which case a new one is generated and every reference to it (item.location_id, item.category_ids, placement.location_id, location.parent_id) is remapped to match; a category is matched to an existing one by exact name and merged into it rather than duplicated; a location name colliding with an existing sibling under the same parent is disambiguated with a \" (2)\", \" (3)\", ... suffix; and a parent_id/location_id may reference a row already in the target database instead of one included in the payload, for importing new items/locations into an existing tree. In both modes: floorplans (including any in the snapshot) are never created or modified by import, nor are attachment files or Store Log history; a location's floorplan mapping only survives if that floorplan_id (or, failing that, a floorplan with matching svg_content) exists in the target database, otherwise it's dropped and counted in dropped_floorplan_mappings.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportSnapshot"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Restored",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "enum": ["replace", "merge"]
+                    },
+                    "restored": {
+                      "type": "object",
+                      "description": "Present when mode is \"replace\".",
+                      "properties": {
+                        "categories": {
+                          "type": "integer"
+                        },
+                        "locations": {
+                          "type": "integer"
+                        },
+                        "items": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "added": {
+                      "type": "object",
+                      "description": "Present when mode is \"merge\".",
+                      "properties": {
+                        "categories": {
+                          "type": "integer"
+                        },
+                        "locations": {
+                          "type": "integer"
+                        },
+                        "items": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    "categories_matched_existing": {
+                      "type": "integer",
+                      "description": "merge mode only: imported categories matched to an existing one by name instead of being created."
+                    },
+                    "locations_renamed": {
+                      "type": "integer",
+                      "description": "merge mode only: imported locations renamed with a \" (2)\", \" (3)\", ... suffix to avoid a name clash with an existing sibling."
+                    },
+                    "dropped_floorplan_mappings": {
+                      "type": "integer"
+                    },
+                    "remapped_floorplan_mappings": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or unsupported payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/webapp-config": {
+      "get": {
+        "tags": ["Config"],
+        "summary": "Get plugin-level webapp config: theme automation and quantity-step scaling",
+        "description": "Reflects two plugin options (set in the SignalK Admin UI's Plugin Config page): 'Automatically switch light/dark theme based on sun position' (autoTheme, plus the currently recommended theme based on vessels.self.environment.sun/mode when it's on), and 'Dynamic +/- scale for touch interface' (dynamicQuantityScale). Named /webapp-config rather than /config to avoid colliding with signalk-server's own reserved GET /plugins/{id}/config endpoint (which returns the plugin's enabled/configuration metadata, not this).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "autoTheme": {
+                      "type": "boolean"
+                    },
+                    "themeRecommendation": {
+                      "type": "string",
+                      "enum": ["light", "dark"],
+                      "nullable": true
+                    },
+                    "dynamicQuantityScale": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "LocationId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ItemId": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Location": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["storage_space", "container"]
+          },
+          "parent_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "floorplan_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "svg_element_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CategoryRef": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "Item": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "actual_quantity": {
+            "type": "integer"
+          },
+          "target_quantity": {
+            "type": "integer",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          },
+          "location_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "thumbnail": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CategoryRef"
+            }
+          },
+          "placements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemPlacement"
+            },
+            "description": "Empty for a normal item. Non-empty means this item's stock is split across multiple locations — in that case actual_quantity is the sum of placement quantities, location_id is null, and actual_quantity can only be changed via POST /items/:id/split."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Optional expiration date (YYYY-MM-DD). Not tracked in the item log."
+          },
+          "default_location_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Only meaningful for a split item; must match one of its current item_placements' location_id. The quick +/- quantity editors (Overview, Categories, the Touch view) act on this placement's quantity when set. Cleared automatically if that placement is drained, moved elsewhere, or the item collapses back to a single location."
+          },
+          "acquired_date": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Optional date this item was acquired (YYYY-MM-DD)."
+          },
+          "price_paid": {
+            "type": "number",
+            "nullable": true,
+            "description": "Optional price paid for this item, no currency tracked."
+          }
+        }
+      },
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FloorplanSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Floorplan": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/FloorplanSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "svg_content": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "ItemLogEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "string",
+            "description": "Not a foreign key — the row survives item deletion"
+          },
+          "item_name": {
+            "type": "string",
+            "description": "Snapshotted at the time of the event, so history reads correctly after renames"
+          },
+          "event": {
+            "type": "string",
+            "enum": [
+              "created",
+              "actual_quantity",
+              "target_quantity",
+              "deleted",
+              "split"
+            ]
+          },
+          "old_value": {
+            "type": "integer",
+            "nullable": true
+          },
+          "new_value": {
+            "type": "integer",
+            "nullable": true
+          },
+          "delta": {
+            "type": "integer",
+            "description": "new_value - old_value"
+          },
+          "note": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "from_location_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Set only for 'split' events"
+          },
+          "from_location_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Snapshotted, set only for 'split' events"
+          },
+          "to_location_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "Set only for 'split' events"
+          },
+          "to_location_name": {
+            "type": "string",
+            "nullable": true,
+            "description": "Snapshotted, set only for 'split' events"
+          },
+          "quantity": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Units moved in a 'split' event"
+          }
+        }
+      },
+      "ItemPlacement": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "location_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "location_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "quantity": {
+            "type": "integer"
+          }
+        }
+      },
+      "ItemAttachment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item_id": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename as uploaded, display-only."
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer",
+            "description": "Size in bytes."
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ExportSnapshot": {
+        "type": "object",
+        "properties": {
+          "schema_version": {
+            "type": "integer"
+          },
+          "exported_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "locations": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["replace", "merge"],
+            "description": "Import-only, ignored by /export. Defaults to \"replace\" (full restore) when omitted; \"merge\" adds the payload's rows alongside existing data instead. See POST /import's description."
+          }
+        }
+      }
+    }
+  }
+}

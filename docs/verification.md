@@ -1,5 +1,15 @@
 # Verification record
 
+## Reviewed plugin HTTP methods and shared JSON schemas (2026-10-22)
+
+The generic plugin executor now supports individually reviewed POST, PUT, PATCH and DELETE under the caller’s original native identity. Saved GET, POST, native telemetry PUT and Resources reviews retain their existing meanings; each new plugin method has a separate review. The shared parser admits 87 of 100 operations in seven pinned plugin documents, compared with 48 before this change. Remaining exclusions and the KIP `oneOf` ambiguity are recorded in the [schema audit](plugin-schema-audit.md). These are offline contract results, not claims that every endpoint was invoked.
+
+`npm run check` passes on Node **24.22.0** / Signal K **2.33.0**: TypeScript, ESLint, formatting, **121 portable tests** and **66 native integration tests**, with three existing optional product-client/production-History skips. Python MCP interoperability passes. The focused native plugin-method and published-provider suites pass **12/12 entries without skips** on each other supported combination: Node **22.23.3** / Signal K **2.33.0**, Node **24.22.0** / Signal K **2.32.0**, and Node **22.23.3** / Signal K **2.32.0**. `git diff --check` passes.
+
+Synthetic native routes verify method-specific saved approvals, revocation, original bearer identity, native admin-only route denial, unchanged nested/null/zero data, JSON/204 responses, disconnects and sanitized unknown outcomes without retries. The unchanged published **signalk-alert-center 0.4.1** plugin additionally verifies nested policy PATCH against provider readback and DELETE/reset restoring the previous policy, with external transports disabled. Portable tests replay exact Alert Center, Stowage, Anchor, Logbook, KIP, Freeboard and Resources Provider schemas and cover schema diagnostics, bounds, unsafe references/keys/patterns, exact-one alternatives, object intersections and normalized plugin-prefixed routes.
+
+The actual configurator renders PUT, PATCH and DELETE review rows, schema details and native Save/Revoke controls at **1280** and **390** pixel widths. Installed-package verification passes on Node 24 / Signal K 2.33 with Python enabled; the candidate tarball includes the rebuilt UI and shared schema compiler, and the production dependency audit reports zero findings. The receipt identifies a dirty local source tree based on the Resources branch; it is candidate validation, not a clean release artifact. No vessel endpoints, notification services or hardware were mutated, and no release or deployment was performed.
+
 ## Release-test output isolation and 0.1.1 (2026-10-20)
 
 The release-test helper inherited `GITHUB_OUTPUT` from its parent workflow. The packaging script correctly appends artifact paths there during a real release, but the registry sandbox can expose the inherited file as read-only. A local reproduction failed at that write with `EACCES`; a read-only filesystem mount would instead return `EROFS`. The helper now supplies a writable output path inside each temporary fixture, without changing the production packaging script.

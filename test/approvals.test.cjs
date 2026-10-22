@@ -529,3 +529,156 @@ test("resource requests retain only review contracts and share the bounded nativ
     /APPROVAL_QUEUE_FULL/,
   );
 });
+
+function pluginMutation(method = "PATCH") {
+  const input = require("zod").z.object({}).strict();
+  return {
+    id: "update",
+    method,
+    path: "/items/{id}",
+    description: "Update one synthetic item",
+    input,
+    inputSchema: { type: "object", additionalProperties: false },
+    contractHash: "f".repeat(64),
+    enabled: false,
+    permission: "readwrite",
+    reason: "NOT_ALLOWLISTED",
+  };
+}
+
+test("plugin HTTP mutation approvals bind each method separately and preserve POST keys", () => {
+  const requests = new ApprovalRequests();
+  const keys = new Set();
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    const operation = pluginMutation(method);
+    assert.throws(
+      () => requests.request("fixture", operation),
+      /APPROVAL_PENDING/,
+    );
+    const review = Object.values(queued(requests)).find(
+      (item) => item.method === method,
+    );
+    const key = reviewKey(review);
+    keys.add(key);
+    assert.equal(review.kind, method === "POST" ? "post" : "plugin");
+    assert.equal(
+      configSchema.safeParse({ readRequests: { [key]: review } }).success,
+      true,
+    );
+    const approved = { ...review, decision: "approved" };
+    const saved = { [key]: approved };
+    assert.equal(
+      applyReviews([pluginMutation(method)], "fixture", saved, writer)[0]
+        .enabled,
+      true,
+    );
+    assert.equal(
+      applyReviews([pluginMutation(method)], "fixture", saved, reader)[0]
+        .reason,
+      "PERMISSION_DENIED",
+    );
+    for (const changes of [
+      { method: method === "DELETE" ? "PATCH" : "DELETE" },
+      { path: "/other/{id}" },
+      { id: "other" },
+      { description: "Changed meaning" },
+      { inputSchema: { type: "object", required: ["id"] } },
+      { contractHash: "e".repeat(64) },
+    ]) {
+      assert.equal(
+        applyReviews(
+          [{ ...operation, ...changes }],
+          "fixture",
+          saved,
+          writer,
+        )[0].enabled,
+        false,
+      );
+    }
+    approved.decision = "rejected";
+    assert.equal(
+      applyReviews([pluginMutation(method)], "fixture", saved, writer)[0]
+        .reason,
+      "APPROVAL_REJECTED",
+    );
+    const schema = requests.schema().properties[key];
+    assert.match(schema.description, new RegExp(`^${method} `));
+    assert.equal(schema.properties.method.const, method);
+    for (const changes of [
+      { permission: "admin" },
+      { token: "synthetic" },
+      { value: 3 },
+    ])
+      assert.equal(
+        configSchema.safeParse({
+          readRequests: { [key]: { ...review, ...changes } },
+        }).success,
+        false,
+      );
+  }
+  assert.equal(keys.size, 4);
+  // Frozen legacy digest: adding other methods must not revoke saved POSTs.
+  const post = Object.values(queued(requests)).find(
+    (item) => item.kind === "post",
+  );
+  const { createHash } = require("node:crypto");
+  assert.equal(
+    reviewKey(post),
+    createHash("sha256")
+      .update(
+        JSON.stringify([
+          "POST",
+          "fixture",
+          "update",
+          "/items/{id}",
+          "f".repeat(64),
+          "Update one synthetic item",
+          '{"additionalProperties":false,"type":"object"}',
+        ]),
+      )
+      .digest("hex"),
+  );
+});
+
+test("queued reviews preserve scoped and dotted plugin prefixes without changing legacy route contracts", () => {
+  for (const pluginId of ["@Scope/Plugin.name", "Dotted.Plugin"]) {
+    const requests = new ApprovalRequests();
+    for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"]) {
+      const operation = {
+        ...pluginMutation(method),
+        path: `/plugins/${pluginId}/items/{id}`,
+      };
+      assert.throws(
+        () => requests.request(pluginId, operation),
+        /APPROVAL_PENDING/,
+      );
+      const pending = Object.values(queued(requests)).find((review) =>
+        method === "GET" ? !review.kind : review.method === method,
+      );
+      const key = reviewKey(pending);
+      assert.equal(pending.path, operation.path);
+      assert.equal(
+        configSchema.safeParse({ readRequests: { [key]: pending } }).success,
+        true,
+      );
+      assert.equal(
+        applyReviews(
+          [operation],
+          pluginId,
+          { [key]: { ...pending, decision: "approved" } },
+          writer,
+        )[0].enabled,
+        true,
+      );
+    }
+  }
+  const { pluginRouteSchema } = require("../dist/capabilities/schemas.js");
+  for (const path of [
+    "/plugins/@Scope/Plugin.name/items/%2fprivate",
+    "/plugins/@Scope/../items",
+    "/plugins/Plugin.name/../private",
+    "/plugins/Plugin.name/items?url=http://outside",
+    "https://outside/plugins/Plugin.name/items",
+  ])
+    assert.equal(pluginRouteSchema.safeParse(path).success, false, path);
+});

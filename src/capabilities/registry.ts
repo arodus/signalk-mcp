@@ -9,7 +9,13 @@ import {
 import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
 import { applyReviews, type ApprovalRequests } from "../approvals.js";
-import type { LocalGet, LocalPost, LocalResourceMutation } from "./http.js";
+import type {
+  LocalGet,
+  LocalPost,
+  LocalResourceMutation,
+  LocalPluginMutation,
+  PluginMutationMethod,
+} from "./http.js";
 import type { LocalActions } from "../put-types.js";
 import {
   NativePuts,
@@ -94,6 +100,7 @@ export class CapabilityRegistry {
     private readonly actions?: LocalActions,
     private readonly post?: LocalPost,
     private readonly resourceMutation?: LocalResourceMutation,
+    private readonly pluginMutation?: LocalPluginMutation,
   ) {
     this.core = {
       "api.resources": {
@@ -702,11 +709,16 @@ export class CapabilityRegistry {
       this.config.readRequests ?? {},
       this.authorize(),
     ).find((candidate) => candidate.id === operation);
-    if (target && target.method !== (mutation ? "POST" : "GET"))
+    if (
+      target &&
+      (mutation
+        ? !["POST", "PUT", "PATCH", "DELETE"].includes(target.method)
+        : target.method !== "GET")
+    )
       throw new GatewayError(
         mutation
           ? "OPERATION_DISABLED"
-          : target.method === "POST"
+          : ["POST", "PUT", "PATCH", "DELETE"].includes(target.method)
             ? "MUTATION_TOOL_REQUIRED"
             : "OPERATION_DISABLED",
         403,
@@ -729,7 +741,13 @@ export class CapabilityRegistry {
     const route = operationRoute(plugin.id, target, args);
     this.authorize();
     if (mutation) {
-      if (!this.post) throw new GatewayError("PLUGIN_POST_UNAVAILABLE", 503);
+      const send =
+        this.pluginMutation ??
+        (target.method === "POST" && this.post
+          ? (_method: PluginMutationMethod, path: string, body?: unknown) =>
+              this.post!(path, body)
+          : undefined);
+      if (!send) throw new GatewayError("PLUGIN_MUTATION_UNAVAILABLE", 503);
       const body = target.input!.parse(args).body;
       // Recheck lifecycle, enabled state and approval after asynchronous discovery.
       if (!(await this.plugin(id)).enabled)
@@ -746,7 +764,11 @@ export class CapabilityRegistry {
       if (!current.enabled)
         throw new GatewayError(current.reason ?? "OPERATION_DISABLED", 403);
       try {
-        const response = await this.post(route, body);
+        const response = await send(
+          target.method as PluginMutationMethod,
+          route,
+          body,
+        );
         const after = this.authorize();
         if (
           after.identifier !== principal.identifier ||
@@ -782,9 +804,13 @@ export class CapabilityRegistry {
           code:
             error instanceof GatewayError
               ? error.code
-              : "PLUGIN_POST_RESULT_UNAVAILABLE",
+              : target.method === "POST"
+                ? "PLUGIN_POST_RESULT_UNAVAILABLE"
+                : "PLUGIN_MUTATION_RESULT_UNAVAILABLE",
           ...(error instanceof GatewayError &&
-          error.code === "PLUGIN_POST_HTTP_ERROR"
+          ["PLUGIN_POST_HTTP_ERROR", "PLUGIN_MUTATION_HTTP_ERROR"].includes(
+            error.code,
+          )
             ? { statusCode: error.status }
             : {}),
         };

@@ -234,8 +234,9 @@ export default function Configuration() {
                   ? rows.map(([key, item]) => {
                       const put = item.kind === "put";
                       const post = item.kind === "post";
+                      const plugin = item.kind === "plugin";
                       const resource = item.kind === "resource";
-                      const write = put || post || resource;
+                      const write = put || post || plugin || resource;
                       const absent =
                         !put &&
                         !resource &&
@@ -270,7 +271,7 @@ export default function Configuration() {
                               ? `Resources · ${item.provider}`
                               : put
                                 ? `Native PUT · ${item.context}`
-                                : `Plugin ${post ? "POST" : "GET"} · ${item.pluginId}`,
+                                : `Plugin ${post || plugin ? item.method : "GET"} · ${item.pluginId}`,
                             absent ? " · Not installed" : "",
                           ),
                           put
@@ -284,7 +285,7 @@ export default function Configuration() {
                               null,
                               put
                                 ? "Meaning and value constraints"
-                                : `${resource ? item.method : post ? "POST" : "GET"} ${item.path}`,
+                                : `${resource || post || plugin ? item.method : "GET"} ${item.path}`,
                             ),
                             h(
                               "p",
@@ -322,7 +323,7 @@ export default function Configuration() {
                                     null,
                                     resource && item.method === "DELETE"
                                       ? "Accepted target schema"
-                                      : post || resource
+                                      : post || plugin || resource
                                         ? "Accepted input schema (body is sent as JSON)"
                                         : "Accepted value schema",
                                   ),
@@ -340,7 +341,9 @@ export default function Configuration() {
                                 ? "Accept only this exact path and source after checking what it controls. Metadata and schema changes require a new review."
                                 : resource
                                   ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
-                                  : "Check the provider's implementation for side effects and data permissions.",
+                                  : post || plugin
+                                    ? "Approval applies to this exact method and route. Changes to the input schema or meaning require a new review. Check the provider's side effects and data permissions."
+                                    : "Check the provider's implementation for side effects and data permissions.",
                             ),
                           ),
                         ),
@@ -362,7 +365,7 @@ export default function Configuration() {
                               className: `mcp-badge mcp-${write ? "write" : "read"}`,
                               title: put
                                 ? "Requires native Signal K PUT permission"
-                                : post || resource
+                                : post || plugin || resource
                                   ? "Requires a write-capable Signal K identity and provider permission"
                                   : "Requires native Signal K read permission",
                             },

@@ -1,0 +1,817 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Hoeken's Anchor Alarm API",
+    "version": "2.0.0",
+    "description": "HTTP API for dropping, adjusting, and raising the anchor managed by the Hoeken's Anchor Alarm plugin.",
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://www.apache.org/licenses/LICENSE-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "/plugins/hoekens-anchor-alarm"
+    }
+  ],
+  "tags": [
+    {
+      "name": "anchor",
+      "description": "Anchor control operations"
+    },
+    {
+      "name": "config",
+      "description": "Plugin configuration exposed to the UI"
+    },
+    {
+      "name": "icon",
+      "description": "Custom own-boat icon shown on the map"
+    },
+    {
+      "name": "sessions",
+      "description": "Anchoring session history"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "Position": {
+        "type": "object",
+        "required": ["latitude", "longitude"],
+        "properties": {
+          "latitude": {
+            "type": "number",
+            "format": "double",
+            "minimum": -90,
+            "maximum": 90,
+            "description": "Latitude in decimal degrees (WGS84)."
+          },
+          "longitude": {
+            "type": "number",
+            "format": "double",
+            "minimum": -180,
+            "maximum": 180,
+            "description": "Longitude in decimal degrees (WGS84)."
+          }
+        }
+      },
+      "PolygonVertices": {
+        "type": "array",
+        "minItems": 3,
+        "maxItems": 24,
+        "description": "Polygon only: ordered list of vertices relative to the anchor. A shape with fewer than 3 vertices is treated as unfinished (an open zone that never alarms).",
+        "items": {
+          "type": "object",
+          "required": ["bearing", "distance"],
+          "properties": {
+            "bearing": {
+              "type": "number",
+              "format": "double",
+              "minimum": 0,
+              "maximum": 360,
+              "description": "Clockwise bearing in degrees (0 = true north) from the anchor to the vertex."
+            },
+            "distance": {
+              "type": "number",
+              "format": "double",
+              "exclusiveMinimum": 0,
+              "description": "Distance in meters from the anchor to the vertex."
+            }
+          }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "required": ["statusCode", "state"],
+        "properties": {
+          "statusCode": {
+            "type": "integer",
+            "example": 200
+          },
+          "state": {
+            "type": "string",
+            "enum": ["COMPLETED"]
+          }
+        }
+      },
+      "Config": {
+        "type": "object",
+        "description": "Per-user UI preferences. Stored per identity (username for user tokens, clientId for device tokens, a shared anonymous bucket otherwise); GET resolves defaults, then the boat-wide baseline migrated from pre-2.11 plugin config, then the identity's own saved keys.",
+        "properties": {
+          "defaultBasemap": {
+            "type": "string",
+            "enum": ["OpenStreetMap", "Satellite", "Blank"],
+            "description": "Which map layer to show on load. \"Blank\" draws no tiles (offline / local-charts-only use)."
+          },
+          "defaultShape": {
+            "type": "string",
+            "enum": ["circle", "sector", "polygon"],
+            "description": "Default watch zone shape used when estimating a new anchor position."
+          },
+          "fleetFilterRadius": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Radius (meters) around own vessel for displaying other vessels and historical tracks."
+          },
+          "enableTidePanel": {
+            "type": "boolean",
+            "description": "Show the tide chart panel while anchored."
+          },
+          "enableWindPanel": {
+            "type": "boolean",
+            "description": "Show the wind speed/direction panel."
+          },
+          "enableScopePanel": {
+            "type": "boolean",
+            "description": "Show the scope/depth calculator panel while the anchor is up."
+          },
+          "enableBoatLabels": {
+            "type": "boolean",
+            "description": "Show other vessels' names as labels on the map (only once zoomed in enough to be legible)."
+          },
+          "enableOwnBoatLabel": {
+            "type": "boolean",
+            "description": "Show your own vessel's name as a label on the map. Independent of enableBoatLabels; the own label always wins a label collision."
+          },
+          "enableOwnTrack": {
+            "type": "boolean",
+            "description": "Draw your own vessel's historical track on the map."
+          },
+          "enableOtherTracks": {
+            "type": "boolean",
+            "description": "Draw other vessels' historical tracks on the map."
+          },
+          "enableAnchorageHistory": {
+            "type": "boolean",
+            "description": "Show the past-anchorages button and query the server's History API for recorded anchoring sessions."
+          },
+          "enableChartLayers": {
+            "type": "boolean",
+            "description": "Enable local raster chart overlays by default when a charts plugin provides them."
+          },
+          "enableSeascape": {
+            "type": "boolean",
+            "description": "Overlay the Seascape bathymetry (depth) chart on the base map by default. Requires internet + WebGL; toggleable at runtime in the layer control."
+          },
+          "enableLargeControls": {
+            "type": "boolean",
+            "description": "Draw the map control buttons at 1.5x size for easier touch targets; off restores the original smaller sizing."
+          },
+          "scopes": {
+            "type": "string",
+            "description": "Comma-separated scope ratios (1–10) to calculate and display, e.g. \"7,5,4,3\". Blank turns scope calculations off."
+          },
+          "charts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Per-chart show/hide choices for SignalK-provided chart overlays, keyed by chart identifier. A chart with no entry defaults to enabled. Usually updated one chart at a time via POST /ui-config/charts as the user ticks layer-control checkboxes."
+          },
+          "glitchFilterSpeed": {
+            "type": "number",
+            "readOnly": true,
+            "description": "Boat-level plugin config (drives the server's own-position glitch filter), riding along read-only for the UI's fleet track filtering. Set it in the SignalK admin plugin settings; values POSTed here are ignored."
+          },
+          "hasCustomIcon": {
+            "type": "boolean",
+            "readOnly": true,
+            "description": "Derived (not stored): whether a custom own-boat icon has been uploaded via PUT /icon. The UI uses it to decide whether to render the custom icon and how to seed the settings preview."
+          },
+          "version": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Derived (not stored): the plugin version, shown in the settings footer."
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["statusCode", "state", "message"],
+        "properties": {
+          "statusCode": {
+            "type": "integer",
+            "example": 403
+          },
+          "state": {
+            "type": "string",
+            "enum": ["FAILED"]
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "required": ["id", "droppedAt", "position"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "droppedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "raisedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Absent while the anchor is still down."
+          },
+          "droppedAtEstimated": {
+            "type": "boolean",
+            "description": "True when droppedAt was reconstructed at plugin start rather than recorded at the actual drop."
+          },
+          "raisedAtEstimated": {
+            "type": "boolean",
+            "description": "True when raisedAt was reconstructed at plugin start rather than recorded at the actual raise."
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "latitude": {
+                "type": "number"
+              },
+              "longitude": {
+                "type": "number"
+              }
+            }
+          },
+          "zone": {
+            "type": "object",
+            "description": "Watch zone config snapshot as of the last change during the session."
+          }
+        }
+      }
+    },
+    "responses": {
+      "AnchorError": {
+        "description": "Request rejected due to an anchor validation or state error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "statusCode": 403,
+              "state": "FAILED",
+              "message": "position with latitude and longitude required"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Unexpected internal error.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "statusCode": 500,
+              "state": "FAILED",
+              "message": "internal error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/dropAnchor": {
+      "post": {
+        "tags": ["anchor"],
+        "summary": "Drop the anchor at a given position",
+        "description": "Records the supplied position as the anchor location and (optionally) sets the alarm radius. Starts the anchor watch. Requires readwrite permission.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["position"],
+                "properties": {
+                  "position": {
+                    "$ref": "#/components/schemas/Position"
+                  },
+                  "zone": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["circle", "sector", "polygon"]
+                      },
+                      "radius": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0,
+                        "description": "Alarm radius in meters. Required for `circle` and `sector` shapes."
+                      },
+                      "startAngle": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0,
+                        "maximum": 360,
+                        "description": "Sector only: clockwise bearing in degrees (0 = true north) of the start of the safe arc."
+                      },
+                      "endAngle": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0,
+                        "maximum": 360,
+                        "description": "Sector only: clockwise bearing in degrees (0 = true north) of the end of the safe arc. When `endAngle < startAngle` the arc wraps across 0°/360°."
+                      },
+                      "vertices": {
+                        "$ref": "#/components/schemas/PolygonVertices"
+                      }
+                    },
+                    "description": "Watch zone configuration. If omitted, the previously configured zone is retained."
+                  },
+                  "radius": {
+                    "type": "number",
+                    "format": "double",
+                    "minimum": 0,
+                    "description": "Legacy: alarm radius in meters. If both `zone` and `radius` are provided, `zone` wins."
+                  }
+                }
+              },
+              "example": {
+                "position": {
+                  "latitude": 37.8199,
+                  "longitude": -122.4783
+                },
+                "zone": {
+                  "type": "circle",
+                  "radius": 30
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Anchor dropped successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/AnchorError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/setZone": {
+      "post": {
+        "tags": ["anchor"],
+        "summary": "Set the anchor watch zone",
+        "description": "Updates the watch zone (shape + parameters) for the currently dropped anchor. The anchor position is unchanged. Requires that an anchor has been dropped and that a GPS position is available. Requires readwrite permission.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["zone"],
+                "properties": {
+                  "zone": {
+                    "type": "object",
+                    "required": ["type"],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "enum": ["circle", "sector", "polygon"],
+                        "description": "Watch zone shape."
+                      },
+                      "radius": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0,
+                        "description": "Alarm radius in meters. Required for `circle` and `sector` shapes."
+                      },
+                      "startAngle": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0,
+                        "maximum": 360,
+                        "description": "Sector only: clockwise bearing in degrees (0 = true north) of the start of the safe arc."
+                      },
+                      "endAngle": {
+                        "type": "number",
+                        "format": "double",
+                        "minimum": 0,
+                        "maximum": 360,
+                        "description": "Sector only: clockwise bearing in degrees (0 = true north) of the end of the safe arc. When `endAngle < startAngle` the arc wraps across 0°/360°."
+                      },
+                      "vertices": {
+                        "$ref": "#/components/schemas/PolygonVertices"
+                      }
+                    }
+                  }
+                }
+              },
+              "example": {
+                "zone": {
+                  "type": "circle",
+                  "radius": 45
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Zone updated successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/AnchorError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/raiseAnchor": {
+      "post": {
+        "tags": ["anchor"],
+        "summary": "Raise the anchor",
+        "description": "Clears the anchor position and radius and stops the anchor watch. Requires readwrite permission.",
+        "responses": {
+          "200": {
+            "description": "Anchor raised successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/AnchorError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/ui-config": {
+      "get": {
+        "tags": ["config"],
+        "summary": "Get the requesting identity's UI preferences",
+        "description": "Returns the effective UI preferences for the requesting identity (username for user tokens, device clientId for device tokens, a shared anonymous bucket otherwise): schema defaults, overlaid with the boat-wide baseline, overlaid with the identity's own saved keys. Every preference key is always present. Requires readonly permission.",
+        "responses": {
+          "200": {
+            "description": "Effective UI preferences returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                },
+                "example": {
+                  "fleetFilterRadius": 500
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["config"],
+        "summary": "Update the requesting identity's UI preferences",
+        "description": "Persists UI-editable settings for the requesting identity. Only whitelisted properties are accepted; each is validated and merged into that identity's preference file — other identities are unaffected. Requires readwrite permission.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Config"
+              },
+              "example": {
+                "enableTidePanel": false,
+                "fleetFilterRadius": 750
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Configuration saved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/AnchorError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/ui-config/charts": {
+      "post": {
+        "tags": ["config"],
+        "summary": "Set one chart overlay's show/hide preference",
+        "description": "Persists a single SignalK-provided chart overlay's enabled/disabled choice into the requesting identity's `charts` preference map, leaving the identity's other chart choices untouched. Charts are dynamic (only those covering the current view are listed), so the client names just the one chart it toggled instead of echoing the whole map. A chart with no entry defaults to enabled. Requires readwrite permission.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["identifier", "enabled"],
+                "properties": {
+                  "identifier": {
+                    "type": "string",
+                    "description": "The chart's identifier from the SignalK charts catalog."
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "description": "Whether the chart overlay should be shown on the map."
+                  }
+                }
+              },
+              "example": {
+                "identifier": "Fiji_Nanuku-Passage",
+                "enabled": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Preference saved successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "$ref": "#/components/responses/AnchorError"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/icon": {
+      "get": {
+        "tags": ["icon"],
+        "summary": "Get the custom own-boat icon",
+        "description": "Serves the uploaded own-boat icon image. Returns 404 when no custom icon has been set. Requires readonly permission.",
+        "responses": {
+          "200": {
+            "description": "The custom icon image.",
+            "content": {
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/gif": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No custom icon is set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "statusCode": 404,
+                  "state": "FAILED",
+                  "message": "no custom boat icon set"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["icon"],
+        "summary": "Upload (or replace) the custom own-boat icon",
+        "description": "Stores the request body as the own-boat icon, overwriting any existing one. The body is the raw image bytes; the type is detected from the file's magic bytes (the Content-Type header is not trusted). Accepts jpg, png, gif, or webp up to 500 KB. Requires admin permission.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "image/png": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/jpeg": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/gif": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            },
+            "image/webp": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Icon stored successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Empty upload.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "statusCode": 400,
+                  "state": "FAILED",
+                  "message": "empty upload"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Image exceeds the 500 KB size limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "statusCode": 413,
+                  "state": "FAILED",
+                  "message": "image too large — max 500 KB"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Body is not a recognized jpg/png/gif/webp image.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "statusCode": 415,
+                  "state": "FAILED",
+                  "message": "unsupported image type — use jpg, png, gif, or webp"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["icon"],
+        "summary": "Delete the custom own-boat icon",
+        "description": "Removes any stored own-boat icon. Idempotent — succeeds whether or not an icon was set. The map reverts to the AIS ship-type icon. Requires admin permission.",
+        "responses": {
+          "200": {
+            "description": "Icon removed (or none was set).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/sessions": {
+      "get": {
+        "tags": ["sessions"],
+        "summary": "List anchoring sessions",
+        "description": "Returns recorded anchoring sessions (one per drop..raise span), newest first. The open session (anchor still down) has no raisedAt. Sessions carry metadata only; the vessel track for a session is reconstructed by querying the server's History API (GET /signalk/v2/api/history/values) for navigation.position over the session's time window. Requires readonly permission.",
+        "responses": {
+          "200": {
+            "description": "Session list returned successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sessions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Session"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}": {
+      "delete": {
+        "tags": ["sessions"],
+        "summary": "Delete an anchoring session",
+        "description": "Removes one recorded anchoring session from the log. Returns 404 when no session has that id. Requires readwrite permission.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Session deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No session with that id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

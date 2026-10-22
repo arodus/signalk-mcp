@@ -78,11 +78,18 @@ export async function loadConfiguration(fetcher = nativeFetch) {
               typeof review.contractHash !== "string" ||
               !/^[a-f0-9]{64}$/.test(review.contractHash) ||
               "permission" in review
-            : review.kind === "post"
-              ? review.method !== "POST" ||
+            : review.kind === "post" || review.kind === "plugin"
+              ? (review.kind === "post"
+                  ? review.method !== "POST"
+                  : !["PUT", "PATCH", "DELETE"].includes(review.method)) ||
                 typeof review.pluginId !== "string" ||
+                review.pluginId === "signalk-mcp" ||
+                typeof review.operationId !== "string" ||
+                typeof review.path !== "string" ||
+                typeof review.description !== "string" ||
                 !object(review.inputSchema) ||
                 typeof review.contractHash !== "string" ||
+                !/^[a-f0-9]{64}$/.test(review.contractHash) ||
                 "permission" in review
               : "kind" in review || typeof review.pluginId !== "string"),
     )

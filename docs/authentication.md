@@ -1,6 +1,6 @@
 # Signal K authentication compatibility
 
-Scope: the gateway's existing-token authentication and authorization bridge, including individually approved native PUTs and plugin POSTs from issue #30. Every plugin GET or POST operation and native PUT target needs its own saved administrator approval in addition to native permissions; there is no blanket approval. Built-in data reads use native permissions without that extra review. This does not certify production providers, vessel deployments or every Signal K release. Native PUT support is included starting with `0.1.0-alpha.2`; plugin POST support starts with `0.1.0-alpha.3`.
+Scope: the gateway's existing-token authentication and authorization bridge, including individually approved native PUTs and plugin POST/PUT/PATCH/DELETE operations. Every supported plugin HTTP operation and native PUT target needs its own saved administrator approval in addition to native permissions; there is no blanket approval. Built-in data reads use native permissions without that extra review. This does not certify production providers, vessel deployments or every Signal K release. Native PUT support is included starting with `0.1.0-alpha.2`; plugin POST support starts with `0.1.0-alpha.3`.
 
 ## Supported releases
 
@@ -68,6 +68,6 @@ Signal K 2.32.0/2.33.0's HTTP handler calls `shouldAllowPut` with a null source 
 
 Every PUT requires a saved exact path/source/metadata/value-contract review. Identity and permissions are resolved afresh before dispatch; post-response authorization/binding changes produce an explicit unknown outcome because the action may already have happened. Do not apply the generic read error/retry behavior to these results. Status polling reauthenticates and checks same-identity ownership, original target binding, current metadata, ACLs, approval, one-hour expiry and lifecycle state. The gateway never proxies arbitrary native request IDs; the native status route itself lacks an ownership check in the supported releases. See [native PUT behavior and remaining limits](native-puts.md).
 
-## Plugin POST authorization
+## Plugin HTTP mutation authorization
 
-Individually reviewed plugin POSTs require native `readwrite` or `admin` identity even when a provider labels a POST readonly. The original bearer passes through native plugin HTTP routing; provider-specific data authorization remains mandatory. Review, lifecycle and identity are checked before dispatch; failures after attempted dispatch preserve an explicit unknown outcome. No telemetry `put` ACL is invented for plugin routes. Supported native versions remain Signal K 2.32.0/2.33.0 on Node 22/24. See [POST contracts and tests](plugin-posts.md).
+Individually reviewed plugin POST/PUT/PATCH/DELETE operations require native `readwrite` or `admin` identity even when a provider labels the route readonly. The original bearer passes through native plugin HTTP routing; provider-specific data authorization remains mandatory. Review, lifecycle and identity are checked before dispatch; failures after attempted dispatch preserve an explicit unknown outcome. No telemetry `put` ACL is invented for plugin routes. Supported native versions remain Signal K 2.32.0/2.33.0 on Node 22/24. See [plugin HTTP contracts and tests](plugin-posts.md).

@@ -1,0 +1,471 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Signal K Logbook",
+    "description": "API for the semi-automatic vessel logbook",
+    "version": "0.2.0"
+  },
+  "tags": [
+    {
+      "name": "entries",
+      "description": "Log entry management"
+    }
+  ],
+  "paths": {
+    "/logs": {
+      "get": {
+        "tags": ["entries"],
+        "deprecated": true,
+        "summary": "List logs",
+        "description": "Receive a list of days containing logbook entries.\n\nDeprecated: use `GET /signalk/v2/api/resources/logentries?dates=true` instead.\n",
+        "responses": {
+          "200": {
+            "description": "List of days",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Logs"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["entries"],
+        "deprecated": true,
+        "summary": "Create new log entry",
+        "description": "Create a new log entry for either now, up to 15 minutes ago, or an explicit date-time.\n\nDeprecated: use `POST /signalk/v2/api/resources/logentries` instead.\n",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewEntry"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Succesful operation"
+          }
+        }
+      }
+    },
+    "/logs/{date}": {
+      "get": {
+        "tags": ["entries"],
+        "deprecated": true,
+        "summary": "List entries for a day",
+        "description": "Receive a list of log entries in a given day.\n\nDeprecated: use `GET /signalk/v2/api/resources/logentries?date=<day>` instead.\n",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Log"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logs/{date}/{datetime}": {
+      "get": {
+        "tags": ["entries"],
+        "deprecated": true,
+        "summary": "Read individual entry",
+        "description": "Receive the contents of an individual entry.\n\nDeprecated: use `GET /signalk/v2/api/resources/logentries/<id>` instead.\n",
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "datetime",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Entry"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": ["entries"],
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "datetime",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "deprecated": true,
+        "summary": "Update individual entry",
+        "description": "Update the data in an entry.\n\nDeprecated: use `PUT /signalk/v2/api/resources/logentries/<id>` instead — one upsert on the stable entry id, no two-call move\n",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Entry"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Succesful operation"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["entries"],
+        "parameters": [
+          {
+            "name": "date",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "datetime",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "deprecated": true,
+        "summary": "Delete individual entry",
+        "description": "Delete an entry.\n\nDeprecated: use `DELETE /signalk/v2/api/resources/logentries/<id>` instead.\n",
+        "responses": {
+          "204": {
+            "description": "Succesful operation"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Logs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "format": "date",
+          "example": "2023-02-22"
+        }
+      },
+      "Observations": {
+        "type": "object",
+        "properties": {
+          "seaState": {
+            "description": "Sea state in WMO sea state (Douglas) code; maps through the standard WMO correspondence to the numeric Beaufort scale of the API path environment.water.seaStateValue",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "cloudCoverage": {
+            "description": "Cloud coverage in oktas; the API path environment.outside.cloudCover carries the ratio (n oktas = n/8)",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 8
+          },
+          "visibility": {
+            "description": "Visibility in fog scale",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 9
+          }
+        }
+      },
+      "NewEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "example": "Autopilot activated"
+          },
+          "ago": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 15
+          },
+          "datetime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "observations": {
+            "$ref": "#/components/schemas/Observations"
+          },
+          "vhf": {
+            "type": "string",
+            "maxLength": 2,
+            "minLength": 1,
+            "example": "70"
+          },
+          "author": {
+            "type": "string",
+            "example": "Bryan"
+          },
+          "origin": {
+            "type": "string",
+            "enum": ["manual", "auto", "agent"]
+          }
+        }
+      },
+      "Entry": {
+        "type": "object",
+        "description": "Log entry. Open content model: unknown fields are preserved verbatim. The `id` is the resource id of the entry in the Signal K v2 `logentries` resources API; `telemetry` parks pathvalues (unknown paths, or known paths carrying extra members like `$source`) that have no historical storage field.",
+        "required": ["datetime", "text"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Stable resource id (UUID), assigned at first storage"
+          },
+          "datetime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "telemetry": {
+            "type": "array",
+            "description": "Parked Signal K pathvalues with no historical storage field",
+            "items": {
+              "type": "object",
+              "required": ["path", "value"],
+              "additionalProperties": true,
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "value": {}
+              }
+            }
+          },
+          "schemaVersion": {
+            "type": "integer",
+            "description": "Reserved for future schema evolution; absent means 1"
+          },
+          "position": {
+            "type": "object",
+            "required": ["latitude", "longitude"],
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "example": 52.5109996
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "example": 13.1936481
+              },
+              "altitude": {
+                "type": "number",
+                "example": 0
+              },
+              "source": {
+                "type": "string",
+                "example": "GPS",
+                "default": "GPS"
+              }
+            }
+          },
+          "log": {
+            "type": "number",
+            "minimum": 0,
+            "example": 0.5
+          },
+          "waypoint": {
+            "type": "object",
+            "required": ["latitude", "longitude"],
+            "properties": {
+              "latitude": {
+                "type": "number",
+                "minimum": -90,
+                "maximum": 90,
+                "example": 52.5109996
+              },
+              "longitude": {
+                "type": "number",
+                "minimum": -180,
+                "maximum": 180,
+                "example": 13.1936481
+              }
+            }
+          },
+          "heading": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360,
+            "example": 190
+          },
+          "course": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 360,
+            "example": 190
+          },
+          "speed": {
+            "type": "object",
+            "properties": {
+              "sog": {
+                "type": "number",
+                "minimum": 0,
+                "example": 5.2
+              },
+              "stw": {
+                "type": "number",
+                "minimum": 0,
+                "example": 5.1
+              }
+            }
+          },
+          "barometer": {
+            "type": "number",
+            "example": 1013.25
+          },
+          "wind": {
+            "type": "object",
+            "properties": {
+              "speed": {
+                "type": "number",
+                "minimum": 0,
+                "example": 12.7
+              },
+              "direction": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 360,
+                "example": 89.5
+              }
+            }
+          },
+          "observations": {
+            "$ref": "#/components/schemas/Observations"
+          },
+          "engine": {
+            "type": "object",
+            "properties": {
+              "hours": {
+                "type": "number",
+                "minimum": 0
+              },
+              "engines": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "hours": {
+                      "type": "number",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "vhf": {
+            "type": "string",
+            "maxLength": 3,
+            "minLength": 1,
+            "example": "10"
+          },
+          "crewNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipperName": {
+            "type": "string",
+            "example": "Alice"
+          },
+          "end": {
+            "type": "boolean",
+            "default": false
+          },
+          "text": {
+            "type": "string",
+            "example": "Autopilot activated"
+          },
+          "author": {
+            "type": "string",
+            "example": "auto"
+          },
+          "origin": {
+            "type": "string",
+            "description": "Recommended vocabulary is manual, auto, agent; other values are preserved (open enumeration)",
+            "default": "manual",
+            "example": "auto"
+          },
+          "category": {
+            "type": "string",
+            "description": "Recommended vocabulary is navigation, engine, radio, maintenance; other values are preserved (open enumeration)",
+            "example": "navigation"
+          }
+        }
+      },
+      "Log": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/Entry"
+        }
+      }
+    }
+  }
+}
