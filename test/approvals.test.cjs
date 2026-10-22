@@ -5,6 +5,7 @@ const {
   applyReviews,
   applyPutReview,
   putReview,
+  resourceReview,
   reviewKey,
 } = require("../dist/approvals.js");
 const { discoverOperations } = require("../dist/capabilities/openapi.js");
@@ -406,4 +407,125 @@ test("fallback approval forms expose only decisions and keep legacy GET permissi
     if (!schema.default.kind)
       assert.equal(schema.properties.permission.const, "readonly");
   }
+});
+
+const resourceTarget = {
+  collection: "logentries",
+  provider: "logbook-fixture",
+  method: "POST",
+  path: "/signalk/v2/api/resources/logentries",
+  description: "Create one log entry through the selected provider",
+  inputSchema: {
+    type: "object",
+    properties: { body: { type: "object", required: ["text"] } },
+    required: ["body"],
+  },
+};
+
+test("resource reviews bind method, collection, provider, schema and meaning without changing existing approvals", () => {
+  const review = resourceReview(resourceTarget);
+  const key = reviewKey(review);
+  const saved = { ...review, decision: "approved" };
+  assert.equal(
+    configSchema.safeParse({ readRequests: { [key]: saved } }).success,
+    true,
+  );
+  assert.equal(reviewKey(saved), key);
+  for (const changes of [
+    { provider: "other-provider" },
+    { description: "Different write behavior" },
+    { inputSchema: { type: "object", required: ["id"] } },
+    { collection: "notes", path: "/signalk/v2/api/resources/notes" },
+    { method: "PUT", path: "/signalk/v2/api/resources/logentries/{id}" },
+    { method: "DELETE", path: "/signalk/v2/api/resources/logentries/{id}" },
+  ]) {
+    assert.notEqual(
+      reviewKey(resourceReview({ ...resourceTarget, ...changes })),
+      key,
+    );
+    assert.equal(
+      configSchema.safeParse({
+        readRequests: { [key]: { ...saved, ...changes } },
+      }).success,
+      false,
+    );
+  }
+  const reordered = {
+    ...resourceTarget,
+    inputSchema: {
+      required: ["body"],
+      properties: { body: { required: ["text"], type: "object" } },
+      type: "object",
+    },
+  };
+  assert.equal(reviewKey(resourceReview(reordered)), key);
+  for (const changes of [
+    { method: "GET" },
+    { collection: "settings" },
+    { provider: "*" },
+    { path: "/signalk/v2/api/resources/logentries/id" },
+    { path: "/signalk/v2/api/resources/logentries/_providers/_default" },
+    { inputSchema: { excessive: "x".repeat(32768) } },
+  ])
+    assert.throws(
+      () => resourceReview({ ...resourceTarget, ...changes }),
+      /OPERATION_DISABLED/,
+    );
+  for (const changes of [
+    { permission: "readonly" },
+    { value: "private entry text" },
+    { token: "synthetic-token" },
+    { contractHash: "0".repeat(64) },
+  ])
+    assert.equal(
+      configSchema.safeParse({
+        readRequests: { [key]: { ...saved, ...changes } },
+      }).success,
+      false,
+    );
+});
+
+test("resource requests retain only review contracts and share the bounded native admin save flow", () => {
+  const requests = new ApprovalRequests();
+  const target = globalThis.structuredClone(resourceTarget);
+  const review = resourceReview({
+    ...target,
+    value: "private entry text",
+    token: "synthetic-token",
+  });
+  for (let i = 0; i < 3; i++)
+    assert.throws(() => requests.requestResource(review), /APPROVAL_PENDING/);
+  assert.equal(requests.pendingResource(review), true);
+  const [key, pending] = Object.entries(queued(requests))[0];
+  target.inputSchema.required.push("id");
+  assert.deepEqual(pending.inputSchema.required, ["body"]);
+  assert.equal(JSON.stringify(pending).includes("private entry text"), false);
+  assert.equal(JSON.stringify(pending).includes("synthetic-token"), false);
+  const schema = requests.schema().properties[key];
+  assert.match(schema.title, /Resource POST: logentries/);
+  assert.match(schema.description, /logbook-fixture/);
+  assert.match(schema.description, /Create one log entry/);
+  assert.equal(schema.properties.contractHash.readOnly, true);
+  assert.equal(requests.uiSchema()[key].provider["ui:widget"], "hidden");
+  pending.decision = "approved";
+  assert.equal(queued(requests)[key].decision, "pending");
+  requests.reset({ [key]: { ...pending, decision: "rejected" } });
+  assert.throws(() => requests.requestResource(review), /APPROVAL_REJECTED/);
+  assert.equal(requests.pendingResource(review), false);
+  requests.reset();
+  for (let i = 0; i < 64; i++)
+    assert.throws(
+      () =>
+        requests.requestResource(
+          resourceReview({ ...resourceTarget, provider: `provider-${i}` }),
+        ),
+      /APPROVAL_PENDING/,
+    );
+  assert.throws(
+    () =>
+      requests.requestResource(
+        resourceReview({ ...resourceTarget, provider: "overflow" }),
+      ),
+    /APPROVAL_QUEUE_FULL/,
+  );
 });

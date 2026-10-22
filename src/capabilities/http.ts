@@ -6,6 +6,11 @@ import { GatewayError } from "../auth.js";
 import { boundedJson } from "../json.js";
 import type { LocalActions } from "../put-types.js";
 
+// Fixed Resources read shapes only: no property traversal, configuration,
+// default-provider changes, chart tiles or arbitrary URLs.
+const resourceReadRoute =
+  /^\/signalk\/v2\/api\/resources(?:\/[A-Za-z][A-Za-z0-9_-]{0,63}(?:\/(?:_providers|[A-Za-z0-9][A-Za-z0-9_-]{0,127}))?)?(?:\?[^#\r\n\\]*)?$/;
+
 export type LocalGet = (path: string) => Promise<unknown>;
 
 export class NativeActionHttpError extends GatewayError {
@@ -38,7 +43,8 @@ export function localGet(
       (!/^\/(?:skServer\/openapi\/plugins\/|plugins\/|signalk\/v2\/api\/history\/)/.test(
         path,
       ) &&
-        path !== "/signalk/v2/api/notifications") ||
+        path !== "/signalk/v2/api/notifications" &&
+        !resourceReadRoute.test(path)) ||
       /[\r\n\\#]/.test(path)
     ) {
       throw new GatewayError("INVALID_LOCAL_ROUTE");
@@ -240,20 +246,21 @@ export interface PostResponse {
 }
 export type LocalPost = (path: string, body?: unknown) => Promise<PostResponse>;
 
+export type ResourceMethod = "POST" | "PUT" | "DELETE";
+export type LocalResourceMutation = (
+  method: ResourceMethod,
+  path: string,
+  body?: unknown,
+) => Promise<PostResponse>;
+
 export function localPost(
   req: Request,
   authorization: string,
   signal: AbortSignal,
   tlsServerName?: string,
 ): LocalPost {
-  const address = req.socket.localAddress;
-  const mapped = address?.startsWith("::ffff:") ? address.slice(7) : undefined;
-  const hostname = mapped && isIP(mapped) === 4 ? mapped : address;
-  const port = req.socket.localPort;
-  const encrypted = "encrypted" in req.socket && req.socket.encrypted === true;
+  const send = localMutationHttp(req, authorization, signal, tlsServerName);
   return async (path, body) => {
-    if (!hostname || !port)
-      throw new GatewayError("LOCAL_HTTP_UNAVAILABLE", 503);
     if (
       !/^\/plugins\/(?:@[a-z0-9_-]+\/)?[a-z0-9][a-z0-9._-]*\/[A-Za-z0-9_/-]+(?:\?[^#\r\n\\]*)?$/.test(
         path,
@@ -262,6 +269,55 @@ export function localPost(
       path.includes("/plugins/signalk-mcp/")
     )
       throw new GatewayError("INVALID_LOCAL_ROUTE");
+    return send("POST", path, body);
+  };
+}
+
+export function localResourceMutation(
+  req: Request,
+  authorization: string,
+  signal: AbortSignal,
+  tlsServerName?: string,
+): LocalResourceMutation {
+  const send = localMutationHttp(
+    req,
+    authorization,
+    signal,
+    tlsServerName,
+    "RESOURCE_HTTP_ERROR",
+  );
+  return async (method, path, body) => {
+    const match =
+      /^\/signalk\/v2\/api\/resources\/(routes|waypoints|regions|notes|charts|logentries)(?:\/([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?\?provider=([^&]+)$/.exec(
+        path,
+      );
+    if (
+      !match ||
+      !["POST", "PUT", "DELETE"].includes(method) ||
+      /[\r\n\\#]/.test(path) ||
+      (method === "POST") !== (match[2] === undefined) ||
+      (method === "DELETE" && body !== undefined)
+    )
+      throw new GatewayError("INVALID_LOCAL_ROUTE");
+    return send(method, path, body);
+  };
+}
+
+function localMutationHttp(
+  req: Request,
+  authorization: string,
+  signal: AbortSignal,
+  tlsServerName?: string,
+  errorCode = "PLUGIN_POST_HTTP_ERROR",
+): LocalResourceMutation {
+  const address = req.socket.localAddress;
+  const mapped = address?.startsWith("::ffff:") ? address.slice(7) : undefined;
+  const hostname = mapped && isIP(mapped) === 4 ? mapped : address;
+  const port = req.socket.localPort;
+  const encrypted = "encrypted" in req.socket && req.socket.encrypted === true;
+  return async (method, path, body) => {
+    if (!hostname || !port)
+      throw new GatewayError("LOCAL_HTTP_UNAVAILABLE", 503);
     const serialized =
       body === undefined
         ? undefined
@@ -272,7 +328,7 @@ export function localPost(
           hostname,
           port,
           path,
-          method: "POST",
+          method,
           ...(encrypted && tlsServerName ? { servername: tlsServerName } : {}),
           headers: {
             Authorization: authorization,
@@ -291,7 +347,7 @@ export function localPost(
           // Never follow redirects or expose provider error bodies.
           if (status < 200 || status >= 300) {
             response.destroy();
-            reject(new GatewayError("PLUGIN_POST_HTTP_ERROR", status));
+            reject(new GatewayError(errorCode, status));
             return;
           }
           if (status === 204) {

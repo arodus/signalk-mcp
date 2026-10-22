@@ -1,6 +1,10 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
-const { reviewKey, putReview } = require("../dist/approvals.js");
+const {
+  reviewKey,
+  putReview,
+  resourceReview,
+} = require("../dist/approvals.js");
 const { configSchema } = require("../dist/config.js");
 const clone = (value) => globalThis.structuredClone(value);
 const ui = () => import("../ui/configuration.mjs");
@@ -365,4 +369,84 @@ test("POST reviews load, save decisions and can be revoked while provider remain
     api.mergeChanges(base, draft, base).configuration.readRequests,
     {},
   );
+});
+
+test("resource write decisions save with existing approvals and preserve concurrent requests", async () => {
+  const { saveConfiguration, mergeChanges } = await ui();
+  const resource = resourceReview({
+    collection: "logentries",
+    provider: "logbook-fixture",
+    method: "PUT",
+    path: "/signalk/v2/api/resources/logentries/{id}",
+    description: "Create or replace one log entry",
+    inputSchema: { type: "object", required: ["id", "body"] },
+  });
+  const resourceKey = reviewKey(resource);
+  const mixed = { [key]: review, [putKey]: put, [resourceKey]: resource };
+  const base = await snapshot(inventory(mixed));
+  const draft = draftOf(base);
+  draft.reviews[resourceKey].decision = "approved";
+  const next = resourceReview({ ...resource, provider: "second-provider" });
+  const nextKey = reviewKey(next);
+  const concurrent = inventory({ ...mixed, [nextKey]: next });
+  let saved;
+  const calls = [];
+  const result = await saveConfiguration(base, draft, async (url, options) => {
+    calls.push([url, options.method ?? "GET"]);
+    if (url === "/plugins") return response(concurrent);
+    if (options.method === "POST") {
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  });
+  assert.deepEqual(calls, [
+    ["/plugins", "GET"],
+    ["/plugins/signalk-mcp/config", "POST"],
+    ["/plugins/signalk-mcp/config", "GET"],
+  ]);
+  assert.equal(result.reviews[resourceKey].decision, "approved");
+  assert.equal(result.reviews[nextKey].decision, "pending");
+  assert.deepEqual(result.reviews[key], review);
+  assert.deepEqual(result.reviews[putKey], put);
+  assert.equal(configSchema.safeParse(saved.configuration).success, true);
+  const remove = draftOf(result);
+  delete remove.reviews[resourceKey];
+  assert.equal(
+    Object.hasOwn(
+      mergeChanges(result, remove, result).configuration.readRequests,
+      resourceKey,
+    ),
+    false,
+  );
+  const changed = clone(base);
+  changed.reviews[resourceKey].decision = "rejected";
+  assert.throws(() => mergeChanges(base, draft, changed), /another session/);
+});
+
+test("resource review table refuses unsupported routes, methods and gateway permission policy", async () => {
+  const resource = resourceReview({
+    collection: "logentries",
+    provider: "logbook-fixture",
+    method: "POST",
+    path: "/signalk/v2/api/resources/logentries",
+    description: "Create one log entry",
+    inputSchema: { type: "object" },
+  });
+  const resourceKey = reviewKey(resource);
+  for (const changes of [
+    { method: "GET" },
+    { collection: "configuration" },
+    { provider: "" },
+    { provider: undefined },
+    { path: "/signalk/v2/api/resources/logentries/_providers/_default" },
+    { inputSchema: null },
+    { contractHash: "invalid" },
+    { permission: "admin" },
+    { kind: "unknown" },
+  ])
+    await assert.rejects(
+      snapshot(inventory({ [resourceKey]: { ...resource, ...changes } })),
+      /invalid/,
+    );
 });

@@ -9,7 +9,7 @@ import {
 import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
 import { applyReviews, type ApprovalRequests } from "../approvals.js";
-import type { LocalGet, LocalPost } from "./http.js";
+import type { LocalGet, LocalPost, LocalResourceMutation } from "./http.js";
 import type { LocalActions } from "../put-types.js";
 import {
   NativePuts,
@@ -18,7 +18,29 @@ import {
   putPathsInput,
   putStatusInput,
 } from "../puts.js";
+import {
+  describeResource,
+  describeResourceInput,
+  mutateResource,
+  isResourceMutation,
+  createResourceInput,
+  putResourceInput,
+  deleteResourceInput,
+} from "./resource-mutations.js";
 import { getHistory, historyProviders } from "./history.js";
+import {
+  listResourceCollections,
+  listResourceProviders,
+  getResource,
+  listResources,
+  listLogentries,
+  listLogentryDates,
+  resourceProvidersInput,
+  resourceInput,
+  resourcesInput,
+  logentriesInput,
+  logentryDatesInput,
+} from "./resources.js";
 import { getNotification, listNotifications } from "./notifications.js";
 import {
   discoverOperations,
@@ -71,8 +93,87 @@ export class CapabilityRegistry {
     private readonly puts?: NativePuts,
     private readonly actions?: LocalActions,
     private readonly post?: LocalPost,
+    private readonly resourceMutation?: LocalResourceMutation,
   ) {
     this.core = {
+      "api.resources": {
+        description:
+          "Native Resources API reads and individually approved writes under the caller's Signal K permissions",
+        operations: {
+          describe_resource: {
+            description:
+              "Describe create, upsert and delete contracts and saved approval for one resource collection/provider. Discovery does not queue approval.",
+            input: describeResourceInput,
+            run: (args) =>
+              describeResource(
+                this.resourceContext(),
+                describeResourceInput.parse(args),
+              ),
+          },
+          list_collections: {
+            description:
+              "Discover registered resource collections and which have read adapters",
+            input: stateInput,
+            run: () =>
+              listResourceCollections(() => this.authorize(), this.get),
+          },
+          list_resource_providers: {
+            description:
+              "Discover registered providers for a resource collection; multiple providers require explicit selection",
+            input: resourceProvidersInput,
+            run: (args) =>
+              listResourceProviders(
+                () => this.authorize(),
+                this.get,
+                resourceProvidersInput.parse(args).collection,
+              ),
+          },
+          list_resources: {
+            description:
+              "Read routes, waypoints, regions, notes or chart metadata. Standard lists default to limit 100 (maximum 500); charts accept no filters. No URL or chart-tile fetching. Provider filters and values are not recomputed.",
+            input: resourcesInput,
+            run: (args) =>
+              listResources(
+                () => this.authorize(),
+                this.get,
+                resourcesInput.parse(args),
+              ),
+          },
+          get_resource: {
+            description:
+              "Read one resource unchanged, including a UUID logentry. URLs and attachments remain data.",
+            input: resourceInput,
+            run: (args) =>
+              getResource(
+                () => this.authorize(),
+                this.get,
+                resourceInput.parse(args),
+              ),
+          },
+          list_logentries: {
+            description:
+              "Read logentries using a date, a from/to pair (maximum 31 days), or a limit (newest matches, maximum 500). No default window or silent truncation. Author is provider attribution, not authenticated identity.",
+            input: logentriesInput,
+            run: (args) =>
+              listLogentries(
+                () => this.authorize(),
+                this.get,
+                logentriesInput.parse(args),
+              ),
+          },
+          list_logentry_dates: {
+            description:
+              "Fetch the provider's dates=true calendar unchanged (maximum 2000 dates); optional date or from/to pair spanning at most 366 days. Counts are supplied by the provider.",
+            input: logentryDatesInput,
+            run: (args) =>
+              listLogentryDates(
+                () => this.authorize(),
+                this.get,
+                logentryDatesInput.parse(args),
+              ),
+          },
+        },
+      },
       "signalk.telemetry": {
         description: "Permission-filtered current measurements on vessels.self",
         operations: {
@@ -229,6 +330,15 @@ export class CapabilityRegistry {
       },
     };
   }
+  private resourceContext() {
+    return {
+      authorize: () => this.authorize(),
+      config: this.config,
+      get: this.get,
+      requests: this.requests,
+      http: this.resourceMutation,
+    };
+  }
   private nativePuts(): NativePuts {
     if (!this.puts) throw new GatewayError("PUT_UNAVAILABLE", 503);
     return this.puts;
@@ -249,6 +359,8 @@ export class CapabilityRegistry {
     args: unknown,
   ): Promise<object> {
     this.authorize();
+    if (id === "api.resources" && isResourceMutation(operation))
+      return mutateResource(this.resourceContext(), operation, args);
     if (id.startsWith("plugin."))
       return this.executePlugin(id, operation, args, true);
     if (id !== "signalk.put" || operation !== "put_value")
@@ -301,22 +413,21 @@ export class CapabilityRegistry {
       ([id, cap]) => ({
         id,
         provider: "signalk",
-        kind: "core",
+        kind: id === "api.resources" ? "api" : "core",
         description: cap.description,
-        readOnly: id !== "signalk.put",
-        availability:
-          id === "signalk.history"
-            ? "provider-dependent"
-            : id === "signalk.put"
-              ? "per-target-approval"
-              : "available",
+        readOnly: !["signalk.put", "api.resources"].includes(id),
+        availability: ["signalk.history", "api.resources"].includes(id)
+          ? "provider-dependent"
+          : id === "signalk.put"
+            ? "per-target-approval"
+            : "available",
       }),
     );
     let discovery: string = "complete";
     try {
       const features = await this.features();
       for (const api of features.apis)
-        if (!["history", "notifications"].includes(api))
+        if (!["history", "notifications", "resources"].includes(api))
           capabilities.push({
             id: `api.${api}`,
             provider: "signalk",
@@ -409,6 +520,17 @@ export class CapabilityRegistry {
         }
         this.authorize();
       }
+      if (id === "api.resources") {
+        try {
+          await listResourceCollections(() => this.authorize(), this.get);
+        } catch (error) {
+          reason =
+            error instanceof GatewayError
+              ? error.code
+              : "RESOURCES_UNAVAILABLE";
+        }
+        this.authorize();
+      }
       if (id === "signalk.history") {
         try {
           providers = await historyProviders(this.get);
@@ -422,13 +544,13 @@ export class CapabilityRegistry {
       return {
         id,
         provider: "signalk",
-        readOnly: true,
+        readOnly: id !== "api.resources",
         description: capability.description,
         available: reason === null,
         reason,
         ...(providers ? { providers } : {}),
-        operations: Object.entries(capability.operations).map(
-          ([name, operation]) => ({
+        operations: [
+          ...Object.entries(capability.operations).map(([name, operation]) => ({
             id: name,
             permission: "readonly",
             enabled:
@@ -443,8 +565,27 @@ export class CapabilityRegistry {
             inputSchema: zodToJsonSchema(operation.input, {
               $refStrategy: "none",
             }),
-          }),
-        ),
+          })),
+          ...(id === "api.resources"
+            ? [
+                ["create_resource", createResourceInput],
+                ["put_resource", putResourceInput],
+                ["delete_resource", deleteResourceInput],
+              ].map(([name, input]) => ({
+                id: name,
+                permission: "readwrite",
+                readOnly: false,
+                enabled: false,
+                reason: "PER_OPERATION_APPROVAL_REQUIRED",
+                executionTool: "execute_mutation",
+                description:
+                  "Use describe_resource with collection and provider for the exact reviewed body contract and approval state.",
+                inputSchema: zodToJsonSchema(input as z.AnyZodObject, {
+                  $refStrategy: "none",
+                }),
+              }))
+            : []),
+        ],
       };
     }
     if (id.startsWith("api.")) {
@@ -516,7 +657,10 @@ export class CapabilityRegistry {
   }
   async execute(id: string, operation: string, args: unknown): Promise<object> {
     this.authorize();
-    if (id === "signalk.put" && operation === "put_value")
+    if (
+      (id === "signalk.put" && operation === "put_value") ||
+      (id === "api.resources" && isResourceMutation(operation))
+    )
       throw new GatewayError("MUTATION_TOOL_REQUIRED", 403);
     if (Object.hasOwn(this.core, id)) {
       const operations = this.core[id]!.operations;
