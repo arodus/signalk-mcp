@@ -51,7 +51,7 @@ Values retain native units. Zero and false remain valid; null is `missing`, whil
 
 ## Approve a plugin operation
 
-Plugins appear as `plugin.<plugin-id>`. Describe one to read its OpenAPI operations. Missing documents, disabled plugins, unsupported schemas and unapproved operations are reported explicitly. Other advertised APIs appear as `api.<name>` with `ADAPTER_REQUIRED`; discovery never enables control functions.
+Plugins appear as `plugin.<plugin-id>`. Describe one to read its OpenAPI operations. Missing documents, disabled plugins, unsupported schemas and unapproved operations are reported explicitly. Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors appear as `api.<name>` and use the shared OpenAPI parser and executor. Each supported GET or mutation requires exact saved review; unsupported namespaces and contracts remain disabled. Static native documents are cached until the MCP plugin restarts, while features, permissions and approvals remain live. See [native API contracts](native-apis.md).
 
 All plugin operations start disabled. When a client attempts a discovered, supported GET with valid arguments, the read stays blocked with `APPROVAL_PENDING`. The plugin prepares a deduplicated review entry without calling that endpoint or saving configuration.
 

@@ -1,3 +1,4 @@
+import { isNativeApiRoute, nativeApiSchema } from "./native-api.js";
 import http from "node:http";
 import https from "node:https";
 import { isIP } from "node:net";
@@ -44,7 +45,11 @@ export function localGet(
         path,
       ) &&
         path !== "/signalk/v2/api/notifications" &&
-        !resourceReadRoute.test(path)) ||
+        !resourceReadRoute.test(path) &&
+        !isNativeApiRoute("GET", path) &&
+        !nativeApiSchema.options.some(
+          (api) => path === `/skServer/openapi/${api}`,
+        )) ||
       /[\r\n\\#]/.test(path)
     ) {
       throw new GatewayError("INVALID_LOCAL_ROUTE");
@@ -286,9 +291,10 @@ export function localPluginMutation(
   return async (method, path, body) => {
     if (
       !["POST", "PUT", "PATCH", "DELETE"].includes(method) ||
-      !/^\/plugins\/(?:@[A-Za-z0-9_-]+\/)?[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9_.%:+/-]+(?:\?[^#\r\n\\]*)?$/.test(
-        path,
-      ) ||
+      (!isNativeApiRoute(method, path) &&
+        !/^\/plugins\/(?:@[A-Za-z0-9_-]+\/)?[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9_.%:+/-]+(?:\?[^#\r\n\\]*)?$/.test(
+          path,
+        )) ||
       /(?:^|\/)(?:(?:[A-Za-z0-9_]+-)?(?:_?config|configuration|settings))(?:\/|\?|$)/i.test(
         path,
       ) ||

@@ -1,3 +1,5 @@
+import { DiscoveryCache } from "./discovery-cache.js";
+import { nativeApiSchema, type NativeApi } from "./native-api.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import {
@@ -79,6 +81,7 @@ interface CoreOperation {
   run: (args: unknown) => object | Promise<object>;
 }
 interface PluginInfo {
+  api?: NativeApi;
   id: string;
   enabled: boolean;
 }
@@ -101,6 +104,7 @@ export class CapabilityRegistry {
     private readonly post?: LocalPost,
     private readonly resourceMutation?: LocalResourceMutation,
     private readonly pluginMutation?: LocalPluginMutation,
+    private readonly discovery = new DiscoveryCache(),
   ) {
     this.core = {
       "api.resources": {
@@ -368,7 +372,10 @@ export class CapabilityRegistry {
     this.authorize();
     if (id === "api.resources" && isResourceMutation(operation))
       return mutateResource(this.resourceContext(), operation, args);
-    if (id.startsWith("plugin."))
+    if (
+      id.startsWith("plugin.") ||
+      (id.startsWith("api.") && !Object.hasOwn(this.core, id))
+    )
       return this.executePlugin(id, operation, args, true);
     if (id !== "signalk.put" || operation !== "put_value")
       throw new GatewayError("OPERATION_DISABLED", 403);
@@ -439,8 +446,10 @@ export class CapabilityRegistry {
             id: `api.${api}`,
             provider: "signalk",
             kind: "api",
-            readOnly: true,
-            availability: "adapter-required",
+            readOnly: false,
+            availability: nativeApiSchema.safeParse(api).success
+              ? "inspect-required"
+              : "unsupported-namespace",
           });
       for (const plugin of features.plugins.sort((a, b) =>
         a.id.localeCompare(b.id),
@@ -595,18 +604,6 @@ export class CapabilityRegistry {
         ],
       };
     }
-    if (id.startsWith("api.")) {
-      const features = await this.features();
-      if (features.apis.includes(id.slice(4)))
-        return {
-          id,
-          provider: "signalk",
-          readOnly: true,
-          available: false,
-          reason: "ADAPTER_REQUIRED",
-          operations: [],
-        };
-    }
     const plugin = await this.plugin(id);
     if (!plugin.enabled)
       return {
@@ -618,15 +615,14 @@ export class CapabilityRegistry {
         operations: [],
       };
     try {
-      const document = await this.get(
-        `/skServer/openapi/plugins/${encodeURIComponent(plugin.id)}`,
-      );
+      const document = await this.document(plugin);
       const operations = applyReviews(
         discoverOperations(
           document,
           plugin.id,
           this.config.pluginOperations ?? [],
           this.authorize(),
+          plugin.api,
         ),
         plugin.id,
         this.config.readRequests ?? {},
@@ -653,7 +649,20 @@ export class CapabilityRegistry {
       };
     }
   }
+  private async document(plugin: PluginInfo): Promise<unknown> {
+    return plugin.api
+      ? this.discovery.nativeDocument(plugin.api, this.get)
+      : this.get(`/skServer/openapi/plugins/${encodeURIComponent(plugin.id)}`);
+  }
   private async plugin(id: string): Promise<PluginInfo> {
+    if (id.startsWith("api.")) {
+      const name = id.slice(4);
+      if (!(await this.features()).apis.includes(name))
+        throw new GatewayError("CAPABILITY_NOT_FOUND");
+      const parsed = nativeApiSchema.safeParse(name);
+      if (!parsed.success) throw new GatewayError("UNSUPPORTED_API_NAMESPACE");
+      return { id: name, api: parsed.data, enabled: true };
+    }
     if (!id.startsWith("plugin."))
       throw new GatewayError("CAPABILITY_NOT_FOUND");
     const plugin = (await this.features()).plugins.find(
@@ -695,15 +704,14 @@ export class CapabilityRegistry {
       throw new GatewayError("PERMISSION_DENIED", 403);
     const plugin = await this.plugin(id);
     if (!plugin.enabled) throw new GatewayError("CAPABILITY_UNAVAILABLE");
-    const document = await this.get(
-      `/skServer/openapi/plugins/${encodeURIComponent(plugin.id)}`,
-    );
+    const document = await this.document(plugin);
     const target = applyReviews(
       discoverOperations(
         document,
         plugin.id,
         this.config.pluginOperations ?? [],
         this.authorize(),
+        plugin.api,
       ),
       plugin.id,
       this.config.readRequests ?? {},
@@ -816,8 +824,22 @@ export class CapabilityRegistry {
         };
       }
     }
+    const beforeRead = this.authorize();
     const result = await this.get(route);
+    if (plugin.api && !(await this.plugin(id)).enabled)
+      throw new GatewayError("CAPABILITY_UNAVAILABLE");
     const principal = this.authorize();
+    if (
+      plugin.api &&
+      (principal.identifier !== beforeRead.identifier ||
+        !applyReviews(
+          [{ ...target, enabled: false, reason: "NOT_ALLOWLISTED" }],
+          plugin.id,
+          this.config.readRequests ?? {},
+          principal,
+        )[0]!.enabled)
+    )
+      throw new GatewayError("PERMISSION_DENIED", 403);
     if (target.permission === "admin" && principal.permissions !== "admin")
       throw new GatewayError("PERMISSION_DENIED", 403);
     return { capability: id, operation, provider: plugin.id, data: result };

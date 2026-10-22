@@ -14,7 +14,15 @@ import {
   type Approval,
 } from "./schemas.js";
 
+import {
+  nativeApiPath,
+  nativeApis,
+  nativeRouteAllowed,
+  type NativeApi,
+} from "./native-api.js";
+
 export interface DiscoveredOperation {
+  api?: NativeApi;
   id: string;
   method: string;
   path: string;
@@ -169,6 +177,7 @@ export function discoverOperations(
   pluginId: string,
   approvals: Approval[],
   principal: Principal,
+  nativeApi?: NativeApi,
 ): DiscoveredOperation[] {
   if (
     !record(document) ||
@@ -180,7 +189,10 @@ export function discoverOperations(
   const result: DiscoveredOperation[] = [];
   const paths = Object.entries(document.paths);
   if (paths.length > 128) throw new GatewayError("DISCOVERY_LIMIT");
-  for (const [path, raw] of paths) {
+  for (const [documentPath, raw] of paths) {
+    const path = nativeApi
+      ? (nativeApiPath(nativeApi, documentPath) ?? documentPath)
+      : documentPath;
     if (!record(raw)) continue;
     for (const method of [
       "get",
@@ -199,11 +211,16 @@ export function discoverOperations(
       // approval still applies; collisions are disabled below, not guessed away.
       const id =
         operation.operationId === undefined &&
-        pluginRouteSchema.safeParse(path).success
-          ? `${method}.${(pluginId.startsWith("@") &&
-            path.startsWith(`/plugins/${pluginId}/`)
-              ? path.slice(`/plugins/${pluginId}`.length)
-              : path
+        (pluginRouteSchema.safeParse(path).success ||
+          (nativeApi && documentPath === "/"))
+          ? `${method}.${(nativeApi
+              ? path.startsWith(nativeApis[nativeApi].base)
+                ? path.slice(nativeApis[nativeApi].base.length) || "/root"
+                : path
+              : pluginId.startsWith("@") &&
+                  path.startsWith(`/plugins/${pluginId}/`)
+                ? path.slice(`/plugins/${pluginId}`.length)
+                : path
             )
               .replace(/^\//, "")
               .replace(/\/$/, "")
@@ -220,6 +237,7 @@ export function discoverOperations(
           a.method === method.toUpperCase(),
       );
       const entry: DiscoveredOperation = {
+        ...(nativeApi ? { api: nativeApi } : {}),
         id: id as string,
         method: method.toUpperCase(),
         path,
@@ -244,8 +262,10 @@ export function discoverOperations(
       )
         entry.reason = "UNSUPPORTED_ROUTE";
       else if (
-        (!path.startsWith(`/plugins/${pluginId}/`) &&
-          /^\/(?:plugins|signalk|skServer)(?:\/|$)/.test(path)) ||
+        (nativeApi
+          ? !nativeRouteAllowed(nativeApi, method.toUpperCase(), path)
+          : !path.startsWith(`/plugins/${pluginId}/`) &&
+            /^\/(?:plugins|signalk|skServer)(?:\/|$)/.test(path)) ||
         !pluginRouteSchema.safeParse(path).success ||
         raw.$ref !== undefined
       )
@@ -253,8 +273,16 @@ export function discoverOperations(
       else {
         try {
           if (record(operation.responses)) {
+            if (
+              nativeApi &&
+              (Object.hasOwn(operation.responses, "101") ||
+                /websocket|event.stream/i.test(String(operation.summary)))
+            )
+              throw new GatewayError("UNSUPPORTED_RESPONSE");
             const success = Object.entries(operation.responses).filter(
-              ([status]) => /^2(?:[0-9]{2}|XX)$/.test(status),
+              ([status]) =>
+                /^2(?:[0-9]{2}|XX)$/.test(status) ||
+                (nativeApi && status === "default"),
             );
             if (
               success.length &&
@@ -275,7 +303,7 @@ export function discoverOperations(
           entry.inputSchema = parsed.inputSchema;
           entry.input = parsed.input;
           entry.parameters = parsed.parameters;
-          if (method !== "get") {
+          if (method !== "get" || nativeApi) {
             entry.inputSchema = resolvedContract(
               document,
               entry.inputSchema,
@@ -293,14 +321,42 @@ export function discoverOperations(
                     pathSummary: raw.summary ?? null,
                     pathDescription: raw.description ?? null,
                     security: operation.security ?? document.security ?? null,
-                    operation,
+                    operation: nativeApi
+                      ? {
+                          ...operation,
+                          // Outputs are forwarded, not schema-validated. Bind their
+                          // transport and meaning without compiling response models.
+                          responses: record(operation.responses)
+                            ? Object.fromEntries(
+                                Object.entries(operation.responses).map(
+                                  ([status, response]) => {
+                                    const resolved = resolve(
+                                      document,
+                                      response,
+                                    );
+                                    return [
+                                      status,
+                                      {
+                                        description:
+                                          resolved.description ?? null,
+                                        mediaTypes: record(resolved.content)
+                                          ? Object.keys(resolved.content).sort()
+                                          : [],
+                                      },
+                                    ];
+                                  },
+                                ),
+                              )
+                            : null,
+                        }
+                      : operation,
                   }),
                   32768,
                 ),
               )
               .digest("hex");
           }
-          if (approval && method === "get") {
+          if (!nativeApi && approval && method === "get") {
             entry.enabled =
               approval.permission === "readonly" ||
               principal.permissions === "admin";
@@ -364,8 +420,9 @@ export function operationRoute(
       );
     else query.set(parameter.name, String(value));
   }
-  const route = path.startsWith(`/plugins/${pluginId}/`)
-    ? path
-    : `/plugins/${pluginId}${path}`;
+  const route =
+    operation.api || path.startsWith(`/plugins/${pluginId}/`)
+      ? path
+      : `/plugins/${pluginId}${path}`;
   return `${route}${query.size ? "?" + query.toString() : ""}`;
 }

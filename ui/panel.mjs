@@ -191,7 +191,7 @@ export default function Configuration() {
     h(
       "p",
       { className: "mcp-help" },
-      "Review each plugin operation, native PUT or resource write before accepting it. Check the target, meaning, input constraints and provider permissions. Signal K permissions still apply. Changes take effect when you save.",
+      "Review each plugin/native API operation, native PUT or resource write before accepting it. Check the target, meaning, input constraints and provider permissions. Signal K permissions still apply. Changes take effect when you save.",
     ),
     error
       ? h("div", { role: "alert", className: "mcp-notice mcp-error" }, error)
@@ -236,16 +236,23 @@ export default function Configuration() {
                       const post = item.kind === "post";
                       const plugin = item.kind === "plugin";
                       const resource = item.kind === "resource";
-                      const write = put || post || plugin || resource;
+                      const api = item.kind === "api";
+                      const write =
+                        put ||
+                        post ||
+                        plugin ||
+                        resource ||
+                        (api && item.method !== "GET");
                       const absent =
                         !put &&
                         !resource &&
+                        !api &&
                         !base.installed.includes(item.pluginId);
                       const label = resource
                         ? `${item.method} ${item.collection} provider ${item.provider}`
                         : put
                           ? `PUT ${item.context}:${item.path} source ${item.source}`
-                          : `${item.pluginId}: ${item.operationId}`;
+                          : `${api ? item.api : item.pluginId}: ${item.operationId}`;
                       const description = put
                         ? item.metadata.description
                         : item.description;
@@ -271,7 +278,9 @@ export default function Configuration() {
                               ? `Resources · ${item.provider}`
                               : put
                                 ? `Native PUT · ${item.context}`
-                                : `Plugin ${post || plugin ? item.method : "GET"} · ${item.pluginId}`,
+                                : api
+                                  ? `Native API ${item.method} · ${item.api}`
+                                  : `Plugin ${post || plugin ? item.method : "GET"} · ${item.pluginId}`,
                             absent ? " · Not installed" : "",
                           ),
                           put
@@ -285,7 +294,7 @@ export default function Configuration() {
                               null,
                               put
                                 ? "Meaning and value constraints"
-                                : `${resource || post || plugin ? item.method : "GET"} ${item.path}`,
+                                : `${resource || post || plugin || api ? item.method : "GET"} ${item.path}`,
                             ),
                             h(
                               "p",
@@ -294,7 +303,7 @@ export default function Configuration() {
                                 ? description
                                 : "No description provided.",
                             ),
-                            write
+                            write || api
                               ? h(
                                   React.Fragment,
                                   null,
@@ -323,7 +332,7 @@ export default function Configuration() {
                                     null,
                                     resource && item.method === "DELETE"
                                       ? "Accepted target schema"
-                                      : post || plugin || resource
+                                      : post || plugin || resource || api
                                         ? "Accepted input schema (body is sent as JSON)"
                                         : "Accepted value schema",
                                   ),
@@ -341,7 +350,7 @@ export default function Configuration() {
                                 ? "Accept only this exact path and source after checking what it controls. Metadata and schema changes require a new review."
                                 : resource
                                   ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
-                                  : post || plugin
+                                  : post || plugin || api
                                     ? "Approval applies to this exact method and route. Changes to the input schema or meaning require a new review. Check the provider's side effects and data permissions."
                                     : "Check the provider's implementation for side effects and data permissions.",
                             ),
@@ -365,7 +374,7 @@ export default function Configuration() {
                               className: `mcp-badge mcp-${write ? "write" : "read"}`,
                               title: put
                                 ? "Requires native Signal K PUT permission"
-                                : post || plugin || resource
+                                : post || plugin || resource || api
                                   ? "Requires a write-capable Signal K identity and provider permission"
                                   : "Requires native Signal K read permission",
                             },
@@ -397,7 +406,7 @@ export default function Configuration() {
                                 "aria-label": `Reject ${label}`,
                               },
                             ),
-                            (write || absent) && deleting !== key
+                            (write || api || absent) && deleting !== key
                               ? button("Delete", () => setDeleting(key), {
                                   disabled: busy,
                                   "aria-label": `Delete ${label}`,
@@ -410,7 +419,7 @@ export default function Configuration() {
                                   h(
                                     "small",
                                     null,
-                                    write
+                                    write || api
                                       ? "Remove this review and revoke its approval when you save? A later request will need a new review."
                                       : "Remove this saved review?",
                                   ),
@@ -437,7 +446,7 @@ export default function Configuration() {
                       h(
                         "td",
                         { colSpan: 4 },
-                        "No requests yet. Refresh after a client attempts an unapproved plugin operation, native PUT or resource write.",
+                        "No requests yet. Refresh after a client attempts an unapproved plugin/native API operation, native PUT or resource write.",
                       ),
                     ),
               ),
@@ -449,7 +458,7 @@ export default function Configuration() {
               className: "mcp-help",
               style: { marginTop: 10, marginBottom: 0 },
             },
-            "Rejected requests stay in this list. Delete a write review to revoke its approval; plugin GET reviews can be deleted when the plugin is no longer installed. Save to apply changes.",
+            "Rejected requests stay in this list. Delete a write or native API review to revoke its approval; plugin GET reviews can be deleted when the plugin is no longer installed. Save to apply changes.",
           ),
           h(
             "details",

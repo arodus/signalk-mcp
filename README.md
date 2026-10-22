@@ -13,6 +13,7 @@ Supported versions are Signal K **2.32.0 and 2.33.0**, with Node.js **22 or 24**
 - Read current vessel measurements, including their units, timestamps and sources.
 - Discover available data and installed plugin capabilities.
 - Work with most plugins that describe their JSON APIs through Signal K's OpenAPI interface, without a separate adapter for each plugin.
+- Discover and call supported Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors API operations after individual approval; see [native API coverage](docs/native-apis.md).
 - Read notifications and historical data from an installed History API provider.
 - Read routes, waypoints, regions, notes, chart metadata and logbook entries through the [Resources API](docs/resources.md).
 - Create, save or delete resources, call plugin operations and send native Signal K PUT actions after an administrator approves each operation.
@@ -121,7 +122,7 @@ The agent discovers and calls the tools; you do not need to write JSON requests.
 
 ## Approve plugin operations and actions
 
-Built-in telemetry, history, notification and resource reads use your Signal K permissions immediately. **Every plugin read, plugin mutation (POST, PUT, PATCH or DELETE), native PUT action and resource write needs its own saved administrator approval.** There is no allow-all setting, and an agent cannot approve itself.
+Built-in telemetry, history, notification and resource reads use your Signal K permissions immediately. **Every generic native API operation, plugin read, plugin mutation (POST, PUT, PATCH or DELETE), native PUT action and resource write needs its own saved administrator approval.** There is no allow-all setting, and an agent cannot approve itself.
 
 When an agent attempts an eligible operation that has not been approved, it receives `APPROVAL_PENDING`. The operation has not run.
 
@@ -134,7 +135,7 @@ When an agent attempts an eligible operation that has not been approved, it rece
 
 _The screenshot uses synthetic example requests, not live vessel data._
 
-The generic JSON executor supports GET, POST, PUT, PATCH and DELETE described by the plugin’s OpenAPI. PATCH is for partial updates; PUT follows the endpoint’s documented save or replacement behavior. See the [cross-plugin schema audit and author guidance](docs/plugin-schema-audit.md) for supported contracts and remaining gaps.
+The generic JSON executor supports GET, POST, PUT, PATCH and DELETE described by the plugin’s or supported native API’s OpenAPI. PATCH is for partial updates; PUT follows the endpoint’s documented save or replacement behavior. See the [cross-plugin schema audit and author guidance](docs/plugin-schema-audit.md) for supported contracts and remaining gaps.
 
 Native Signal K PUT actions remain supported for exact `vessels.self` paths and handler sources, with their own saved approvals and native `put` permissions. See [native control actions](docs/native-puts.md).
 
@@ -149,6 +150,8 @@ Back up your Signal K configuration and record the installed plugin version. Dis
 Version 0.2.0 adds native Resources reads and reviewed writes, plugin PUT/PATCH/DELETE operations and broader supported JSON contracts. Existing approvals retain their reviewed scope; new methods and resource writes require individual approval. The version change does not grant any new permissions.
 
 ## Compatibility and limits
+
+- Generic native discovery accepts 60 of 75 contracts across the seven audited Signal K 2.33.0 API documents. Unsupported schemas, configuration writes and streaming endpoints remain disabled. Static native documents are cached until the MCP plugin restarts; identities, approvals and provider data are checked live. See [coverage and discovery lifetime](docs/native-apis.md).
 
 - The shared parser accepts 87 of 100 operations across seven audited plugin API documents. This checks their contracts; it does not mean every operation was executed. Plugins need a discoverable OpenAPI description for generic execution. Uploads, binary responses, event streams, configuration writes and routes outside the plugin namespace remain excluded; see the [schema audit](docs/plugin-schema-audit.md).
 - Native server and installed-package tests cover Signal K **2.32.0/2.33.0** on Node.js **22/24**, including TypeScript and Python MCP clients. Other server versions need separate verification.

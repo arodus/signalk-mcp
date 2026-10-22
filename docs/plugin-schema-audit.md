@@ -96,6 +96,5 @@ The other discovered plugin groups were:
 | Set System Time, SK to NMEA 0183, UDP NMEA Sender         | `PLUGIN_DISABLED`, no operations        | An enabled provider before its contract can be assessed                                   |
 
 Native `api.course`, `api.weather`, `api.autopilot`, `api.radar`, `api.ble`,
-`api.tracks` and `api.sensors` advertise feature names rather than plugin OpenAPI
-operations. Their `ADAPTER_REQUIRED` status is a separate native-interface gap.
-The generic OpenAPI improvements do not invent contracts for those features.
+`api.tracks` and `api.sensors` publish separate native OpenAPI documents.
+Their shared discovery/execution coverage is tracked in the [native API audit](native-apis.md).

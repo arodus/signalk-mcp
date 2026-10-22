@@ -1,3 +1,4 @@
+import type { DiscoveryCache } from "./capabilities/discovery-cache.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { GatewayError, type App } from "./auth.js";
@@ -40,6 +41,7 @@ export function createMcpServer(
   post?: LocalPost,
   resourceMutation?: LocalResourceMutation,
   pluginMutation?: LocalPluginMutation,
+  discovery?: DiscoveryCache,
 ) {
   const server = new McpServer({ name: "signalk-mcp", version: "0.1.0" });
   const registry = new CapabilityRegistry(
@@ -54,6 +56,7 @@ export function createMcpServer(
     post,
     resourceMutation,
     pluginMutation,
+    discovery,
   );
   const run = async (
     operation: () => object | Promise<object>,
@@ -193,7 +196,7 @@ export function createMcpServer(
     "execute_mutation",
     {
       description:
-        "Execute an individually approved mutation under the caller's Signal K identity. Supports signalk.put / put_value, individually reviewed plugin POST/PUT/PATCH/DELETE operations, and api.resources create_resource, put_resource and delete_resource. Resource writes need collection, provider, and body for create/upsert or id for upsert/delete; describe_resource exposes the exact contract. An eligible blocked mutation queues a native administrator review; only saving Plugin Config can approve it. Never automatically retry a submitted or unknown outcome.",
+        "Execute an individually approved mutation under the caller's Signal K identity. Supports signalk.put / put_value, individually reviewed plugin/native API POST/PUT/PATCH/DELETE operations, and api.resources create_resource, put_resource and delete_resource. Resource writes need collection, provider, and body for create/upsert or id for upsert/delete; describe_resource exposes the exact contract. An eligible blocked mutation queues a native administrator review; only saving Plugin Config can approve it. Never automatically retry a submitted or unknown outcome.",
       inputSchema: z
         .object({
           id: z.string().min(1).max(160),
@@ -233,7 +236,7 @@ export function createMcpServer(
     "execute_capability",
     {
       description:
-        "Execute a core or Resources read, or an individually approved plugin GET as the current Signal K user. Every plugin operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require their own individual approval through put_value or execute_mutation; plugin POST/PUT/PATCH/DELETE operations and Resources writes require execute_mutation and their own saved approval. Never claim approval or retry repeatedly while waiting.",
+        "Execute a core or Resources read, or an individually approved plugin/native API GET as the current Signal K user. Every generic plugin/native API operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require their own individual approval through put_value or execute_mutation; plugin/native API POST/PUT/PATCH/DELETE operations and Resources writes require execute_mutation and their own saved approval. Never claim approval or retry repeatedly while waiting.",
       inputSchema: {
         id: z.string().min(1).max(160),
         operation: z.string().min(1).max(128),

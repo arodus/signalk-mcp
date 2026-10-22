@@ -525,3 +525,44 @@ test("plugin PUT, PATCH and DELETE reviews save and revoke independently through
       /metadata is invalid/,
     );
 });
+
+test("native API read and write reviews retain contracts through save and revoke", async () => {
+  const { ApprovalRequests } = require("../dist/approvals.js");
+  const { discoverOperations } = require("../dist/capabilities/openapi.js");
+  const queue = new ApprovalRequests();
+  const operations = discoverOperations(
+    require("./fixtures/native-openapi/autopilot.json"),
+    "autopilot",
+    [],
+    { identifier: "writer", permissions: "readwrite" },
+    "autopilot",
+  );
+  for (const name of ["get.by-id.state", "post.by-id.engage"])
+    assert.throws(
+      () =>
+        queue.request(
+          "autopilot",
+          operations.find((o) => o.id === name),
+        ),
+      /APPROVAL_PENDING/,
+    );
+  const reviews = Object.fromEntries(
+    Object.entries(queue.schema().properties).map(([k, v]) => [k, v.default]),
+  );
+  const base = await snapshot(inventory(reviews));
+  assert.equal(Object.keys(base.reviews).length, 2);
+  const draft = draftOf(base);
+  for (const value of Object.values(draft.reviews)) value.decision = "approved";
+  const merged = (await ui()).mergeChanges(base, draft, base);
+  assert.equal(configSchema.safeParse(merged.configuration).success, true);
+  for (const [id, review] of Object.entries(reviews))
+    assert.deepEqual(merged.configuration.readRequests[id], {
+      ...review,
+      decision: "approved",
+    });
+  draft.reviews = {};
+  assert.deepEqual(
+    (await ui()).mergeChanges(base, draft, base).configuration.readRequests,
+    {},
+  );
+});

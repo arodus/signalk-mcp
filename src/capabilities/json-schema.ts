@@ -20,17 +20,31 @@ export function resolveSchema(
 ): Record<string, unknown> {
   let current = value;
   const seen = new Set<string>();
+  const annotations: Record<string, unknown> = {};
   for (let depth = 0; depth < 8; depth++) {
     if (!record(current)) throw new GatewayError("UNSUPPORTED_SCHEMA");
-    if (!Object.hasOwn(current, "$ref")) return current;
+    if (!Object.hasOwn(current, "$ref")) return { ...current, ...annotations };
     const ref = current.$ref;
     if (
-      Object.keys(current).length !== 1 ||
+      Object.keys(current).some(
+        (key) =>
+          ![
+            "$ref",
+            "description",
+            "title",
+            "example",
+            "examples",
+            "deprecated",
+          ].includes(key),
+      ) ||
       typeof ref !== "string" ||
       !ref.startsWith("#/components/") ||
       seen.has(ref)
     )
       throw new GatewayError("UNSUPPORTED_REFERENCE");
+    for (const [key, value] of Object.entries(current))
+      if (key !== "$ref" && !Object.hasOwn(annotations, key))
+        annotations[key] = value;
     seen.add(ref);
     current = document;
     for (const encoded of ref.slice(2).split("/")) {
@@ -134,6 +148,24 @@ export class JsonSchemaCompiler {
         );
       throw error;
     }
+    // Some upstream OpenAPI numeric schemas spell minimum/maximum min/max.
+    // Enforce those bounds rather than silently ignoring them; reject conflicts.
+    if (["number", "integer"].includes(String(schema.type))) {
+      for (const [alias, standard] of [
+        ["min", "minimum"],
+        ["max", "maximum"],
+      ]) {
+        if (schema[alias!] !== undefined) {
+          if (
+            schema[standard!] !== undefined &&
+            schema[standard!] !== schema[alias!]
+          )
+            fail(alias!);
+          schema = { ...schema, [standard!]: schema[alias!] };
+          delete schema[alias!];
+        }
+      }
+    }
     const annotations = [
       "description",
       "title",
@@ -182,7 +214,8 @@ export class JsonSchemaCompiler {
     if (
       scalar &&
       (nullable ||
-        !["string", "number", "integer", "boolean"].includes(String(type)))
+        (!schema.oneOf &&
+          !["string", "number", "integer", "boolean"].includes(String(type))))
     )
       fail("parameter-type");
     const composition =
@@ -236,14 +269,13 @@ export class JsonSchemaCompiler {
         .reduce((prior, next) => z.intersection(prior, next), alternatives[0]!);
     } else if (schema.oneOf !== undefined) {
       if (
-        scalar ||
         !Array.isArray(schema.oneOf) ||
         schema.oneOf.length < 2 ||
         schema.oneOf.length > 8
       )
         fail("oneOf");
       const alternatives = (schema.oneOf as unknown[]).map((item, i) =>
-        this.parse(item, `${location}.oneOf[${i}]`, false, depth + 1),
+        this.parse(item, `${location}.oneOf[${i}]`, scalar, depth + 1),
       );
       value = z
         .union(alternatives as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
@@ -273,6 +305,10 @@ export class JsonSchemaCompiler {
           text = text.datetime({ offset: true });
         else if (schema.format === "date") text = text.date();
         else if (schema.format === "uuid") text = text.uuid();
+        else if (schema.format === "duration")
+          text = text.regex(
+            /^P(?=\d|T\d)(?:\d+(?:[.,]\d+)?Y)?(?:\d+(?:[.,]\d+)?M)?(?:\d+(?:[.,]\d+)?W)?(?:\d+(?:[.,]\d+)?D)?(?:T(?=\d)(?:\d+(?:[.,]\d+)?H)?(?:\d+(?:[.,]\d+)?M)?(?:\d+(?:[.,]\d+)?S)?)?$/,
+          );
         else fail("format");
       }
       if (schema.pattern !== undefined) {
@@ -281,14 +317,14 @@ export class JsonSchemaCompiler {
         if (
           typeof schema.pattern !== "string" ||
           schema.pattern.length > 256 ||
-          !/^\^(?:\[[A-Za-z0-9_-]+\](?:\{\d{1,4}(?:,\d{1,4})?\})?){1,8}\$$/.test(
+          !/^\^(?:(?:\[[A-Za-z0-9_-]+\]|[A-Za-z0-9_:/ -])(?:\{\d{1,4}(?:,\d{1,4})?\})?){1,32}\$$/.test(
             schema.pattern,
           )
         )
           fail("pattern");
         const segments = (schema.pattern as string)
           .slice(1, -1)
-          .match(/\[[^\]]+\](?:\{[^}]+\})?/g)!;
+          .match(/(?:\[[^\]]+\]|[A-Za-z0-9_:/ -])(?:\{[^}]+\})?/g)!;
         if (segments.slice(0, -1).some((part) => part.includes(",")))
           fail("pattern");
         try {
