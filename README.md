@@ -26,7 +26,7 @@ These optional plugins have been tested with Signal K MCP. The table lists the t
 | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
 | [Alert Center](https://github.com/arodus/signalk-alert-center) (`signalk-alert-center`)          | Persistent alerts, delivery history and policy control | Published 0.4.1: native reads, snooze POST, policy PATCH and DELETE/reset with external services disabled        |
 | [Logbook](https://github.com/meri-imperiumi/signalk-logbook) (`@meri-imperiumi/signalk-logbook`) | Vessel log entries                                     | Published 0.14.3 provider/storage: Resources create, read, filter, update and delete with synthetic entries      |
-| Stowage (`signalk-stowage-mgmt`)                                                                 | Inventory and storage locations                        | 1.3.0 category reads and creation through MCP; 35 of 36 documented operation contracts pass offline schema tests |
+| [Stowage](https://github.com/BoatHacks/signalk-stowage-mgmt) (`signalk-stowage-mgmt`)            | Inventory and storage locations                        | 1.3.0 category reads and creation through MCP; 35 of 36 documented operation contracts pass offline schema tests |
 
 See the [plugin schema audit](docs/plugin-schema-audit.md), [Resources checks](docs/verification.md#native-resources-reads-and-reviewed-writes--2026-10-22) for the exact scope. Schema checks for other plugins are documented separately; they do not establish execution against those providers.
 
