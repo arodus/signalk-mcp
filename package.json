@@ -35,8 +35,7 @@
     "recommends": [
       "signalk-alert-center",
       "@meri-imperiumi/signalk-logbook",
-      "signalk-stowage-mgmt",
-      "signalk-to-influxdb"
+      "signalk-stowage-mgmt"
     ]
   },
   "signalk-plugin-enabled-by-default": false,
