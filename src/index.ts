@@ -1,3 +1,4 @@
+import { DiscoveryCache } from "./capabilities/discovery-cache.js";
 import type { Plugin, PluginRouter } from "@signalk/server-api";
 import type { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -21,6 +22,7 @@ function pluginFactory(app: App): Plugin {
   let config: Config | undefined;
   const requests = new ApprovalRequests();
   const puts = new NativePuts(app);
+  const discovery = new DiscoveryCache();
   let metadataGeneration = 0;
   const active = new Set<ReturnType<typeof createMcpServer>>();
   const pending = new Map<AbortController, Response>();
@@ -104,6 +106,7 @@ function pluginFactory(app: App): Plugin {
           controller.signal,
           settings.localTlsServerName,
         ),
+        discovery,
       );
       active.add(server);
       const transport = new StreamableHTTPServerTransport({
@@ -168,6 +171,7 @@ function pluginFactory(app: App): Plugin {
     start(options: unknown) {
       config = undefined;
       puts.reset();
+      discovery.clear();
       const parsed = configSchema.safeParse(options);
       if (!parsed.success) {
         app.setPluginError(
@@ -200,6 +204,7 @@ function pluginFactory(app: App): Plugin {
       config = undefined;
       metadataGeneration++;
       puts.reset();
+      discovery.clear();
       for (const [controller, response] of pending) {
         controller.abort();
         // Closing the MCP transport alone can leave its HTTP response pending.

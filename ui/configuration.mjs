@@ -78,20 +78,41 @@ export async function loadConfiguration(fetcher = nativeFetch) {
               typeof review.contractHash !== "string" ||
               !/^[a-f0-9]{64}$/.test(review.contractHash) ||
               "permission" in review
-            : review.kind === "post" || review.kind === "plugin"
-              ? (review.kind === "post"
-                  ? review.method !== "POST"
-                  : !["PUT", "PATCH", "DELETE"].includes(review.method)) ||
-                typeof review.pluginId !== "string" ||
-                review.pluginId === "signalk-mcp" ||
+            : review.kind === "api"
+              ? !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(
+                  review.method,
+                ) ||
+                ![
+                  "course",
+                  "weather",
+                  "autopilot",
+                  "radar",
+                  "ble",
+                  "tracks",
+                  "sensors",
+                ].includes(review.api) ||
                 typeof review.operationId !== "string" ||
                 typeof review.path !== "string" ||
+                !review.path.startsWith("/signalk/v2/api/") ||
                 typeof review.description !== "string" ||
                 !object(review.inputSchema) ||
                 typeof review.contractHash !== "string" ||
                 !/^[a-f0-9]{64}$/.test(review.contractHash) ||
                 "permission" in review
-              : "kind" in review || typeof review.pluginId !== "string"),
+              : review.kind === "post" || review.kind === "plugin"
+                ? (review.kind === "post"
+                    ? review.method !== "POST"
+                    : !["PUT", "PATCH", "DELETE"].includes(review.method)) ||
+                  typeof review.pluginId !== "string" ||
+                  review.pluginId === "signalk-mcp" ||
+                  typeof review.operationId !== "string" ||
+                  typeof review.path !== "string" ||
+                  typeof review.description !== "string" ||
+                  !object(review.inputSchema) ||
+                  typeof review.contractHash !== "string" ||
+                  !/^[a-f0-9]{64}$/.test(review.contractHash) ||
+                  "permission" in review
+                : "kind" in review || typeof review.pluginId !== "string"),
     )
   )
     throw new Error(

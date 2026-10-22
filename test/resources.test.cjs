@@ -91,7 +91,7 @@ test("Resources replaces adapter-required discovery and retains unsupported API 
   );
   assert.equal(
     (await registry.describe("api.weather")).reason,
-    "ADAPTER_REQUIRED",
+    "UNSUPPORTED_OPENAPI",
   );
   const collections = await call("list_collections");
   assert.ok(Object.hasOwn(collections.collections, "custom"));

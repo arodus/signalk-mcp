@@ -357,11 +357,11 @@ test("partial discovery stays truthful and does not break core capabilities", as
   );
   assert.equal(
     (await registry.describe("api.autopilot")).reason,
-    "ADAPTER_REQUIRED",
+    "DISCOVERY_UNAVAILABLE",
   );
   await assert.rejects(
     registry.execute("api.autopilot", "engage", {}),
-    /CAPABILITY_NOT_FOUND/,
+    /sensitive upstream details/,
   );
   app.getFeatures = async () => {
     throw new Error("sensitive discovery failure");

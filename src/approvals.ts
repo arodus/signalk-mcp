@@ -12,6 +12,33 @@ import { pathSchema } from "./paths.js";
 import type { PutTarget } from "./put-types.js";
 import { boundedJson } from "./json.js";
 
+import {
+  nativeApiSchema,
+  nativeRouteAllowed,
+} from "./capabilities/native-api.js";
+
+const apiReviewSchema = z
+  .object({
+    kind: z.literal("api"),
+    api: nativeApiSchema,
+    operationId: operationIdSchema,
+    method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+    path: routeSchema,
+    description: z.string().max(4096),
+    inputSchema: z.record(z.unknown()),
+    contractHash: z.string().regex(/^[a-f0-9]{64}$/),
+    decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
+  })
+  .strict()
+  .refine((review) => {
+    try {
+      boundedJson(review.inputSchema, 32768);
+      return nativeRouteAllowed(review.api, review.method, review.path);
+    } catch {
+      return false;
+    }
+  });
+
 const digest = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const readReviewSchema = z
@@ -207,6 +234,7 @@ export function resourceReview(target: ResourceReviewTarget): ResourceReview {
 }
 export const reviewSchema = z.union([
   readReviewSchema,
+  apiReviewSchema,
   putReviewSchema,
   postReviewSchema,
   pluginReviewSchema,
@@ -214,6 +242,17 @@ export const reviewSchema = z.union([
 ]);
 export type Review = z.infer<typeof reviewSchema>;
 export function reviewKey(review: Review): string {
+  if ("kind" in review && review.kind === "api")
+    return digest([
+      "API",
+      review.api,
+      review.operationId,
+      review.method,
+      review.path,
+      review.contractHash,
+      review.description,
+      canonicalJson(review.inputSchema),
+    ]);
   if ("kind" in review && review.kind === "resource")
     return digest(["RESOURCE", review.contractHash]);
   if ("kind" in review && review.kind === "post")
@@ -269,8 +308,21 @@ function candidate(
   operation: DiscoveredOperation,
 ):
   | ReadReview
+  | z.infer<typeof apiReviewSchema>
   | z.infer<typeof postReviewSchema>
   | z.infer<typeof pluginReviewSchema> {
+  if (operation.api && operation.input && operation.inputSchema)
+    return apiReviewSchema.parse({
+      kind: "api",
+      api: operation.api,
+      operationId: operation.id,
+      method: operation.method,
+      path: operation.path,
+      description: operation.description,
+      inputSchema: operation.inputSchema,
+      contractHash: operation.contractHash,
+      decision: "pending",
+    });
   if (operation.method === "POST" && operation.input && operation.inputSchema)
     return postReviewSchema.parse({
       kind: "post",
@@ -392,7 +444,9 @@ export class ApprovalRequests {
                 ? `Resource ${review.method}: ${review.collection} (${review.provider})`
                 : "kind" in review && review.kind === "put"
                   ? `Native PUT: ${review.path}`
-                  : `${review.pluginId}: ${review.operationId}`,
+                  : "kind" in review && review.kind === "api"
+                    ? `Native API ${review.api}: ${review.operationId}`
+                    : `${review.pluginId}: ${review.operationId}`,
             description:
               "kind" in review && review.kind === "resource"
                 ? `${review.method} ${review.path} — provider ${review.provider}. ${review.description}; input ${canonicalJson(review.inputSchema)}`
@@ -462,14 +516,15 @@ export function applyReviews(
     const review = reviews[reviewKey(candidate(pluginId, operation))];
     if (
       !review ||
-      ("kind" in review && !["post", "plugin"].includes(review.kind))
+      ("kind" in review && !["post", "plugin", "api"].includes(review.kind))
     )
       continue;
     if ("kind" in review) {
-      operation.permission = "readwrite";
+      const read = review.kind === "api" && review.method === "GET";
+      operation.permission = read ? "readonly" : "readwrite";
       operation.enabled =
         review.decision === "approved" &&
-        ["readwrite", "admin"].includes(principal.permissions);
+        (read || ["readwrite", "admin"].includes(principal.permissions));
       operation.reason =
         review.decision === "rejected"
           ? "APPROVAL_REJECTED"

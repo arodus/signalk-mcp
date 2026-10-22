@@ -71,3 +71,7 @@ Every PUT requires a saved exact path/source/metadata/value-contract review. Ide
 ## Plugin HTTP mutation authorization
 
 Individually reviewed plugin POST/PUT/PATCH/DELETE operations require native `readwrite` or `admin` identity even when a provider labels the route readonly. The original bearer passes through native plugin HTTP routing; provider-specific data authorization remains mandatory. Review, lifecycle and identity are checked before dispatch; failures after attempted dispatch preserve an explicit unknown outcome. No telemetry `put` ACL is invented for plugin routes. Supported native versions remain Signal K 2.32.0/2.33.0 on Node 22/24. See [plugin HTTP contracts and tests](plugin-posts.md).
+
+## Generic native API operations
+
+Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors use the shared generic HTTP boundary. Each operation requires saved exact method/namespace/path/input/meaning approval; writes require a native write-capable identity. The caller's original bearer reaches native routes, whose authorization remains authoritative. No separate telemetry ACL gate is added for arbitrary API results. Static public OpenAPI metadata is cached; identities, approvals and provider responses are not. See [native API verification](native-apis.md).
