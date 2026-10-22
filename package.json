@@ -31,6 +31,12 @@
     "appIcon": "./docs/images/signalk-mcp-icon.png",
     "screenshots": [
       "./docs/images/native-put-approvals.png"
+    ],
+    "recommends": [
+      "signalk-alert-center",
+      "@meri-imperiumi/signalk-logbook",
+      "signalk-stowage-mgmt",
+      "signalk-to-influxdb"
     ]
   },
   "signalk-plugin-enabled-by-default": false,
@@ -43,7 +49,7 @@
     "lint": "eslint src test ui scripts webpack.config.cjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "npm run build && node --test test/approvals.test.cjs test/configuration-ui.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/resources.test.cjs test/notifications.test.cjs test/release.test.cjs test/puts.test.cjs test/plugin-posts.test.cjs",
+    "test": "npm run build && node --test test/approvals.test.cjs test/configuration-ui.test.cjs test/security.test.cjs test/capabilities.test.cjs test/history.test.cjs test/resources.test.cjs test/notifications.test.cjs test/release.test.cjs test/puts.test.cjs test/plugin-posts.test.cjs test/openapi-json.test.cjs",
     "test:integration": "npm run build && node --test --test-force-exit test/integration.test.cjs test/hosting.test.cjs test/production-plugin.test.cjs test/runtime.test.cjs test/notifications-native.test.cjs test/resources-native.test.cjs test/restart.test.cjs test/native-puts.test.cjs test/native-posts.test.cjs",
     "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run test:integration",
     "verify:package": "node test/package-smoke.cjs",

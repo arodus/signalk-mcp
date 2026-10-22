@@ -46,8 +46,13 @@ function spec() {
     },
   };
 }
-function fixture() {
+function fixture(method = "POST") {
   const doc = spec();
+  if (method !== "POST") {
+    doc.paths["/action/{id}"][method.toLowerCase()] =
+      doc.paths["/action/{id}"].post;
+    delete doc.paths["/action/{id}"].post;
+  }
   const requests = new ApprovalRequests();
   const config = configSchema.parse({});
   let principal = writer;
@@ -89,6 +94,13 @@ function fixture() {
       calls.push({ route, body });
       return post();
     },
+    undefined,
+    method === "POST"
+      ? undefined
+      : async (verb, route, body) => {
+          calls.push({ method: verb, route, body });
+          return post();
+        },
   );
   const reviews = () =>
     Object.fromEntries(
@@ -235,7 +247,7 @@ test("POST JSON subset fails closed for uploads, arbitrary bodies, unsafe routes
     },
     (op) => {
       op.requestBody.content["application/json"].schema.additionalProperties =
-        true;
+        "yes";
     },
     (op) => {
       op.requestBody.content["application/json"].schema.properties.level = {
@@ -245,7 +257,7 @@ test("POST JSON subset fails closed for uploads, arbitrary bodies, unsafe routes
     (op) => {
       op.requestBody.content[
         "application/json"
-      ].schema.properties.level.nullable = true;
+      ].schema.properties.level.nullable = "yes";
     },
     (op) => {
       op.requestBody.content["application/json"].schema.properties.url = {
@@ -421,4 +433,129 @@ test("POST contract approval ignores object-key and required-field ordering", as
   schema.required.reverse();
   await f.execute();
   assert.equal(f.calls.length, 1);
+});
+
+test("plugin PUT/PATCH/DELETE require their own saved review, preserve values and never execute through reads", async () => {
+  for (const method of ["PUT", "PATCH", "DELETE"]) {
+    const f = fixture(method);
+    await assert.rejects(f.execute(), /APPROVAL_PENDING/);
+    const pending = Object.values(f.reviews())[0];
+    assert.equal(pending.kind, "plugin");
+    assert.equal(pending.method, method);
+    assert.equal("body" in pending, false);
+    f.approve();
+    await assert.rejects(
+      f.registry.execute("plugin.fixture", "act", {
+        id: "demo",
+        body: { enabled: false, level: 0 },
+      }),
+      /MUTATION_TOOL_REQUIRED/,
+    );
+    const result = await f.execute();
+    assert.equal(result.outcome, "responded");
+    assert.equal(result.retrySafe, false);
+    assert.deepEqual(f.calls[0], {
+      method,
+      route: "/plugins/fixture/action/demo",
+      body: { enabled: false, level: 0 },
+    });
+    f.doc.paths["/action/{id}"].post =
+      f.doc.paths["/action/{id}"][method.toLowerCase()];
+    delete f.doc.paths["/action/{id}"][method.toLowerCase()];
+    await assert.rejects(f.execute(), /APPROVAL_PENDING/);
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+test("all plugin mutation methods recheck identity and review after provider response without leaking data or retrying", async () => {
+  for (const method of ["PUT", "PATCH", "DELETE"]) {
+    for (const revoke of [
+      (f) => f.principal({ identifier: "other", permissions: "readwrite" }),
+      (f) => f.principal({ identifier: "writer", permissions: "readonly" }),
+      (f) => {
+        f.config.readRequests = {};
+      },
+      (f) => f.running(false),
+    ]) {
+      const f = fixture(method);
+      await assert.rejects(f.execute(), /APPROVAL_PENDING/);
+      f.approve();
+      f.post(async () => {
+        revoke(f);
+        return { status: 200, data: { privateValue: "must not escape" } };
+      });
+      const result = await f.execute();
+      assert.equal(result.outcome, "unknown");
+      assert.equal(result.retrySafe, false);
+      assert.equal(result.data, undefined);
+      assert.equal(f.calls.length, 1);
+    }
+    const f = fixture(method);
+    await assert.rejects(f.execute(), /APPROVAL_PENDING/);
+    f.approve();
+    f.post(async () => {
+      throw new Error("private provider details");
+    });
+    assert.equal(
+      (await f.execute()).code,
+      "PLUGIN_MUTATION_RESULT_UNAVAILABLE",
+    );
+    assert.equal(f.calls.length, 1);
+  }
+});
+
+test("fixed-local plugin mutation transport preserves methods, bearer and mixed-case paths and rejects encoded escapes", async (t) => {
+  const http = require("node:http");
+  const { localPluginMutation } = require("../dist/capabilities/http.js");
+  const calls = [];
+  const server = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
+    calls.push({
+      method: req.method,
+      url: req.url,
+      authorization: req.headers.authorization,
+      body,
+    });
+    res.setHeader("Content-Type", "application/json");
+    res.end(JSON.stringify({ received: true }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const send = localPluginMutation(
+    { socket: { localAddress: "127.0.0.1", localPort: server.address().port } },
+    "Bearer synthetic-original",
+    new AbortController().signal,
+  );
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    await send(
+      method,
+      "/plugins/MixedCase/_record/2026-10-22T12%3A00%3A00.000Z",
+      { value: null },
+    );
+    assert.deepEqual(calls.at(-1), {
+      method,
+      url: "/plugins/MixedCase/_record/2026-10-22T12%3A00%3A00.000Z",
+      authorization: "Bearer synthetic-original",
+      body: '{"value":null}',
+    });
+    for (const path of [
+      "/plugins/MixedCase/%2e%2e/other",
+      "/plugins/MixedCase/value%2fconfig",
+      "/plugins/MixedCase/value%3ftoken=x",
+      "/plugins/MixedCase/%5cadmin",
+      "/plugins/MixedCase/%63onfig",
+      "/plugins/MixedCase/_config/item",
+      "/plugins/MixedCase/ui-config/charts",
+      "/plugins/MixedCase//record",
+      "/plugins/MixedCase/%zz",
+    ])
+      await assert.rejects(send(method, path, {}), /INVALID_LOCAL_ROUTE/);
+  }
+  await send("DELETE", "/plugins/MixedCase/-record/");
+  await assert.rejects(
+    send("GET", "/plugins/MixedCase/record"),
+    /INVALID_LOCAL_ROUTE/,
+  );
+  assert.equal(calls.length, 5);
 });

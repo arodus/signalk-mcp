@@ -397,7 +397,7 @@ test(
           assert.equal(operation.enabled, false);
           error(
             await execute(admin, operation.id, { id: expected.items[0].id }),
-            operation.method === "POST"
+            ["POST", "PUT", "PATCH", "DELETE"].includes(operation.method)
               ? "MUTATION_TOOL_REQUIRED"
               : "OPERATION_DISABLED",
           );
@@ -526,6 +526,80 @@ test(
           );
           assert.notDeepEqual(result.structuredContent.data, before);
           error(await mutate(reader), "PERMISSION_DENIED");
+        } finally {
+          gateway.start(configuration);
+        }
+      },
+    );
+
+    await t.test(
+      "published policy PATCH and DELETE preserve nested JSON and reset provider state",
+      async () => {
+        const gateway = loadedPlugin(server, "signalk-mcp");
+        const writer = await clientFor("writer");
+        const id = expected.items.find((item) =>
+          item.pathPattern.startsWith("notifications.mcp.synthetic."),
+        ).id;
+        const route = `/definitions/${encodeURIComponent(id)}`;
+        const before = await (await direct(route)).json();
+        const body = {
+          enabled: false,
+          activationDelaySeconds: 0,
+          notifierIds: [],
+          notifierRepeatOverrides: {},
+          soundEnabled: false,
+          speechEnabled: false,
+          connectivity: { mode: "queue" },
+        };
+        const mutate = (client, method, value = body) =>
+          client.callTool({
+            name: "execute_mutation",
+            arguments: {
+              id: capability,
+              operation: `${method}.definitions.by-id.policy`,
+              arguments: {
+                id,
+                ...(method === "delete" ? {} : { body: value }),
+              },
+            },
+          });
+        error(await mutate(reader, "patch"), "PERMISSION_DENIED");
+        for (const method of ["patch", "delete"])
+          error(await mutate(writer, method), "APPROVAL_PENDING");
+        assert.deepEqual(await (await direct(route)).json(), before);
+        const reviews = Object.fromEntries(
+          Object.entries(gateway.schema().properties.readRequests.properties)
+            .filter(([, value]) => value.default.kind === "plugin")
+            .map(([key, value]) => [
+              key,
+              { ...value.default, decision: "approved" },
+            ]),
+        );
+        assert.equal(Object.keys(reviews).length, 2);
+        gateway.start({ ...configuration, readRequests: reviews });
+        try {
+          error(await mutate(writer, "patch", {}), "INVALID_ARGUMENTS");
+          error(
+            await mutate(writer, "patch", {
+              connectivity: { mode: "queue", delaySeconds: 1 },
+            }),
+            "INVALID_ARGUMENTS",
+          );
+          const patched = (await mutate(writer, "patch")).structuredContent;
+          assert.equal(patched.outcome, "responded");
+          assert.equal(patched.statusCode, 200);
+          assert.equal(patched.retrySafe, false);
+          assert.deepEqual(patched.data, await (await direct(route)).json());
+          assert.equal(patched.data.policy.enabled, false);
+          assert.equal(patched.data.policy.activationDelaySeconds, 0);
+          assert.deepEqual(patched.data.policy.notifierIds, []);
+          assert.deepEqual(patched.data.policy.connectivity, { mode: "queue" });
+          const reset = (await mutate(writer, "delete")).structuredContent;
+          assert.equal(reset.outcome, "responded");
+          assert.equal(reset.statusCode, 200);
+          assert.deepEqual(reset.data, await (await direct(route)).json());
+          assert.deepEqual(reset.data.policy, before.policy);
+          error(await mutate(reader, "delete"), "PERMISSION_DENIED");
         } finally {
           gateway.start(configuration);
         }

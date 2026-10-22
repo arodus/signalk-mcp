@@ -5,6 +5,7 @@ import {
   pluginIdSchema,
   operationIdSchema,
   routeSchema,
+  pluginRouteSchema,
 } from "./capabilities/schemas.js";
 import type { DiscoveredOperation } from "./capabilities/openapi.js";
 import { pathSchema } from "./paths.js";
@@ -17,7 +18,7 @@ const readReviewSchema = z
   .object({
     pluginId: pluginIdSchema.refine((id) => id !== "signalk-mcp"),
     operationId: operationIdSchema,
-    path: routeSchema,
+    path: pluginRouteSchema,
     schemaHash: z.string().regex(/^[a-f0-9]{64}$/),
     description: z.string().max(256),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
@@ -92,7 +93,30 @@ const postReviewSchema = z
     pluginId: pluginIdSchema.refine((id) => id !== "signalk-mcp"),
     operationId: operationIdSchema,
     method: z.literal("POST"),
-    path: routeSchema,
+    path: pluginRouteSchema,
+    description: z.string().max(4096),
+    inputSchema: z.record(z.unknown()),
+    contractHash: z.string().regex(/^[a-f0-9]{64}$/),
+    decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
+  })
+  .strict()
+  .refine((review) => {
+    try {
+      boundedJson(review.inputSchema, 32768);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+// Keep legacy POST records and their keys intact. Other plugin HTTP mutations
+// have a separate namespace from native Signal K PUT target approvals.
+const pluginReviewSchema = z
+  .object({
+    kind: z.literal("plugin"),
+    pluginId: pluginIdSchema.refine((id) => id !== "signalk-mcp"),
+    operationId: operationIdSchema,
+    method: z.enum(["PUT", "PATCH", "DELETE"]),
+    path: pluginRouteSchema,
     description: z.string().max(4096),
     inputSchema: z.record(z.unknown()),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -185,6 +209,7 @@ export const reviewSchema = z.union([
   readReviewSchema,
   putReviewSchema,
   postReviewSchema,
+  pluginReviewSchema,
   resourceReviewSchema,
 ]);
 export type Review = z.infer<typeof reviewSchema>;
@@ -194,6 +219,17 @@ export function reviewKey(review: Review): string {
   if ("kind" in review && review.kind === "post")
     return digest([
       "POST",
+      review.pluginId,
+      review.operationId,
+      review.path,
+      review.contractHash,
+      review.description,
+      canonicalJson(review.inputSchema),
+    ]);
+  if ("kind" in review && review.kind === "plugin")
+    return digest([
+      "PLUGIN",
+      review.method,
       review.pluginId,
       review.operationId,
       review.path,
@@ -231,7 +267,10 @@ export const reviewsSchema = z
 function candidate(
   pluginId: string,
   operation: DiscoveredOperation,
-): ReadReview | z.infer<typeof postReviewSchema> {
+):
+  | ReadReview
+  | z.infer<typeof postReviewSchema>
+  | z.infer<typeof pluginReviewSchema> {
   if (operation.method === "POST" && operation.input && operation.inputSchema)
     return postReviewSchema.parse({
       kind: "post",
@@ -245,10 +284,26 @@ function candidate(
       decision: "pending",
     });
   if (
+    ["PUT", "PATCH", "DELETE"].includes(operation.method) &&
+    operation.input &&
+    operation.inputSchema
+  )
+    return pluginReviewSchema.parse({
+      kind: "plugin",
+      method: operation.method,
+      pluginId,
+      operationId: operation.id,
+      path: operation.path,
+      description: operation.description,
+      inputSchema: operation.inputSchema,
+      contractHash: operation.contractHash,
+      decision: "pending",
+    });
+  if (
     operation.method !== "GET" ||
     !operation.input ||
     !operation.inputSchema ||
-    !routeSchema.safeParse(operation.path).success
+    !pluginRouteSchema.safeParse(operation.path).success
   )
     throw new GatewayError("OPERATION_DISABLED", 403);
   return readReviewSchema.parse({
@@ -343,7 +398,7 @@ export class ApprovalRequests {
                 ? `${review.method} ${review.path} — provider ${review.provider}. ${review.description}; input ${canonicalJson(review.inputSchema)}`
                 : "kind" in review && review.kind === "put"
                   ? `PUT ${review.context}:${review.path} — source ${review.source}. Metadata: ${canonicalJson(review.metadata)}. Value constraints: ${canonicalJson(review.inputSchema)}`
-                  : `${"kind" in review ? "POST" : "GET"} ${review.path}${review.description ? ` — ${review.description}` : ""}${"kind" in review ? `; input ${canonicalJson(review.inputSchema)}` : ""}`,
+                  : `${"kind" in review ? review.method : "GET"} ${review.path}${review.description ? ` — ${review.description}` : ""}${"kind" in review ? `; input ${canonicalJson(review.inputSchema)}` : ""}`,
             default: structuredClone(review),
             additionalProperties: false,
             required: Object.keys(review),
@@ -405,7 +460,11 @@ export function applyReviews(
     )
       continue;
     const review = reviews[reviewKey(candidate(pluginId, operation))];
-    if (!review || ("kind" in review && review.kind !== "post")) continue;
+    if (
+      !review ||
+      ("kind" in review && !["post", "plugin"].includes(review.kind))
+    )
+      continue;
     if ("kind" in review) {
       operation.permission = "readwrite";
       operation.enabled =

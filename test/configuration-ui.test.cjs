@@ -450,3 +450,78 @@ test("resource review table refuses unsupported routes, methods and gateway perm
       /invalid/,
     );
 });
+
+test("plugin PUT, PATCH and DELETE reviews save and revoke independently through native config", async () => {
+  const { ApprovalRequests } = require("../dist/approvals.js");
+  const requests = new ApprovalRequests();
+  for (const method of ["PUT", "PATCH", "DELETE"]) {
+    assert.throws(
+      () =>
+        requests.request("fixture", {
+          id: "item",
+          method,
+          path: "/items/{id}",
+          description: "Synthetic item change",
+          input: require("zod").z.object({}).strict(),
+          inputSchema: { type: "object", additionalProperties: false },
+          contractHash: "f".repeat(64),
+          reason: "NOT_ALLOWLISTED",
+        }),
+      /APPROVAL_PENDING/,
+    );
+  }
+  const reviews = Object.fromEntries(
+    Object.entries(requests.schema().properties).map(([id, schema]) => [
+      id,
+      schema.default,
+    ]),
+  );
+  const base = await snapshot(inventory(reviews));
+  const draft = draftOf(base);
+  const keys = Object.keys(reviews);
+  draft.reviews[keys[0]].decision = "approved";
+  draft.reviews[keys[1]].decision = "rejected";
+  let saved;
+  const result = await (
+    await ui()
+  ).saveConfiguration(base, draft, async (url, options = {}) => {
+    if (url === "/plugins") return response(inventory(reviews));
+    if (options.method === "POST") {
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  });
+  assert.equal(result.reviews[keys[0]].decision, "approved");
+  assert.equal(result.reviews[keys[1]].decision, "rejected");
+  assert.equal(result.reviews[keys[2]].decision, "pending");
+  assert.equal(configSchema.safeParse(saved.configuration).success, true);
+  const remove = draftOf(result);
+  delete remove.reviews[keys[0]];
+  const merged = (await ui()).mergeChanges(result, remove, result);
+  assert.equal(
+    Object.hasOwn(merged.configuration.readRequests, keys[0]),
+    false,
+  );
+  const changed = clone(result);
+  changed.reviews[keys[0]].decision = "rejected";
+  const { mergeChanges } = await ui();
+  assert.throws(() => mergeChanges(result, remove, changed), /another session/);
+  for (const changes of [
+    { method: "POST" },
+    { method: "GET" },
+    { method: "TRACE" },
+    { kind: "put" },
+    { permission: "admin" },
+    { contractHash: "invalid" },
+    { pluginId: "signalk-mcp" },
+  ])
+    await assert.rejects(
+      snapshot(
+        inventory({
+          [keys[0]]: { ...reviews[keys[0]], ...changes },
+        }),
+      ),
+      /metadata is invalid/,
+    );
+});

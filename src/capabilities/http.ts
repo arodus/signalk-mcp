@@ -246,6 +246,13 @@ export interface PostResponse {
 }
 export type LocalPost = (path: string, body?: unknown) => Promise<PostResponse>;
 
+export type PluginMutationMethod = "POST" | "PUT" | "PATCH" | "DELETE";
+export type LocalPluginMutation = (
+  method: PluginMutationMethod,
+  path: string,
+  body?: unknown,
+) => Promise<PostResponse>;
+
 export type ResourceMethod = "POST" | "PUT" | "DELETE";
 export type LocalResourceMutation = (
   method: ResourceMethod,
@@ -259,17 +266,69 @@ export function localPost(
   signal: AbortSignal,
   tlsServerName?: string,
 ): LocalPost {
-  const send = localMutationHttp(req, authorization, signal, tlsServerName);
-  return async (path, body) => {
+  const send = localPluginMutation(req, authorization, signal, tlsServerName);
+  return (path, body) => send("POST", path, body);
+}
+
+export function localPluginMutation(
+  req: Request,
+  authorization: string,
+  signal: AbortSignal,
+  tlsServerName?: string,
+): LocalPluginMutation {
+  const send = localMutationHttp(
+    req,
+    authorization,
+    signal,
+    tlsServerName,
+    "PLUGIN_MUTATION_HTTP_ERROR",
+  );
+  return async (method, path, body) => {
     if (
-      !/^\/plugins\/(?:@[a-z0-9_-]+\/)?[a-z0-9][a-z0-9._-]*\/[A-Za-z0-9_/-]+(?:\?[^#\r\n\\]*)?$/.test(
+      !["POST", "PUT", "PATCH", "DELETE"].includes(method) ||
+      !/^\/plugins\/(?:@[A-Za-z0-9_-]+\/)?[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9_.%:+/-]+(?:\?[^#\r\n\\]*)?$/.test(
         path,
       ) ||
-      /(?:^|\/)(?:config|configuration|settings)(?:\/|\?|$)/i.test(path) ||
+      /(?:^|\/)(?:(?:[A-Za-z0-9_]+-)?(?:_?config|configuration|settings))(?:\/|\?|$)/i.test(
+        path,
+      ) ||
       path.includes("/plugins/signalk-mcp/")
     )
       throw new GatewayError("INVALID_LOCAL_ROUTE");
-    return send("POST", path, body);
+    // Validate every decoded segment before HTTP dispatch. Encoding can never
+    // turn a reviewed parameter into traversal, another path, query or fragment.
+    try {
+      for (const segment of path
+        .split("?", 1)[0]!
+        .replace(/\/$/, "")
+        .split("/")
+        .slice(2)) {
+        const decoded = decodeURIComponent(segment);
+        if (
+          !/^(?:@[A-Za-z0-9_-]+|[A-Za-z0-9_-][A-Za-z0-9_.:+-]*)$/.test(decoded)
+        )
+          throw new Error();
+        if (
+          /^(?:[A-Za-z0-9_]+-)?(?:_?config|configuration|settings)$/i.test(
+            decoded,
+          )
+        )
+          throw new Error();
+      }
+    } catch {
+      throw new GatewayError("INVALID_LOCAL_ROUTE");
+    }
+    try {
+      return await send(method, path, body);
+    } catch (error) {
+      if (
+        method === "POST" &&
+        error instanceof GatewayError &&
+        error.code === "PLUGIN_MUTATION_HTTP_ERROR"
+      )
+        throw new GatewayError("PLUGIN_POST_HTTP_ERROR", error.status);
+      throw error;
+    }
   };
 }
 
@@ -309,7 +368,7 @@ function localMutationHttp(
   signal: AbortSignal,
   tlsServerName?: string,
   errorCode = "PLUGIN_POST_HTTP_ERROR",
-): LocalResourceMutation {
+): LocalPluginMutation {
   const address = req.socket.localAddress;
   const mapped = address?.startsWith("::ffff:") ? address.slice(7) : undefined;
   const hostname = mapped && isIP(mapped) === 4 ? mapped : address;

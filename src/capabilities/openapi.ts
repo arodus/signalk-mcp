@@ -1,10 +1,18 @@
 import { createHash } from "node:crypto";
 import { boundedJson } from "../json.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import {
+  JsonSchemaCompiler,
+  SchemaError,
+  resolveSchema as resolve,
+} from "./json-schema.js";
 import { GatewayError, type Principal } from "../auth.js";
 import { record } from "../data.js";
-import { operationIdSchema, routeSchema, type Approval } from "./schemas.js";
+import {
+  operationIdSchema,
+  pluginRouteSchema,
+  type Approval,
+} from "./schemas.js";
 
 export interface DiscoveredOperation {
   id: string;
@@ -15,38 +23,10 @@ export interface DiscoveredOperation {
   reason: string | null;
   permission: string;
   inputSchema?: object;
+  schemaIssue?: { location: string; keyword: string };
   contractHash?: string;
   input?: z.ZodObject<z.ZodRawShape>;
   parameters?: { name: string; location: "path" | "query" }[];
-}
-function resolve(document: unknown, value: unknown): Record<string, unknown> {
-  let current = value;
-  const seen = new Set<string>();
-  for (let depth = 0; depth < 8; depth++) {
-    if (!record(current)) throw new GatewayError("UNSUPPORTED_SCHEMA");
-    if (!Object.hasOwn(current, "$ref")) return current;
-    const ref = current.$ref;
-    if (
-      Object.keys(current).length !== 1 ||
-      typeof ref !== "string" ||
-      !ref.startsWith("#/components/") ||
-      seen.has(ref)
-    )
-      throw new GatewayError("UNSUPPORTED_REFERENCE");
-    seen.add(ref);
-    current = document;
-    for (const encoded of ref.slice(2).split("/")) {
-      const part = encoded.replace(/~1/g, "/").replace(/~0/g, "~");
-      if (
-        !record(current) ||
-        !Object.hasOwn(current, part) ||
-        ["__proto__", "constructor", "prototype"].includes(part)
-      )
-        throw new GatewayError("UNSUPPORTED_REFERENCE");
-      current = current[part];
-    }
-  }
-  throw new GatewayError("UNSUPPORTED_REFERENCE");
 }
 // Bind only this endpoint, including referenced schemas and documented meaning.
 // Other endpoints, document versions and property order do not invalidate it.
@@ -54,9 +34,9 @@ function resolvedContract(
   document: unknown,
   value: unknown,
   depth = 0,
-  budget = { remaining: 2048 },
+  budget = { remaining: 4096 },
 ): unknown {
-  if (depth > 16 || --budget.remaining < 0)
+  if (depth > 32 || --budget.remaining < 0)
     throw new GatewayError("UNSUPPORTED_SCHEMA");
   if (Array.isArray(value))
     return value.map((item) =>
@@ -82,81 +62,6 @@ function resolvedContract(
       ]),
   );
 }
-function primitive(schema: Record<string, unknown>): z.ZodTypeAny {
-  const allowed = new Set([
-    "type",
-    "enum",
-    "minimum",
-    "maximum",
-    "minLength",
-    "maxLength",
-    "description",
-    "title",
-    "default",
-  ]);
-  if (Object.keys(schema).some((key) => !allowed.has(key)))
-    throw new GatewayError("UNSUPPORTED_SCHEMA");
-  let value: z.ZodTypeAny;
-  if (schema.type === "string") {
-    const min = schema.minLength ?? 0,
-      max = schema.maxLength ?? 256;
-    if (
-      !Number.isInteger(min) ||
-      !Number.isInteger(max) ||
-      (min as number) < 0 ||
-      (max as number) < (min as number) ||
-      (max as number) > 512
-    )
-      throw new GatewayError("UNSUPPORTED_SCHEMA");
-    value = z
-      .string()
-      .min(min as number)
-      .max(max as number);
-  } else if (schema.type === "integer" || schema.type === "number") {
-    const min = schema.minimum ?? -1e12,
-      max = schema.maximum ?? 1e12;
-    if (
-      typeof min !== "number" ||
-      typeof max !== "number" ||
-      !Number.isFinite(min) ||
-      !Number.isFinite(max) ||
-      min > max
-    )
-      throw new GatewayError("UNSUPPORTED_SCHEMA");
-    let number = z
-      .number()
-      .finite()
-      .min(Math.max(-1e12, min))
-      .max(Math.min(1e12, max));
-    if (schema.type === "integer") number = number.int();
-    value = number;
-  } else if (schema.type === "boolean") value = z.boolean();
-  else throw new GatewayError("UNSUPPORTED_SCHEMA");
-  if (schema.enum !== undefined) {
-    if (
-      !Array.isArray(schema.enum) ||
-      schema.enum.length < 1 ||
-      schema.enum.length > 32 ||
-      schema.enum.some((item) => !value.safeParse(item).success)
-    )
-      throw new GatewayError("UNSUPPORTED_SCHEMA");
-    const choices = schema.enum as (string | number | boolean)[];
-    const literals = choices.map((choice) => z.literal(choice));
-    value =
-      literals.length === 1
-        ? literals[0]!
-        : z.union(
-            literals as [
-              z.ZodLiteral<string | number | boolean>,
-              z.ZodLiteral<string | number | boolean>,
-              ...z.ZodLiteral<string | number | boolean>[],
-            ],
-          );
-  }
-  // Defaults are descriptive only: omit absent optional parameters and let the
-  // provider choose its default, rather than silently changing request behavior.
-  return value;
-}
 function inputs(
   document: unknown,
   item: Record<string, unknown>,
@@ -164,7 +69,9 @@ function inputs(
   path: string,
   method: string,
 ) {
-  if (method !== "post" && operation.requestBody !== undefined)
+  const mutation = ["post", "put", "patch", "delete"].includes(method);
+  const compiler = new JsonSchemaCompiler(document);
+  if (!mutation && operation.requestBody !== undefined)
     throw new GatewayError("UNSUPPORTED_SCHEMA");
   const shape: z.ZodRawShape = Object.create(null);
   const parameters: { name: string; location: "path" | "query" }[] = [];
@@ -193,7 +100,7 @@ function inputs(
       ) ||
       ["constructor", "prototype"].includes(name) ||
       Object.hasOwn(shape, name) ||
-      (method === "post" &&
+      (mutation &&
         (name === "body" || /command|script|file|config/i.test(name))) ||
       (location !== "path" && location !== "query")
     )
@@ -205,12 +112,16 @@ function inputs(
         parameter.style !== (location === "path" ? "simple" : "form"))
     )
       throw new GatewayError("UNSUPPORTED_PARAMETER");
-    let value = primitive(resolve(document, parameter.schema));
+    let value = compiler.parse(
+      parameter.schema,
+      `parameters.${name}.schema`,
+      true,
+    );
     if (location === "path") {
       if (parameter.required !== true || !path.includes(`{${name}}`))
         throw new GatewayError("UNSUPPORTED_PARAMETER");
       value = value.refine(
-        (v) => /^[A-Za-z0-9_-]+$/.test(String(v)),
+        (v) => /^[A-Za-z0-9][A-Za-z0-9_.:+-]{0,511}$/.test(String(v)),
         "Invalid path parameter",
       );
     }
@@ -221,7 +132,7 @@ function inputs(
   for (const match of path.matchAll(/\{([^}]+)\}/g))
     if (!parameters.some((p) => p.location === "path" && p.name === match[1]))
       throw new GatewayError("UNSUPPORTED_PARAMETER");
-  if (method === "post" && operation.requestBody !== undefined) {
+  if (mutation && operation.requestBody !== undefined) {
     if (Object.hasOwn(shape, "body"))
       throw new GatewayError("UNSUPPORTED_SCHEMA");
     const request = resolve(document, operation.requestBody);
@@ -235,7 +146,7 @@ function inputs(
       Object.keys(request.content).length !== 1 ||
       !record(request.content["application/json"])
     )
-      throw new GatewayError("UNSUPPORTED_SCHEMA");
+      throw new SchemaError("requestBody", "application/json-content");
     const media = request.content["application/json"];
     if (
       Object.keys(media).some(
@@ -243,54 +154,14 @@ function inputs(
       )
     )
       throw new GatewayError("UNSUPPORTED_SCHEMA");
-    const schema = resolve(document, media.schema);
-    if (
-      schema.type !== "object" ||
-      !record(schema.properties) ||
-      Object.keys(schema).some(
-        (key) =>
-          ![
-            "type",
-            "properties",
-            "required",
-            "additionalProperties",
-            "description",
-            "title",
-          ].includes(key),
-      ) ||
-      (schema.additionalProperties !== undefined &&
-        schema.additionalProperties !== false) ||
-      Object.keys(schema.properties).length > 32
-    )
-      throw new GatewayError("UNSUPPORTED_SCHEMA");
-    const required = schema.required ?? [];
-    if (
-      !Array.isArray(required) ||
-      new Set(required).size !== required.length ||
-      required.some(
-        (key) =>
-          typeof key !== "string" ||
-          !Object.hasOwn(schema.properties as object, key),
-      )
-    )
-      throw new GatewayError("UNSUPPORTED_SCHEMA");
-    const body: z.ZodRawShape = Object.create(null);
-    for (const [name, raw] of Object.entries(schema.properties)) {
-      if (
-        !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name) ||
-        /token|secret|password|authorization|cookie|url|uri|host|endpoint|command|script|file|config/i.test(
-          name,
-        ) ||
-        ["constructor", "prototype"].includes(name)
-      )
-        throw new GatewayError("UNSUPPORTED_PARAMETER");
-      const value = primitive(resolve(document, raw));
-      body[name] = required.includes(name) ? value : value.optional();
-    }
-    const bodyInput = z.object(body).strict();
+    const bodyInput = compiler.parse(
+      media.schema,
+      "requestBody.content.application/json.schema",
+    );
     shape.body = request.required === true ? bodyInput : bodyInput.optional();
   }
-  return { input: z.object(shape).strict(), parameters };
+  const input = z.object(shape).strict();
+  return { input, parameters, inputSchema: compiler.json(input) };
 }
 
 export function discoverOperations(
@@ -328,8 +199,12 @@ export function discoverOperations(
       // approval still applies; collisions are disabled below, not guessed away.
       const id =
         operation.operationId === undefined &&
-        routeSchema.safeParse(path).success
-          ? `${method}.${path
+        pluginRouteSchema.safeParse(path).success
+          ? `${method}.${(pluginId.startsWith("@") &&
+            path.startsWith(`/plugins/${pluginId}/`)
+              ? path.slice(`/plugins/${pluginId}`.length)
+              : path
+            )
               .replace(/^\//, "")
               .replace(/\/$/, "")
               .replace(/\{([^}]+)\}/g, "by-$1")
@@ -355,28 +230,52 @@ export function discoverOperations(
         enabled: false,
         reason: "NOT_ALLOWLISTED",
         permission:
-          method === "post"
+          method !== "get"
             ? "readwrite"
             : (approval?.permission ?? "unclassified"),
       };
-      if (!["get", "post"].includes(method))
+      if (!["get", "post", "put", "patch", "delete"].includes(method))
         entry.reason = "METHOD_NOT_READONLY";
       else if (
-        method === "post" &&
-        /(?:^|\/)(?:config|configuration|settings)(?:\/|$)/i.test(path)
+        method !== "get" &&
+        /(?:^|\/)(?:(?:[A-Za-z0-9_]+-)?(?:_?config|configuration|settings))(?:\/|$)/i.test(
+          path,
+        )
       )
         entry.reason = "UNSUPPORTED_ROUTE";
-      else if (!routeSchema.safeParse(path).success || raw.$ref !== undefined)
+      else if (
+        (!path.startsWith(`/plugins/${pluginId}/`) &&
+          /^\/(?:plugins|signalk|skServer)(?:\/|$)/.test(path)) ||
+        !pluginRouteSchema.safeParse(path).success ||
+        raw.$ref !== undefined
+      )
         entry.reason = "UNSUPPORTED_ROUTE";
       else {
         try {
+          if (record(operation.responses)) {
+            const success = Object.entries(operation.responses).filter(
+              ([status]) => /^2(?:[0-9]{2}|XX)$/.test(status),
+            );
+            if (
+              success.length &&
+              success.every(([, rawResponse]) => {
+                const response = resolve(document, rawResponse);
+                return (
+                  record(response.content) &&
+                  Object.keys(response.content).length > 0 &&
+                  !Object.keys(response.content).some((type) =>
+                    /^application\/(?:[\w.-]+\+)?json$/.test(type),
+                  )
+                );
+              })
+            )
+              throw new GatewayError("UNSUPPORTED_RESPONSE");
+          }
           const parsed = inputs(document, raw, operation, path, method);
-          entry.inputSchema = zodToJsonSchema(parsed.input, {
-            $refStrategy: "none",
-          });
+          entry.inputSchema = parsed.inputSchema;
           entry.input = parsed.input;
           entry.parameters = parsed.parameters;
-          if (method === "post") {
+          if (method !== "get") {
             entry.inputSchema = resolvedContract(
               document,
               entry.inputSchema,
@@ -410,6 +309,11 @@ export function discoverOperations(
         } catch (error) {
           entry.reason =
             error instanceof GatewayError ? error.code : "UNSUPPORTED_SCHEMA";
+          if (error instanceof SchemaError)
+            entry.schemaIssue = {
+              location: error.location,
+              keyword: error.keyword,
+            };
         }
       }
       result.push(entry);
@@ -427,7 +331,7 @@ export function operationDescription(operation: DiscoveredOperation) {
     id: operation.id,
     method: operation.method,
     readOnly: operation.method === "GET",
-    ...(operation.method === "POST"
+    ...(["POST", "PUT", "PATCH", "DELETE"].includes(operation.method)
       ? { executionTool: "execute_mutation" }
       : {}),
     path: operation.path,
@@ -435,6 +339,7 @@ export function operationDescription(operation: DiscoveredOperation) {
     permission: operation.permission,
     enabled: operation.enabled,
     reason: operation.reason,
+    ...(operation.schemaIssue ? { schemaIssue: operation.schemaIssue } : {}),
     inputSchema: operation.inputSchema ?? null,
   };
 }
@@ -459,5 +364,8 @@ export function operationRoute(
       );
     else query.set(parameter.name, String(value));
   }
-  return `/plugins/${pluginId}${path}${query.size ? "?" + query.toString() : ""}`;
+  const route = path.startsWith(`/plugins/${pluginId}/`)
+    ? path
+    : `/plugins/${pluginId}${path}`;
+  return `${route}${query.size ? "?" + query.toString() : ""}`;
 }

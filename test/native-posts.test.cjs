@@ -139,3 +139,97 @@ test(
     assert.equal(f.provider.postCalls.length, before);
   },
 );
+
+test(
+  "native plugin PUT/PATCH/DELETE preserve native identities and exact method reviews",
+  { timeout: 90000 },
+  async (t) => {
+    const f = await start();
+    t.after(async () => {
+      try {
+        await f.stop();
+      } finally {
+        f.remove();
+      }
+    });
+    t.diagnostic(
+      `Node ${process.version}; Signal K ${f.version}; synthetic plugin HTTP methods only`,
+    );
+    const body = {
+      value: { enabled: false, labels: ["sample", null], amount: 0 },
+    };
+    const mutate = (method, mode = "normal", principal = "writer") =>
+      f.call(
+        "execute_mutation",
+        {
+          id: "plugin.put-fixture",
+          operation: `${method}-${mode}`,
+          arguments: { id: "sample", ...(method === "delete" ? {} : { body }) },
+        },
+        principal,
+      );
+    async function approve(method, mode) {
+      const settings = await f.readConfig();
+      settings.configuration.readRequests = f.reviews();
+      const review = Object.values(settings.configuration.readRequests).find(
+        (item) =>
+          item.kind === "plugin" && item.operationId === `${method}-${mode}`,
+      );
+      assert.ok(review);
+      assert.equal(review.method, method.toUpperCase());
+      assert.equal("body" in review, false);
+      review.decision = "approved";
+      await f.saveConfig(settings);
+    }
+    for (const method of ["put", "patch", "delete"]) {
+      error(await mutate(method, "normal", "reader"), "PERMISSION_DENIED");
+      const before = f.provider.mutationCalls.length;
+      error(await mutate(method), "APPROVAL_PENDING");
+      assert.equal(f.provider.mutationCalls.length, before);
+      await approve(method, "normal");
+      error(
+        await f.call("execute_capability", {
+          id: "plugin.put-fixture",
+          operation: `${method}-normal`,
+          arguments: { id: "sample", ...(method === "delete" ? {} : { body }) },
+        }),
+        "MUTATION_TOOL_REQUIRED",
+      );
+      const result = data(await mutate(method));
+      assert.equal(result.outcome, "responded");
+      assert.equal(result.retrySafe, false);
+      assert.equal(result.statusCode, method === "delete" ? 204 : 200);
+      const call = f.provider.mutationCalls.at(-1);
+      assert.equal(call.method, method.toUpperCase());
+      assert.equal(call.principal, "writer");
+      if (method !== "delete") assert.deepEqual(call.body, body);
+      for (const mode of ["admin", "disconnect", "failure"]) {
+        error(await mutate(method, mode), "APPROVAL_PENDING");
+        await approve(method, mode);
+        const before = f.provider.mutationCalls.length;
+        const result = data(await mutate(method, mode));
+        assert.equal(result.outcome, "unknown");
+        assert.equal(result.retrySafe, false);
+        assert.equal(result.data, undefined);
+        assert.equal(
+          f.provider.mutationCalls.length,
+          before + (mode === "admin" ? 0 : 1),
+        );
+        if (mode === "admin") {
+          assert.ok([401, 403].includes(result.statusCode));
+          assert.equal(
+            data(await mutate(method, mode, "admin")).outcome,
+            "responded",
+          );
+        }
+      }
+    }
+    const settings = await f.readConfig();
+    settings.configuration.readRequests = {};
+    await f.saveConfig(settings);
+    const before = f.provider.mutationCalls.length;
+    for (const method of ["put", "patch", "delete"])
+      error(await mutate(method), "APPROVAL_PENDING");
+    assert.equal(f.provider.mutationCalls.length, before);
+  },
+);

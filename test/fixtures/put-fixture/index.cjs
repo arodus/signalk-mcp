@@ -2,6 +2,7 @@
 module.exports = (app) => {
   const calls = [];
   const postCalls = [];
+  const mutationCalls = [];
   const postModes = [
     "normal",
     "admin",
@@ -39,6 +40,57 @@ module.exports = (app) => {
       ]),
     ),
   };
+  for (const mode of ["normal", "admin", "disconnect", "failure"]) {
+    document.paths[`/method-${mode}/{id}`] = Object.fromEntries(
+      ["put", "patch", "delete"].map((method) => [
+        method,
+        {
+          operationId: `${method}-${mode}`,
+          summary: `Synthetic ${method} ${mode}`,
+          parameters: [
+            {
+              name: "id",
+              in: "path",
+              required: true,
+              schema: { type: "string" },
+            },
+          ],
+          ...(method === "delete"
+            ? {}
+            : {
+                requestBody: {
+                  required: true,
+                  content: {
+                    "application/json": {
+                      schema: {
+                        type: "object",
+                        required: ["value"],
+                        additionalProperties: false,
+                        properties: {
+                          value: {
+                            type: "object",
+                            additionalProperties: false,
+                            required: ["enabled", "labels"],
+                            properties: {
+                              enabled: { type: "boolean" },
+                              labels: {
+                                type: "array",
+                                items: { type: "string", nullable: true },
+                                maxItems: 4,
+                              },
+                              amount: { type: "number", nullable: true },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              }),
+        },
+      ]),
+    );
+  }
   const completions = new Map();
   const delayed = new Set();
   const lifecycle = { starts: 0, stops: 0 };
@@ -90,9 +142,29 @@ module.exports = (app) => {
     schema: { type: "object", properties: {} },
     testCalls: calls,
     postCalls,
+    mutationCalls,
     postDocument: document,
     getOpenApi: () => document,
     registerWithRouter(router) {
+      for (const mode of ["normal", "admin", "disconnect", "failure"]) {
+        for (const method of ["put", "patch", "delete"]) {
+          const routes = mode === "admin" ? router : router.access("readwrite");
+          routes[method](`/method-${mode}/:id`, (req, res) => {
+            const call = {
+              method: req.method,
+              id: req.params.id,
+              body: req.body,
+              principal: req.skPrincipal.identifier,
+            };
+            mutationCalls.push(call);
+            if (mode === "disconnect") return req.socket.destroy();
+            if (mode === "failure")
+              return res.status(500).json({ privateError: "must not escape" });
+            if (method === "delete") return res.status(204).end();
+            return res.json(call);
+          });
+        }
+      }
       for (const mode of postModes) {
         // Deliberately misdeclared readonly for normal: gateway still requires writer.
         const routes =

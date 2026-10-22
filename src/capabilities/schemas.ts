@@ -19,6 +19,21 @@ export const routeSchema = z
   .regex(
     /^\/(?:[A-Za-z0-9_-]+|\{[A-Za-z][A-Za-z0-9_]*\})(?:\/(?:[A-Za-z0-9_-]+|\{[A-Za-z][A-Za-z0-9_]*\}))*\/?$/,
   );
+// OpenAPI may publish either a relative route or this plugin's native prefix.
+// Discovery separately binds the prefix to the exact discovered plugin ID.
+export const pluginRouteSchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine((path) => {
+    if (routeSchema.safeParse(path).success) return true;
+    const match = /^\/plugins\/((?:@[^/]+\/)?[^/]+)(\/.*)$/.exec(path);
+    return (
+      !!match &&
+      pluginIdSchema.safeParse(match[1]).success &&
+      routeSchema.safeParse(match[2]).success
+    );
+  }, "Unsupported plugin route");
 export const approvalSchema = z
   .object({
     pluginId: pluginIdSchema,

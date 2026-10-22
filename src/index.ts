@@ -7,6 +7,7 @@ import {
   localActions,
   localGet,
   localPost,
+  localPluginMutation,
   localResourceMutation,
 } from "./capabilities/http.js";
 import { createMcpServer } from "./mcp.js";
@@ -92,6 +93,12 @@ function pluginFactory(app: App): Plugin {
           settings.localTlsServerName,
         ),
         localResourceMutation(
+          req,
+          req.get("authorization")!,
+          controller.signal,
+          settings.localTlsServerName,
+        ),
+        localPluginMutation(
           req,
           req.get("authorization")!,
           controller.signal,
