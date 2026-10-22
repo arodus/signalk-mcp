@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0] - 2026-10-22
+
+- Add native v2 Resources API reads for routes, waypoints, regions, notes, chart metadata and logbook entries, with explicit provider selection and bounded provider-side queries.
+- Add individually reviewed resource creation, replacement and deletion. Reviews bind the collection, provider, method and input contract; native identity and Resources write permissions remain required.
+- Extend reviewed plugin HTTP operations to PUT, PATCH and DELETE alongside GET and POST. Approval for one method never approves another, and uncertain mutations are never retried automatically.
+- Expand supported OpenAPI JSON contracts with a shared bounded schema parser. Offline checks accept 87 of 100 operations across seven pinned plugin API documents; unsupported contracts remain blocked. This does not imply that every audited endpoint was executed.
+- Extend native integration coverage for Resources operations and plugin methods, including published Alert Center policy PATCH and DELETE/reset with external delivery disabled. Document separate Logbook provider and Stowage checks and their limits.
+- Add the Signal K MCP icon, AppStore recommendations and clearer plugin compatibility, installation and approval guidance.
+
+Existing saved approvals retain their reviewed scope; upgrading grants no additional permissions. Supported runtimes remain Signal K 2.32.0/2.33.0 on Node.js 22/24.
+
 ## [0.1.1] - 2026-10-20
 
 - Isolate release-packaging tests from the parent workflow's `GITHUB_OUTPUT` by giving each fixture its own writable temporary output file. This prevents test failures when the Signal K registry sandbox exposes the inherited workflow path as read-only.

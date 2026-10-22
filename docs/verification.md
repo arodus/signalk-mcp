@@ -1,5 +1,11 @@
 # Verification record
 
+## Stable 0.2.0 preparation (2026-10-22)
+
+The release candidate combines the merged native Resources and reviewed plugin HTTP changes. Versioned manifests, changelog, installation examples and release guidance now identify `0.2.0`; the release preparation changes no runtime code or dependencies.
+
+`npm run check` passes on Node **24.22.0** / Signal K **2.33.0**, including TypeScript, ESLint, formatting, **121 portable tests** and **66 native integration tests**, with three existing optional product-client/production-History skips. Python MCP interoperability passes and `git diff --check` is clean. Final-commit package receipts and remote CI evidence are retained with the release PR and tag workflow; local source checks alone do not establish publication or deployment.
+
 ## Reviewed plugin HTTP methods and shared JSON schemas (2026-10-22)
 
 The generic plugin executor now supports individually reviewed POST, PUT, PATCH and DELETE under the caller’s original native identity. Saved GET, POST, native telemetry PUT and Resources reviews retain their existing meanings; each new plugin method has a separate review. The shared parser admits 87 of 100 operations in seven pinned plugin documents, compared with 48 before this change. Remaining exclusions and the KIP `oneOf` ambiguity are recorded in the [schema audit](plugin-schema-audit.md). These are offline contract results, not claims that every endpoint was invoked.
