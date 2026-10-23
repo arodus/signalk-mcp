@@ -7,7 +7,7 @@ import {
   type Principal,
 } from "../auth.js";
 import { record } from "../data.js";
-import { pathSchema } from "../paths.js";
+import { notificationPathSchema } from "../paths.js";
 import type { LocalGet } from "./http.js";
 
 // The public v2 collection omits source metadata on supported servers. Never
@@ -82,8 +82,7 @@ async function readRegistry(
       typeof entry.context !== "string" ||
       entry.context.length > 256 ||
       typeof entry.path !== "string" ||
-      !entry.path.startsWith("notifications.") ||
-      !pathSchema.safeParse(entry.path).success ||
+      !notificationPathSchema.safeParse(entry.path).success ||
       !record(entry.value)
     )
       throw new GatewayError("INVALID_NOTIFICATIONS_RESPONSE");

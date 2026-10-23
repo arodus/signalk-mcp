@@ -7,6 +7,7 @@ const {
 } = require("../dist/capabilities/notifications.js");
 const { CapabilityRegistry } = require("../dist/capabilities/registry.js");
 const { GatewayError } = require("../dist/auth.js");
+const { pathSchema } = require("../dist/paths.js");
 
 function fixture() {
   const principal = { identifier: "reader", permissions: "readonly" };
@@ -163,6 +164,45 @@ test("source identity requires an exact native-model value and all ambiguous sou
   );
 });
 
+test("sensor notification parentheses preserve discovery, records and exact source ACLs", async () => {
+  const f = fixture();
+  const path = "notifications.sensors.SwitchBotTH_(temp1)-AA-BB-CC-DD-EE-FF";
+  assert.equal(pathSchema.safeParse(path).success, false);
+  const allowed = f.add("allowed-sensor", "public", "vessels.self", path);
+  f.add("denied-sensor", "private", "vessels.self", `${path}.private`);
+  f.add("ordinary");
+  const description = await f.registry.describe("signalk.notifications");
+  assert.ok(description.operations.every((operation) => operation.enabled));
+  const listed = await f.registry.execute(
+    "signalk.notifications",
+    "list_notifications",
+    { limit: 1 },
+  );
+  assert.deepEqual(listed, {
+    registry: "v2",
+    notifications: { "allowed-sensor": allowed },
+    nextOffset: 1,
+  });
+  assert.deepEqual(
+    await getNotification(f.app, () => f.principal, f.get, "allowed-sensor"),
+    { registry: "v2", id: "allowed-sensor", notification: allowed },
+  );
+  await assert.rejects(
+    getNotification(f.app, () => f.principal, f.get, "denied-sensor"),
+    /NOTIFICATION_UNAVAILABLE/,
+  );
+  assert.ok(
+    f.checks.some((check) => check.path === path && check.source === "public"),
+  );
+  f.model[`${f.app.selfContext}.${path}`].values = {
+    private: { value: clone(allowed.value) },
+  };
+  await assert.rejects(
+    getNotification(f.app, () => f.principal, f.get, "allowed-sensor"),
+    /NOTIFICATION_UNAVAILABLE/,
+  );
+});
+
 test("native context and admin ACLs remain enforced; missing source policy fails closed", async () => {
   const f = fixture();
   f.add("native", "public", f.app.selfContext);
@@ -191,6 +231,20 @@ test("unavailable API, malformed or oversized responses and unsafe inputs fail c
     { id: null },
     { id: { context: "", path: "navigation.position", value: {} } },
     { id: { context: "", path: "notifications.constructor", value: {} } },
+    ...[
+      "notifications.sensors.__proto__.temp(1)",
+      "notifications.sensors.prototype.temp(1)",
+      "notifications.sensors.constructor.temp(1)",
+      "notifications.sensors..temp(1)",
+      "notifications.sensors.temp(1).",
+      "notifications.sensors.temp(1)/other",
+      "notifications.sensors.temp(1)[value]",
+      "notifications.sensors.temp(1)*",
+      "notifications.sensors.temp(1)\u0000",
+      "notifications.sensors.temp(1)\n",
+      "notifications.sensors.temp(1)\r",
+      `notifications.${"x".repeat(243)}(1)`,
+    ].map((path) => ({ id: { context: "", path, value: {} } })),
     Object.fromEntries(Array.from({ length: 20001 }, (_, i) => [i, {}])),
   ])
     await assert.rejects(
