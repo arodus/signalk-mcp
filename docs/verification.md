@@ -1,5 +1,11 @@
 # Verification record
 
+## Notification sensor-path regression (2026-10-23)
+
+The For Tuna connection reproduced `INVALID_NOTIFICATIONS_RESPONSE` for notification registry reads and discovery. The registry validator reused the stricter telemetry path schema, rejecting provider sensor names containing parentheses. A registry-specific schema now accepts those names while retaining path bounds and rejecting unsafe segments and characters. The original path reaches native model lookup and ACL checks unchanged; telemetry, History and native PUT input contracts remain unchanged.
+
+The new portable regression fails before the fix and passes after it. Isolated Signal K 2.33.0 integration covers unchanged allowed records, denied sensor records, missing/denied lookup equivalence, dedicated and generic list/get calls, and capability discovery with synthetic parenthesized sensor paths. On Node 24.19.0, `npm run check` passes 129 portable tests and 67 native entries, with three explicit skips (the optional live History-provider test and two installed product-client tests). Python MCP interoperability passes using a fresh isolated environment with `test/python-requirements.txt`. An earlier run encountered TLS/lifecycle timeouts; the complete rerun passes without changing those assertions or deadlines. `git diff --check` passes. This is local validation; no live vessel deployment is claimed.
+
 ## Stable 0.3.0 preparation (2026-10-22)
 
 The release candidate contains the merged generic native API discovery, reviewed execution and lifecycle caching changes. Release preparation updates versioned manifests, changelog and installation guidance without changing runtime code or dependencies.

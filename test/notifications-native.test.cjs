@@ -55,8 +55,12 @@ test(
       await response.arrayBuffer();
     }
     const { server, seed } = fixture;
+    const sensorPath =
+      "notifications.sensors.SwitchBotTH_(temp1)-AA-BB-CC-DD-EE-FF";
+    const deniedSensorPath =
+      "notifications.sensors.SwitchBotTH_(temp2)-AA-BB-CC-DD-EE-FF";
     server.app.securityStrategy.getConfiguration().acls[0].resources.push({
-      paths: ["notifications.allowed"],
+      paths: ["notifications.allowed", sensorPath],
       permissions: [{ subject: "reader", permission: "read" }],
     });
     const value = {
@@ -68,6 +72,8 @@ test(
     seed([
       { path: "notifications.allowed", value },
       { path: "notifications.denied", value: { ...value, message: "Denied" } },
+      { path: sensorPath, value: { ...value, message: "Synthetic sensor" } },
+      { path: deniedSensorPath, value: { ...value, message: "Denied sensor" } },
     ]);
     const get = (suffix = "") =>
       fetch(`${fixture.baseUrl}/signalk/v2/api/notifications${suffix}`, {
@@ -75,6 +81,8 @@ test(
       });
     const raw = await (await get()).json();
     assert.ok(Object.hasOwn(raw, "notifications.allowed"));
+    assert.ok(Object.hasOwn(raw, sensorPath));
+    assert.ok(Object.hasOwn(raw, deniedSensorPath));
     assert.ok(!Object.hasOwn(raw["notifications.allowed"].value, "id"));
     assert.ok(!Object.hasOwn(raw["notifications.allowed"].value, "status"));
     assert.equal(
@@ -94,7 +102,10 @@ test(
     const listed = await call("list_notifications");
     assert.deepEqual(listed, {
       registry: "v2",
-      notifications: { "notifications.allowed": raw["notifications.allowed"] },
+      notifications: {
+        "notifications.allowed": raw["notifications.allowed"],
+        [sensorPath]: raw[sensorPath],
+      },
       nextOffset: null,
     });
     assert.deepEqual(
@@ -102,6 +113,39 @@ test(
         .notification,
       raw["notifications.allowed"],
     );
+    assert.deepEqual(
+      (await call("get_notification", { id: sensorPath })).notification,
+      raw[sensorPath],
+    );
+    assert.deepEqual(
+      await call("execute_capability", {
+        id: "signalk.notifications",
+        operation: "list_notifications",
+      }),
+      listed,
+    );
+    assert.deepEqual(
+      (
+        await call("execute_capability", {
+          id: "signalk.notifications",
+          operation: "get_notification",
+          arguments: { id: sensorPath },
+        })
+      ).notification,
+      raw[sensorPath],
+    );
+    const description = await call("describe_capability", {
+      id: "signalk.notifications",
+    });
+    assert.ok(description.operations.every((operation) => operation.enabled));
+    for (const id of [deniedSensorPath, "notifications.absent(1)"]) {
+      const response = await fixture.request("get_notification", { id }).result;
+      assert.equal(response.body.result.isError, true);
+      assert.equal(
+        response.body.result.content[0].text,
+        "NOTIFICATION_UNAVAILABLE",
+      );
+    }
     assert.deepEqual(
       (await call("list_notifications", {}, "other")).notifications,
       {},

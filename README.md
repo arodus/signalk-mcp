@@ -162,14 +162,15 @@ Version 0.3.0 adds generic discovery and execution for supported Course, Weather
 
 ## Troubleshooting
 
-| What you see                         | What to check                                                                                                                                      |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Connection or authentication failure | Confirm the plugin is enabled, the URL is reachable and the agent is sending a valid token. A browser login alone does not authenticate the agent. |
-| Missing measurements                 | Ask the agent to list available paths. Check that Signal K receives the data and that the token’s user or device has permission to read it.        |
-| `APPROVAL_PENDING`                   | Review and save the individual operation in Plugin Config, then try again.                                                                         |
-| `HISTORY_UNAVAILABLE`                | Install and configure a provider for Signal K’s standard v2 History API.                                                                           |
-| Permission denied after approval     | Check the token’s Signal K permissions and the provider’s own access requirements. Approval does not override either.                              |
-| Certificate or browser-origin errors | Follow the [hosting guide](docs/hosting.md). Browser access follows Signal K’s server-wide CORS settings.                                          |
+| What you see                         | What to check                                                                                                                                                                                               |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Connection or authentication failure | Confirm the plugin is enabled, the URL is reachable and the agent is sending a valid token. A browser login alone does not authenticate the agent.                                                          |
+| Missing measurements                 | Ask the agent to list available paths. Check that Signal K receives the data and that the token’s user or device has permission to read it.                                                                 |
+| `INVALID_NOTIFICATIONS_RESPONSE`     | The gateway rejected the registry response. Sensor names with parentheses are supported; see the [notification boundary](docs/capabilities.md#notifications-boundary) for validation and permission limits. |
+| `APPROVAL_PENDING`                   | Review and save the individual operation in Plugin Config, then try again.                                                                                                                                  |
+| `HISTORY_UNAVAILABLE`                | Install and configure a provider for Signal K’s standard v2 History API.                                                                                                                                    |
+| Permission denied after approval     | Check the token’s Signal K permissions and the provider’s own access requirements. Approval does not override either.                                                                                       |
+| Certificate or browser-origin errors | Follow the [hosting guide](docs/hosting.md). Browser access follows Signal K’s server-wide CORS settings.                                                                                                   |
 
 Upgrading from plugin-local `allowedHosts` or `allowedOrigins` settings? Those fields are now ignored; move any browser-origin restrictions to Signal K’s CORS settings. See [upgrade guidance](docs/hosting.md#browser-policy-and-upgrades).
 
