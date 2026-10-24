@@ -149,7 +149,7 @@ The original data-access roadmap is recorded in [#12](https://github.com/arodus/
 
 ### Data-access coverage
 
-- V2 notification registry reads use the released `/signalk/v2/api/notifications` endpoint with native context/path/source permission checks. Forward records unchanged; omit records whose source access cannot be verified. This does not implement the proposed alerts subsystem.
+- V2 notification registry reads use the released `/signalk/v2/api/notifications` endpoint with native context/path/source permission checks, including provider sensor paths containing parentheses. Forward records unchanged; omit records whose source access cannot be verified. This does not implement the proposed alerts subsystem.
 - Keep acknowledge, silence, raise, clear and other mutations outside scope.
 - Add other read adapters only where authorization and data provenance can be established.
 
