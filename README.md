@@ -38,7 +38,7 @@ See the [plugin schema audit](docs/plugin-schema-audit.md), [Resources checks](d
 2. In your **Signal K configuration directory** (usually `~/.signalk`), run this command as the account that runs Signal K:
 
    ```sh
-   npm install --omit=dev --ignore-scripts signalk-mcp@0.3.0
+   npm install --omit=dev --ignore-scripts signalk-mcp@0.3.1
    ```
 
 3. Restart Signal K and open **Apps & Plugins → Configuration → Signal K MCP**.
@@ -145,9 +145,9 @@ If a submitted action times out or loses its connection, its outcome may be unkn
 
 ## Upgrading
 
-Back up your Signal K configuration and record the installed plugin version. Disable the plugin, install `signalk-mcp@0.3.0` with the command above, and restart the Signal K server process. Review the saved operation approvals and native permissions before re-enabling it. See the [upgrade and rollback procedure](docs/release-readiness.md#upgrade-rollback-and-removal).
+Back up your Signal K configuration and record the installed plugin version. Disable the plugin, install `signalk-mcp@0.3.1` with the command above, and restart the Signal K server process. Review the saved operation approvals and native permissions before re-enabling it. See the [upgrade and rollback procedure](docs/release-readiness.md#upgrade-rollback-and-removal).
 
-Version 0.3.0 adds generic discovery and execution for supported Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors API operations, plus lifecycle caching of static native API descriptions. Existing approvals retain their reviewed scope; each native API operation requires individual approval. The version change does not grant any new permissions.
+Version 0.3.1 fixes notification registry paths containing parentheses and migrates validation to patched Zod 4 with native JSON Schema conversion. Existing saved approval identities and accepted provider timestamp and GUID spellings are preserved. The version change does not grant any new permissions.
 
 ## Compatibility and limits
 
