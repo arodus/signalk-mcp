@@ -1,5 +1,13 @@
 # Verification record
 
+## Stable 0.3.1 preparation (2026-10-25)
+
+The release candidate combines the merged notification sensor-path fix and Zod 4 migration. Release preparation updates versioned manifests, changelog and installation guidance without changing runtime code or dependency ranges. Existing saved approval identities and provider timestamp/GUID input compatibility are retained.
+
+`npm run check` passes under Node 24.19.0 / Signal K 2.33.0: type checking, lint, formatting, 135 portable tests and 74 native tests pass, with two optional installed product clients skipped. The isolated Python client and real disposable History backend are enabled. `git diff --check` passes.
+
+Both CI workflows passed on merged source commit `14c78a9f3d1788b363238ec25889c9d7c8562fb9`. Final release-commit checks and the exact commit-stamped package are gated again by the preparation PR and tag-driven release workflow. Publication, registry indexing and vessel deployment are separate from this preparation checkpoint.
+
 ## Zod 4 validation and native schema conversion (2026-10-25)
 
 The post-merge installed-package check for PR #50 failed its production audit for Zod advisory [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5); the integration tests themselves passed. The gateway now uses Zod 4.6.7 and native Draft 7 input-schema conversion, with no direct converter dependency or Zod 3 imports. The pinned MCP SDK retains its own transitive converter dependency for its compatibility branch.

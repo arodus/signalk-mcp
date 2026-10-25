@@ -1,10 +1,13 @@
 # Changelog
 
-## Unreleased
+## [0.3.1] - 2026-10-25
 
+- Fix notification registry reads and discovery for provider sensor names containing parentheses, while preserving telemetry path validation and native permissions.
 - Migrate gateway validation to patched Zod 4.6.7 and replace direct `zod-to-json-schema` usage with native Draft 7 input-schema conversion.
 - Preserve saved approval identities across the migration, including bounded OpenAPI compositions and Resources mutations, and retain accepted provider timestamp and GUID spellings.
 - Add migration coverage for 165 existing review identities and rejection of oversized arrays before element validation.
+
+Existing saved approvals retain their reviewed scope; upgrading grants no additional permissions. Supported runtimes remain Signal K 2.32.0/2.33.0 on Node.js 22/24.
 
 ## [0.3.0] - 2026-10-22
 

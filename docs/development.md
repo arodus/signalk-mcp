@@ -15,7 +15,7 @@ npm pack
 Install the resulting tarball in a test Signal K configuration directory, using its service account:
 
 ```sh
-npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.2.0.tgz
+npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.3.1.tgz
 ```
 
 Restart Signal K, save the default plugin configuration and enable the plugin as described in the README.
