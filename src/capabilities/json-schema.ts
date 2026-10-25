@@ -303,8 +303,10 @@ export class JsonSchemaCompiler {
             (value) => timestampSchema.safeParse(value).success,
           );
           extra.format = "date-time";
-        } else if (schema.format === "date") text = text.date();
-        else if (schema.format === "uuid") {
+        } else if (schema.format === "date") {
+          text = text.refine((value) => z.regexes.date.test(value));
+          extra.format = "date";
+        } else if (schema.format === "uuid") {
           text = text.refine((value) => uuidSchema.safeParse(value).success);
           extra.format = "uuid";
         } else if (schema.format === "duration")

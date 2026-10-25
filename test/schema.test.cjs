@@ -114,6 +114,73 @@ test("Zod 4 rejects oversized constrained arrays before reading their elements",
   assert.equal(result.error.issues[0].code, "too_big");
 });
 
+test("exclusive numeric and formatted filters preserve saved contract spelling and property order", () => {
+  const [operation] = discoverOperations(
+    {
+      openapi: "3.0.3",
+      paths: {
+        "/reading": {
+          get: {
+            operationId: "read",
+            parameters: [
+              {
+                name: "amount",
+                in: "query",
+                schema: {
+                  type: "number",
+                  minimum: 0,
+                  maximum: 10,
+                  exclusiveMinimum: true,
+                },
+              },
+            ],
+            responses: { 200: { description: "Synthetic reading" } },
+          },
+        },
+      },
+    },
+    "fixture",
+    [],
+    principal,
+  );
+  // Captured with Zod 3 at the same baseline commit as the review-key fixture.
+  assert.equal(
+    JSON.stringify(operation.inputSchema),
+    JSON.stringify({
+      type: "object",
+      properties: {
+        amount: {
+          type: "number",
+          minimum: 0,
+          maximum: 10,
+          exclusiveMinimum: 0,
+        },
+      },
+      additionalProperties: false,
+      $schema: "http://json-schema.org/draft-07/schema#",
+    }),
+  );
+  const compiler = new JsonSchemaCompiler({});
+  const pattern = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$";
+  const date = compiler.parse(
+    { type: "string", format: "date", pattern },
+    "query",
+  );
+  assert.equal(
+    JSON.stringify(compiler.json(date)),
+    JSON.stringify({
+      type: "string",
+      minLength: 0,
+      maxLength: 256,
+      format: "date",
+      pattern,
+      $schema: "http://json-schema.org/draft-07/schema#",
+    }),
+  );
+  assert.equal(date.safeParse("2024-02-29").success, true);
+  assert.equal(date.safeParse("2026-02-30").success, false);
+});
+
 test("configuration defaults, strictness and provider timestamp spellings stay compatible", () => {
   assert.deepEqual(configSchema.parse({}), {
     pluginOperations: [],

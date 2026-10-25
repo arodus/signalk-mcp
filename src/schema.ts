@@ -80,6 +80,18 @@ function reviewSchema(value: unknown): unknown {
                   },
             ],
     );
+  const fields =
+    schema.type === "number" || schema.type === "integer"
+      ? ["type", "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum"]
+      : schema.type === "string"
+        ? ["type", "minLength", "maxLength", "format", "pattern"]
+        : [];
+  if (fields.length) {
+    // GET review digests predate canonical hashing and include property order.
+    const ordered: Record<string, unknown> = {};
+    for (const key of fields) if (key in schema) ordered[key] = schema[key];
+    return { ...ordered, ...schema };
+  }
   return schema;
 }
 
