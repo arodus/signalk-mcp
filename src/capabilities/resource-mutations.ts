@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { timestampSchema, toJsonSchema, uuidSchema } from "../schema.js";
 import { GatewayError, type Principal } from "../auth.js";
 import {
   type ApprovalRequests,
@@ -36,7 +36,7 @@ export const describeResourceInput = z
   .object({ collection: collectionSchema, provider: pluginIdSchema })
   .strict();
 export const createResourceInput = describeResourceInput
-  .extend({ body: z.record(z.unknown()) })
+  .extend({ body: z.record(z.string(), z.unknown()) })
   .strict();
 export const putResourceInput = createResourceInput
   .extend({ id: idSchema })
@@ -55,15 +55,18 @@ export const isResourceMutation = (
 ): operation is ResourceOperation => Object.hasOwn(operations, operation);
 const text = z.string().max(16384);
 const name = z.string().max(1024);
-const timestamp = z.string().datetime({ offset: true });
+const timestamp = timestampSchema;
 const coordinate = z.tuple([
   z.number().finite().min(-180).max(180),
   z.number().finite().min(-90).max(90),
 ]);
 const polygon = z.array(z.array(coordinate).min(4).max(2000)).max(128);
-const feature = (geometry: z.ZodTypeAny) =>
+const feature = (geometry: z.ZodType) =>
   z
-    .object({ geometry, properties: z.record(z.unknown()).optional() })
+    .object({
+      geometry,
+      properties: z.record(z.string(), z.unknown()).optional(),
+    })
     .passthrough();
 const common = { name: name.optional(), description: text.optional() };
 const position = z
@@ -123,7 +126,7 @@ const bodySchemas = {
       description: text.optional(),
       mimeType: name.optional(),
       url: text.optional(),
-      properties: z.record(z.unknown()).optional(),
+      properties: z.record(z.string(), z.unknown()).optional(),
       href: z
         .string()
         .max(256)
@@ -163,7 +166,7 @@ const bodySchemas = {
   logentries: z
     .object({
       text,
-      id: z.string().uuid().optional(),
+      id: uuidSchema.optional(),
       datetime: timestamp.optional(),
       timestamp: timestamp.optional(),
       $source: name.optional(),
@@ -182,7 +185,7 @@ const bodySchemas = {
                 z.number().finite(),
                 z.boolean(),
                 z.array(z.unknown()),
-                z.record(z.unknown()),
+                z.record(z.string(), z.unknown()),
               ]),
               $source: name.optional(),
               timestamp: timestamp.optional(),
@@ -222,9 +225,7 @@ function candidate(
     method,
     path: `/signalk/v2/api/resources/${collection}${method === "POST" ? "" : "/{id}"}`,
     description,
-    inputSchema: zodToJsonSchema(inputFor(collection, provider, operation), {
-      $refStrategy: "none",
-    }),
+    inputSchema: toJsonSchema(inputFor(collection, provider, operation)),
   });
 }
 function jsonInput(value: unknown, depth = 0): void {

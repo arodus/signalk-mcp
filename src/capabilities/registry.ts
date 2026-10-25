@@ -1,7 +1,7 @@
 import { DiscoveryCache } from "./discovery-cache.js";
 import { nativeApiSchema, type NativeApi } from "./native-api.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { toJsonSchema } from "../schema.js";
 import {
   authenticate,
   GatewayError,
@@ -77,7 +77,7 @@ const vesselPaths = [
 ];
 interface CoreOperation {
   description: string;
-  input: z.AnyZodObject;
+  input: z.ZodObject;
   run: (args: unknown) => object | Promise<object>;
 }
 interface PluginInfo {
@@ -498,9 +498,7 @@ export class CapabilityRegistry {
                   ? null
                   : "PERMISSION_DENIED",
               description: operation.description,
-              inputSchema: zodToJsonSchema(operation.input, {
-                $refStrategy: "none",
-              }),
+              inputSchema: toJsonSchema(operation.input),
             }),
           ),
           {
@@ -512,7 +510,7 @@ export class CapabilityRegistry {
             executionTool: "put_value",
             description:
               "Submit one approved path/source action. Never automatically retry an unknown outcome. Use put_value or execute_mutation; execute_capability only reads.",
-            inputSchema: zodToJsonSchema(putInput, { $refStrategy: "none" }),
+            inputSchema: toJsonSchema(putInput),
           },
         ],
       };
@@ -578,9 +576,7 @@ export class CapabilityRegistry {
               ? { reason: notificationsReason }
               : {}),
             description: operation.description,
-            inputSchema: zodToJsonSchema(operation.input, {
-              $refStrategy: "none",
-            }),
+            inputSchema: toJsonSchema(operation.input),
           })),
           ...(id === "api.resources"
             ? [
@@ -596,9 +592,7 @@ export class CapabilityRegistry {
                 executionTool: "execute_mutation",
                 description:
                   "Use describe_resource with collection and provider for the exact reviewed body contract and approval state.",
-                inputSchema: zodToJsonSchema(input as z.AnyZodObject, {
-                  $refStrategy: "none",
-                }),
+                inputSchema: toJsonSchema(input as z.ZodObject),
               }))
             : []),
         ],

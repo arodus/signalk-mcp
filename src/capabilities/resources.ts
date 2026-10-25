@@ -4,6 +4,7 @@ import { record } from "../data.js";
 import { boundedJson } from "../json.js";
 import type { LocalGet } from "./http.js";
 import { pluginIdSchema } from "./schemas.js";
+import { timestampSchema } from "../schema.js";
 
 const root = "/signalk/v2/api/resources";
 const standardCollections = [
@@ -26,7 +27,7 @@ const resourceId = z
   .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
   .refine((id) => !["constructor", "prototype"].includes(id));
 const date = z.string().date();
-const datetime = z.string().datetime({ offset: true });
+const datetime = timestampSchema;
 const longitude = z.number().finite().min(-180).max(180);
 const latitude = z.number().finite().min(-90).max(90);
 const bbox = z.tuple([longitude, latitude, longitude, latitude]);

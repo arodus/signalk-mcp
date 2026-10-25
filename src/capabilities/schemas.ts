@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { pathSchema } from "../paths.js";
+import { timestampSchema } from "../schema.js";
 // Native plugin IDs come from plugin.id, not the npm package name. Preserve
 // mixed case for discovery, routing and exact approval matching.
 export const pluginIdSchema = z
@@ -89,8 +90,8 @@ export const historyInput = z
       )
       .min(1)
       .max(16),
-    from: z.string().datetime({ offset: true }).optional(),
-    to: z.string().datetime({ offset: true }).optional(),
+    from: timestampSchema.optional(),
+    to: timestampSchema.optional(),
     duration: z.number().int().min(1).max(604800).optional(),
     resolution: z.number().int().min(1).max(86400).optional(),
     provider: pluginIdSchema.optional(),

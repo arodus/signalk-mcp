@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { uuidSchema } from "./schema.js";
 import { canPut, GatewayError, type App, type Principal } from "./auth.js";
 import {
   applyPutReview,
@@ -18,7 +19,6 @@ const sourceSchema = z
   .min(1)
   .max(256)
   .refine((source) => !/[\s*?[\]\p{Cc}]/u.test(source));
-const uuidSchema = z.string().uuid();
 const putPathSchema = pathSchema.refine(
   (path) => !path.split(".").includes("meta"),
   "Metadata writes are not native action targets",

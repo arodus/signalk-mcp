@@ -25,7 +25,7 @@ const apiReviewSchema = z
     method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
     path: routeSchema,
     description: z.string().max(4096),
-    inputSchema: z.record(z.unknown()),
+    inputSchema: z.record(z.string(), z.unknown()),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -98,8 +98,8 @@ const putReviewSchema = z
       .min(1)
       .max(256)
       .refine((source) => !/[\s*?[\]\p{Cc}]/u.test(source)),
-    metadata: z.record(z.unknown()),
-    inputSchema: z.record(z.unknown()),
+    metadata: z.record(z.string(), z.unknown()),
+    inputSchema: z.record(z.string(), z.unknown()),
     schemaHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -122,7 +122,7 @@ const postReviewSchema = z
     method: z.literal("POST"),
     path: pluginRouteSchema,
     description: z.string().max(4096),
-    inputSchema: z.record(z.unknown()),
+    inputSchema: z.record(z.string(), z.unknown()),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -145,7 +145,7 @@ const pluginReviewSchema = z
     method: z.enum(["PUT", "PATCH", "DELETE"]),
     path: pluginRouteSchema,
     description: z.string().max(4096),
-    inputSchema: z.record(z.unknown()),
+    inputSchema: z.record(z.string(), z.unknown()),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -182,7 +182,7 @@ const resourceReviewSchema = z
     method: z.enum(["POST", "PUT", "DELETE"]),
     path: routeSchema,
     description: z.string().min(1).max(4096),
-    inputSchema: z.record(z.unknown()),
+    inputSchema: z.record(z.string(), z.unknown()),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })

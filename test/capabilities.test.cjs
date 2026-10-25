@@ -8,7 +8,7 @@ const { CapabilityRegistry } = require("../dist/capabilities/registry.js");
 const { configSchema } = require("../dist/config.js");
 const { localGet } = require("../dist/capabilities/http.js");
 const { pluginIdSchema } = require("../dist/capabilities/schemas.js");
-const { zodToJsonSchema } = require("zod-to-json-schema");
+const { toJsonSchema } = require("../dist/schema.js");
 const principal = { identifier: "reader", permissions: "readonly" };
 const approval = {
   pluginId: "example",
@@ -222,7 +222,7 @@ test("native mixed-case plugin IDs preserve discovery, routes and exact approval
   );
   for (const id of ids) {
     assert.equal(
-      new RegExp(zodToJsonSchema(pluginIdSchema).pattern).test(id),
+      new RegExp(toJsonSchema(pluginIdSchema).pattern).test(id),
       true,
     );
     const description = await registry.describe(`plugin.${id}`);
