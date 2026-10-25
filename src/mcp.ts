@@ -109,7 +109,7 @@ export function createMcpServer(
     name: string,
     capability: string,
     description: string,
-    input: z.AnyZodObject,
+    input: z.ZodObject,
   ) => {
     server.registerTool(
       name,
@@ -201,7 +201,7 @@ export function createMcpServer(
         .object({
           id: z.string().min(1).max(160),
           operation: z.string().min(1).max(128),
-          arguments: z.record(z.unknown()).default({}),
+          arguments: z.record(z.string(), z.unknown()).default({}),
         })
         .strict(),
       annotations: mutationAnnotations,
@@ -240,7 +240,7 @@ export function createMcpServer(
       inputSchema: {
         id: z.string().min(1).max(160),
         operation: z.string().min(1).max(128),
-        arguments: z.record(z.unknown()).default({}),
+        arguments: z.record(z.string(), z.unknown()).default({}),
       },
       annotations,
     },

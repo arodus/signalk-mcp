@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Migrate gateway validation to patched Zod 4.6.7 and replace direct `zod-to-json-schema` usage with native Draft 7 input-schema conversion.
+- Preserve saved approval identities across the migration, including bounded OpenAPI compositions and Resources mutations, and retain accepted provider timestamp and GUID spellings.
+- Add migration coverage for 165 existing review identities and rejection of oversized arrays before element validation.
+
 ## [0.3.0] - 2026-10-22
 
 - Discover and execute supported Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors API operations through the shared OpenAPI pipeline, without separate adapters for each API. Availability depends on the installed Signal K version and providers.

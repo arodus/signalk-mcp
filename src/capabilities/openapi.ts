@@ -81,7 +81,7 @@ function inputs(
   const compiler = new JsonSchemaCompiler(document);
   if (!mutation && operation.requestBody !== undefined)
     throw new GatewayError("UNSUPPORTED_SCHEMA");
-  const shape: z.ZodRawShape = Object.create(null);
+  const shape: Record<string, z.ZodType> = Object.create(null);
   const parameters: { name: string; location: "path" | "query" }[] = [];
   const merged = new Map<string, Record<string, unknown>>();
   for (const entries of [item.parameters, operation.parameters]) {

@@ -1,5 +1,15 @@
 # Verification record
 
+## Zod 4 validation and native schema conversion (2026-10-25)
+
+The post-merge installed-package check for PR #50 failed its production audit for Zod advisory [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5); the integration tests themselves passed. The gateway now uses Zod 4.6.7 and native Draft 7 input-schema conversion, with no direct converter dependency or Zod 3 imports. The pinned MCP SDK retains its own transitive converter dependency for its compatibility branch.
+
+All 165 saved-review identities captured from the pre-migration plugin/native fixtures and Resources contracts remain unchanged. Regression tests also cover strict configuration, defaults, legacy timestamp/GUID spellings, bounded custom JSON, unsupported/cyclic conversion and oversized arrays rejected before any element is read. Existing authorization, mutation review, exact `oneOf`, `allOf` and no-coercion tests remain in the full check.
+
+On Node 24.19.0 / Signal K 2.33.0, `npm run check` passes 134 portable tests and 67 native entries with Python enabled and three optional skips. Repeating native integration with a disposable loopback InfluxDB and the pinned History provider passes 74 of 76 entries, skipping only the two installed product clients. `npm run verify:package` builds and installs the exact candidate tarball, passes 64 installed native entries with those same two optional skips, and reports zero production audit findings. The retained receipt labels this as a dirty-tree candidate based on `a0303d6`, not a release. `git diff --check` passes. No deployment or publication was performed.
+
+The checkout's unchanged locked `body-parser` and `fast-uri` dependencies still produce separate audit findings; they are outside this migration. The installed-tarball check resolves its own compatible production tree and passes the audit. No audit assertion or severity threshold was weakened. Node 22 and Signal K 2.32.0 remain covered by the PR CI matrix rather than this local run.
+
 ## Notification sensor-path regression (2026-10-23)
 
 The For Tuna connection reproduced `INVALID_NOTIFICATIONS_RESPONSE` for notification registry reads and discovery. The registry validator reused the stricter telemetry path schema, rejecting provider sensor names containing parentheses. A registry-specific schema now accepts those names while retaining path bounds and rejecting unsafe segments and characters. The original path reaches native model lookup and ACL checks unchanged; telemetry, History and native PUT input contracts remain unchanged.

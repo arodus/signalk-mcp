@@ -20,6 +20,14 @@ npm install --omit=dev --ignore-scripts /absolute/path/signalk-mcp-0.2.0.tgz
 
 Restart Signal K, save the default plugin configuration and enable the plugin as described in the README.
 
+## Validation and JSON Schema
+
+The gateway uses Zod 4.6.7 or later and native `z.toJSONSchema()` conversion. `src/schema.ts` targets Draft 7 input contracts and preserves their established representation so a validator upgrade alone does not revoke saved approvals. The shared bounded OpenAPI compiler registers explicit metadata for `oneOf`, `allOf`, property counts, unique arrays and bounded custom JSON. Other unrepresentable types and cycles fail conversion; no generic fallback to an unconstrained schema is enabled.
+
+`test/fixtures/zod3-review-keys.json` records 165 review keys generated from commit `a0303d6eb81a0a7570c46d5ff5329b743ce5b463` with Zod 3.25.76. `test/schema.test.cjs` checks every admitted pinned plugin/native operation and each Resources mutation against that baseline, then verifies saved plugin/native approvals still enable the same operation. These hashes are synthetic fixture contracts, not user approvals. Change them only after reviewing an intentional contract change. Regression tests also preserve timestamp spellings, GUID-shaped IDs, strict configuration and the pre-parse rejection of oversized arrays.
+
+The gateway has no direct dependency on `zod-to-json-schema` and imports no Zod 3 compatibility API. The pinned MCP SDK still declares the converter as a transitive dependency for its own Zod 3 compatibility branch; it uses native conversion for the Zod 4 schemas supplied by this gateway.
+
 ## Checks and integration tests
 
 ```sh

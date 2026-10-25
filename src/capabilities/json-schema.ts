@@ -1,6 +1,11 @@
 import { isDeepStrictEqual } from "node:util";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import {
+  schemaMetadata,
+  timestampSchema,
+  toJsonSchema,
+  uuidSchema,
+} from "../schema.js";
 import { GatewayError } from "../auth.js";
 import { record } from "../data.js";
 
@@ -77,24 +82,11 @@ export function safeField(name: string): boolean {
 // dropping object properties. Unknown validation keywords fail explicitly.
 export class JsonSchemaCompiler {
   private remaining = 256;
-  private readonly metadata = new WeakMap<
-    z.ZodTypeDef,
-    Record<string, unknown>
-  >();
   constructor(private readonly document: unknown) {}
-  json(input: z.ZodTypeAny): object {
-    return zodToJsonSchema(input, {
-      $refStrategy: "none",
-      postProcess: (json, def) => {
-        const extra = this.metadata.get(def);
-        if (!json || !extra) return json;
-        const result = { ...json, ...extra };
-        if ("oneOf" in extra) delete (result as Record<string, unknown>).anyOf;
-        return result;
-      },
-    });
+  json(input: z.ZodType): object {
+    return toJsonSchema(input);
   }
-  private jsonValue(): z.ZodTypeAny {
+  private jsonValue(): z.ZodType {
     const value = z.custom<unknown>((input) => {
       let remaining = 2048;
       const visit = (item: unknown, depth: number): boolean => {
@@ -119,7 +111,7 @@ export class JsonSchemaCompiler {
       };
       return visit(input, 0);
     }, "Expected bounded JSON data with supported property names");
-    this.metadata.set(value._def, {
+    schemaMetadata.add(value, {
       description:
         "JSON value: depth at most 8, 2048 nodes, 128 array items, 32 object keys, 16384 characters per string and finite numbers between -1e12 and 1e12. Credential, URL, command, script, file and configuration property names are excluded.",
     });
@@ -131,7 +123,7 @@ export class JsonSchemaCompiler {
     scalar = false,
     depth = 0,
     additionalKeys: string[] = [],
-  ): z.ZodTypeAny {
+  ): z.ZodType {
     const fail = (keyword: string): never => {
       throw new SchemaError(location, keyword);
     };
@@ -236,7 +228,7 @@ export class JsonSchemaCompiler {
         fail(key);
       return n as number;
     };
-    let value!: z.ZodTypeAny;
+    let value!: z.ZodType;
     const extra: Record<string, unknown> = {};
     if (schema.allOf !== undefined) {
       if (
@@ -267,6 +259,11 @@ export class JsonSchemaCompiler {
       value = alternatives
         .slice(1)
         .reduce((prior, next) => z.intersection(prior, next), alternatives[0]!);
+      extra.allOf = alternatives.map((alternative) => {
+        const json = { ...this.json(alternative) } as Record<string, unknown>;
+        delete json.$schema;
+        return json;
+      });
     } else if (schema.oneOf !== undefined) {
       if (
         !Array.isArray(schema.oneOf) ||
@@ -278,7 +275,7 @@ export class JsonSchemaCompiler {
         this.parse(item, `${location}.oneOf[${i}]`, scalar, depth + 1),
       );
       value = z
-        .union(alternatives as [z.ZodTypeAny, z.ZodTypeAny, ...z.ZodTypeAny[]])
+        .union(alternatives as [z.ZodType, z.ZodType, ...z.ZodType[]])
         .refine(
           (input) =>
             alternatives.filter(
@@ -301,11 +298,16 @@ export class JsonSchemaCompiler {
       if (max < min) fail("maxLength");
       let text = z.string().min(min).max(max);
       if (schema.format !== undefined) {
-        if (schema.format === "date-time")
-          text = text.datetime({ offset: true });
-        else if (schema.format === "date") text = text.date();
-        else if (schema.format === "uuid") text = text.uuid();
-        else if (schema.format === "duration")
+        if (schema.format === "date-time") {
+          text = text.refine(
+            (value) => timestampSchema.safeParse(value).success,
+          );
+          extra.format = "date-time";
+        } else if (schema.format === "date") text = text.date();
+        else if (schema.format === "uuid") {
+          text = text.refine((value) => uuidSchema.safeParse(value).success);
+          extra.format = "uuid";
+        } else if (schema.format === "duration")
           text = text.regex(
             /^P(?=\d|T\d)(?:\d+(?:[.,]\d+)?Y)?(?:\d+(?:[.,]\d+)?M)?(?:\d+(?:[.,]\d+)?W)?(?:\d+(?:[.,]\d+)?D)?(?:T(?=\d)(?:\d+(?:[.,]\d+)?H)?(?:\d+(?:[.,]\d+)?M)?(?:\d+(?:[.,]\d+)?S)?)?$/,
           );
@@ -384,6 +386,24 @@ export class JsonSchemaCompiler {
         number = number
           .min(Math.max(-2147483648, min as number))
           .max(Math.min(2147483647, max as number));
+      // Native conversion elides a redundant inclusive bound when an exclusive
+      // bound is tighter. Preserve both in already-reviewed contracts.
+      if (
+        schema.exclusiveMinimum !== undefined &&
+        schema.exclusiveMinimum !== false
+      )
+        extra.minimum = Math.max(
+          schema.format === "int32" ? -2147483648 : -1e12,
+          min as number,
+        );
+      if (
+        schema.exclusiveMaximum !== undefined &&
+        schema.exclusiveMaximum !== false
+      )
+        extra.maximum = Math.min(
+          schema.format === "int32" ? 2147483647 : 1e12,
+          max as number,
+        );
       value = number;
     } else if (type === "boolean") value = z.boolean();
     else if (type === "null") value = z.null();
@@ -396,13 +416,14 @@ export class JsonSchemaCompiler {
         typeof schema.uniqueItems !== "boolean"
       )
         fail("uniqueItems");
-      value = z
+      const array = z
         .array(this.parse(schema.items, `${location}.items`, false, depth + 1))
         .min(min)
         .max(max);
+      value = array;
       if (schema.uniqueItems === true) {
-        value = value.refine(
-          (items: unknown[]) =>
+        value = array.refine(
+          (items) =>
             items.every(
               (item, i) =>
                 !items
@@ -426,7 +447,7 @@ export class JsonSchemaCompiler {
         )
       )
         fail("required");
-      const shape: z.ZodRawShape = Object.create(null);
+      const shape: Record<string, z.ZodType> = Object.create(null);
       for (const [name, rawProperty] of Object.entries(
         props as Record<string, unknown>,
       )) {
@@ -480,7 +501,7 @@ export class JsonSchemaCompiler {
         record(schema.additionalProperties) ||
         schema.additionalProperties === true
       ) {
-        value = value.refine(
+        value = object.refine(
           (input) =>
             Object.keys(input).length >= min &&
             Object.keys(input).length <= max &&
@@ -499,7 +520,7 @@ export class JsonSchemaCompiler {
         extra.maxProperties = max;
       }
     } else fail("type");
-    if (Object.keys(extra).length) this.metadata.set(value._def, extra);
+    if (Object.keys(extra).length) schemaMetadata.add(value, extra);
     if (nullable) value = value.nullable();
     if (schema.enum !== undefined) {
       if (
