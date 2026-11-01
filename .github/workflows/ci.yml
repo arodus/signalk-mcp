@@ -24,7 +24,7 @@ jobs:
     strategy:
       matrix:
         node: [22, 24]
-        signalk: [2.32.0, 2.33.0]
+        signalk: [2.32.0, 2.34.0]
     services:
       influxdb:
         image: influxdb:1.8.10@sha256:299ebda2c7e308dbef42e26ac9b8fd1d9b3bcb8a0aee80c6509aa0219c1d0290
@@ -43,7 +43,7 @@ jobs:
           python-version: "3.12"
       - run: npm ci --ignore-scripts --omit=optional
       - name: Install alternate Signal K runtime
-        if: matrix.signalk != '2.33.0'
+        if: matrix.signalk != '2.34.0'
         run: |
           npm install --prefix "$RUNNER_TEMP/signalk-runtime" --ignore-scripts --omit=optional --no-audit --no-fund "signalk-server@$SIGNALK_VERSION" "@signalk/server-api@$SIGNALK_VERSION"
           echo "MCP_TEST_SERVER_DIR=$RUNNER_TEMP/signalk-runtime/node_modules/signalk-server" >> "$GITHUB_ENV"
