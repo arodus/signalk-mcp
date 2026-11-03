@@ -1,5 +1,15 @@
 # Verification record
 
+## Signal K 2.34.0 compatibility (2026-11-03)
+
+PR [#53](https://github.com/arodus/signalk-mcp/pull/53) updates the pinned development server and API types to **2.34.0**, resolving resources provider **1.5.3**. The native CI matrix is now Signal K **2.32.0/2.34.0** on Node **22/24**. Use 2.34.0 as the recommended tested server; 2.32.0 remains isolated compatibility coverage and is affected by [GHSA-4xm8-rg9h-jhq2](https://github.com/advisories/GHSA-4xm8-rg9h-jhq2). The plugin does not upgrade its installed host.
+
+Review of commit `78b8602135ff0f82c3c74d08cbdd5c0a48f4109a` on Node **24.22.2** / Signal K **2.34.0** passed `npm run check`: type checking, lint, formatting, **135 portable tests** and **74 native tests**. Python MCP **1.26.0** and disposable InfluxDB **1.8.10** were enabled. Only the optional Codex and Hermes product-client checks were skipped. `git diff --check` passed.
+
+`npm run verify:package` passed **64 installed-package tests**, with the same two optional skips, both SDK clients and the real History backend. The clean-source receipt recorded zero advisories in the freshly installed production tree. The repository lockfile still has audit findings in unchanged dependencies; this update is not a blanket clean-audit claim. Two separate temporary review probes verified native resource-id rejection before provider dispatch and provider file containment for reads, writes and deletes using synthetic data. These probes were review evidence, not additions to the committed suite.
+
+The [native CI run](https://github.com/arodus/signalk-mcp/actions/runs/41297339357) passed all four runtime combinations and installed-package checks for that reviewed commit; the [official plugin workflow](https://github.com/arodus/signalk-mcp/actions/runs/41297339736) also passed. Documentation follow-up commits require their own checks before merge. These results do not establish publication, deployment or physical vessel operation.
+
 ## Stable 0.3.1 preparation (2026-10-25)
 
 The release candidate combines the merged notification sensor-path fix and Zod 4 migration. Release preparation updates versioned manifests, changelog and installation guidance without changing runtime code or dependency ranges. Existing saved approval identities and provider timestamp/GUID input compatibility are retained.

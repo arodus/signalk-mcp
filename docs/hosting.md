@@ -24,7 +24,7 @@ The gateway calls the private HTTP listener directly. `localTlsServerName` is un
 
 ## Native Signal K HTTPS
 
-Signal K 2.32.0/2.33.0 use `ssl: true`, `sslport` for HTTPS and `port` for the separate HTTP redirect listener. Their native certificate files are `ssl-cert.pem` and `ssl-key.pem` in the Signal K configuration directory (plus an optional `ssl-chain.pem`); follow Signal K's file-permission requirements. The MCP request must reach the HTTPS listener directly, not its redirect listener.
+Signal K 2.32.0/2.34.0 use `ssl: true`, `sslport` for HTTPS and `port` for the separate HTTP redirect listener. Their native certificate files are `ssl-cert.pem` and `ssl-key.pem` in the Signal K configuration directory (plus an optional `ssl-chain.pem`); follow Signal K's file-permission requirements. The MCP request must reach the HTTPS listener directly, not its redirect listener.
 
 Node must trust the certificate issuer. For a private CA, configure the Signal K process with `NODE_EXTRA_CA_CERTS=/absolute/path/to/ca.pem` **before starting it**. The file contains CA certificates, not a server private key. Certificate verification remains enabled.
 
@@ -59,6 +59,6 @@ The test requires `openssl` on PATH. The normal CI matrix includes it for both s
 
 The plugin validates that a supplied Origin is a serialized HTTP(S) origin, then uses the `Access-Control-Allow-Origin` response header set by Signal K’s CORS middleware. An exact match or `*` permits the request to continue to bearer authentication; missing or nonmatching permission returns `ORIGIN_DENIED`. Opaque `null` origins, paths, credentials and malformed origin lists are rejected even under a wildcard policy. Incoming headers cannot supply this server-side CORS decision. The plugin does not read the host’s security file or signing keys.
 
-Signal K 2.32.0/2.33.0 use wildcard CORS when no origin restriction is configured. That permits browser clients from any valid HTTP(S) origin, provided they have a valid Signal K bearer token. This change delegates browser policy to the host; it does not claim the former plugin-local Host/DNS-rebinding restriction. A reverse proxy’s response-only CORS additions cannot authorize a request inside the plugin: configure the policy in Signal K itself.
+Signal K 2.32.0/2.34.0 use wildcard CORS when no origin restriction is configured. That permits browser clients from any valid HTTP(S) origin, provided they have a valid Signal K bearer token. This change delegates browser policy to the host; it does not claim the former plugin-local Host/DNS-rebinding restriction. A reverse proxy’s response-only CORS additions cannot authorize a request inside the plugin: configure the policy in Signal K itself.
 
 Existing `allowedHosts` and `allowedOrigins` plugin fields are ignored. Existing approvals, TLS hostname and staleness settings are preserved. If the retired browser list was restricting access, transfer that restriction to Signal K’s CORS settings before upgrading. Tests cover explicit host CORS grants/denials, the host’s default wildcard policy, malformed origins, forged incoming CORS headers and authentication under permitted origins on both supported server versions.

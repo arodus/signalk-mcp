@@ -30,7 +30,7 @@ Keep this project independent. Preserve compatibility with ordinary Signal K ins
 
 ## Verification and handoff
 
-- Use Node 24 for the primary Signal K 2.33.0 integration check. CI covers Signal K 2.32.0 and 2.33.0 on Node 22 and 24; keep this explicit compatibility matrix and docs/authentication.md current.
+- Use Node 24 for the primary Signal K 2.34.0 integration check. CI covers Signal K 2.32.0 and 2.34.0 on Node 22 and 24; keep this explicit compatibility matrix and docs/authentication.md current.
 - Run `npm run check` and `git diff --check`. Include regression tests for authorization, discovery and execution boundaries.
 - Keep `npm test` portable for official Signal K plugin CI and the registry harness. Native server/provider tests belong to `npm run test:integration`; `npm run check` must continue to include both suites. Do not remove permission checks or conceal security-bridge warnings to improve a registry score.
 - Avoid duplicate feature-branch push and PR CI runs. The official workflow owns portable tests and formatting; our workflow keeps one blocking type/lint job plus the native runtime and installed-package matrix. Upstream lint is advisory, so it cannot replace our blocking lint check.

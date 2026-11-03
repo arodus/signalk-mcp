@@ -51,7 +51,7 @@ Delete a PUT review, confirm the removal and save to revoke it. Native PUT rows 
 
 Native `put` ACL permission is different from telemetry `write`. Both `readwrite` and `admin` identities require the applicable PUT grant; there is no admin ACL bypass.
 
-Signal K 2.32.0 and 2.33.0 dispatch HTTP PUTs after checking `shouldAllowPut` with a null source. This does not establish authorization for the source selected by the request body. The gateway separately requires a literal native ACL grant for the explicit source and keeps the native HTTP route's checks as well. Missing hooks and unknown results fail closed. Fixed-local requests carry only the original bearer identity, with certificate verification and redirects disabled. Public in-process PUT helpers are not used because they do not carry the authenticated request.
+Signal K 2.32.0 and 2.34.0 dispatch HTTP PUTs after checking `shouldAllowPut` with a null source. This does not establish authorization for the source selected by the request body. The gateway separately requires a literal native ACL grant for the explicit source and keeps the native HTTP route's checks as well. Missing hooks and unknown results fail closed. Fixed-local requests carry only the original bearer identity, with certificate verification and redirects disabled. Public in-process PUT helpers are not used because they do not carry the authenticated request.
 
 Checks occur immediately before submission and again when returning results or checking status. These are not an atomic transaction with another plugin's handler or with administrator configuration changes. A later permission change cannot cancel an action already accepted by the native server.
 
@@ -69,4 +69,4 @@ Transport timeout, disconnect, invalid/oversized reply or authorization changes 
 
 Portable tests cover approval binding, schema/input validation, role/ACL checks, correlation bounds, expiry and truthful outcomes. Native integration uses disposable Signal K servers and synthetic PUT handlers, including metadata-only targets, actual native admin saves, source-specific denials, pending ownership, failure replies and lifecycle changes. No live hardware, vessel credentials or notification service is involved.
 
-The supported matrix remains Signal K 2.32.0/2.33.0 on Node 22/24. Record actual runs and remaining limits in [verification](verification.md); implementation, local tests, CI, publication and deployment are separate evidence.
+The supported matrix remains Signal K 2.32.0/2.34.0 on Node 22/24. Record actual runs and remaining limits in [verification](verification.md); implementation, local tests, CI, publication and deployment are separate evidence.

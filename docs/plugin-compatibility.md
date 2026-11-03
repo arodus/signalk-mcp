@@ -12,7 +12,7 @@ This compatibility test uses the `arodus/signalk-alert-center` plugin. It is a t
 | Gateway operation        | `get.definitions` (derived from method and route; the provider omits operation IDs)                                                        |
 | Native permission        | Signal K readonly                                                                                                                          |
 | Example gateway approval | Admin, because the endpoint does not filter results by telemetry path/source ACLs                                                          |
-| CI matrix                | Signal K 2.32.0 / 2.33.0 × Node 22 / 24                                                                                                    |
+| CI matrix                | Signal K 2.32.0 / 2.34.0 × Node 22 / 24                                                                                                    |
 
 The exact npm package is pinned as a development dependency with lockfile integrity `sha512-hbUQvsO4RQUXnY4U83lMHFEoh9ur4e3pZ7M2eXsqGi0ZQjxKJQTPcc/RAGt1Bm3mQLDxucNxiep7RPHhF0UIWg==`. Tests load the published package unchanged, using a fresh temporary configuration and SQLite database. No local Alert Center checkout, operational database, real credentials or live notification services are used.
 

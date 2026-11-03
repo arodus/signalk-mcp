@@ -6,8 +6,8 @@ The gateway uses the standard `/signalk/v2/api/history` API for any registered p
 
 | Provider                         | Server/API              | Backend                             | Gateway status                                                                                                   |
 | -------------------------------- | ----------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| Synthetic `mcp-fixture`          | 2.32.0 / 2.33.0         | In-memory fixtures                  | Standard contract, omitted optional fields, permission and revocation coverage                                   |
-| `signalk-to-influxdb` **1.11.0** | 2.32.0 / 2.33.0         | InfluxDB **1.8.10**, synthetic rows | Works unchanged for the tested standard v2 queries; hyphenated identifiers are rejected due to the server parser |
+| Synthetic `mcp-fixture`          | 2.32.0 / 2.34.0         | In-memory fixtures                  | Standard contract, omitted optional fields, permission and revocation coverage                                   |
+| `signalk-to-influxdb` **1.11.0** | 2.32.0 / 2.34.0         | InfluxDB **1.8.10**, synthetic rows | Works unchanged for the tested standard v2 queries; hyphenated identifiers are rejected due to the server parser |
 | Other registered v2 providers    | Not individually tested | Provider-defined                    | Same standard adapter; compatibility depends on honoring the v2 query contract and gateway limits                |
 
 The test dependency is pinned in `package-lock.json`; it is not a gateway runtime dependency. Its published npm package records upstream commit [`c1a48cc07aa106ea0ccbe5ae358cb9fe67322c10`](https://github.com/tkurki/signalk-to-influxdb/tree/c1a48cc07aa106ea0ccbe5ae358cb9fe67322c10). The Docker fixture uses image digest `sha256:299ebda2c7e308dbef42e26ac9b8fd1d9b3bcb8a0aee80c6509aa0219c1d0290` rather than an unpinned latest image.
@@ -49,7 +49,7 @@ The published provider calls `influx.query(...)` without an AbortSignal or cance
 
 `test/history-provider.cjs`, invoked by the existing real-server harness, contains the executable reproductions and synthetic seed data:
 
-1. Store `fixture-XX=31` and `fixtureXX=47` under the same path. Query the raw History HTTP endpoint for `fixture-XX`; Signal K 2.32.0/2.33.0 selects `fixtureXX` and returns 47. Calling the unchanged provider directly with `sourceRef: "fixture-XX"` returns 31. The mutation is in the server's HTTP parser.
+1. Store `fixture-XX=31` and `fixtureXX=47` under the same path. Query the raw History HTTP endpoint for `fixture-XX`; Signal K 2.32.0/2.34.0 selects `fixtureXX` and returns 47. Calling the unchanged provider directly with `sourceRef: "fixture-XX"` returns 31. The mutation is in the server's HTTP parser.
 2. Store `navigation.test-path=53` and `navigation.testpath=61`. Query the former through HTTP; the response names the latter and returns 61. The gateway rejects the original hyphenated spellings before requesting data.
 3. Query an unchanged non-hyphenated path/source. The native provider returns `values[0].sourceRef`, but `$source` is absent. Both MCP invocation forms return the same JSON as the native API, including zero, metadata and exact range/timestamps.
 

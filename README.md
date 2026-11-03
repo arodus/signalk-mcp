@@ -6,7 +6,7 @@ Connect an AI agent to your boat’s Signal K data. Ask for current readings, av
 
 Signal K MCP runs as a plugin inside your existing Signal K server. It uses Signal K’s accounts and permissions, with no separate server or account to manage.
 
-Supported versions are Signal K **2.32.0 and 2.33.0**, with Node.js **22 or 24**. Node.js **24** is recommended. See [compatibility and limits](#compatibility-and-limits) for the scope of testing.
+The tested compatibility matrix is Signal K **2.32.0 and 2.34.0**, with Node.js **22 or 24**. Use Signal K **2.34.0** and Node.js **24** for the recommended tested combination. Signal K 2.32.0 remains in isolated compatibility tests; it is affected by [GHSA-4xm8-rg9h-jhq2](https://github.com/advisories/GHSA-4xm8-rg9h-jhq2) and is not recommended for deployment. See [compatibility and limits](#compatibility-and-limits) for the scope of testing.
 
 ## What you can do
 
@@ -154,7 +154,7 @@ Version 0.3.1 fixes notification registry paths containing parentheses and migra
 - Generic native discovery accepts 60 of 75 contracts across the seven audited Signal K 2.33.0 API documents. Unsupported schemas, configuration writes and streaming endpoints remain disabled. Static native documents are cached until the MCP plugin restarts; identities, approvals and provider data are checked live. See [coverage and discovery lifetime](docs/native-apis.md).
 
 - The shared parser accepts 87 of 100 operations across seven audited plugin API documents. This checks their contracts; it does not mean every operation was executed. Plugins need a discoverable OpenAPI description for generic execution. Uploads, binary responses, event streams, configuration writes and routes outside the plugin namespace remain excluded; see the [schema audit](docs/plugin-schema-audit.md).
-- Native server and installed-package tests cover Signal K **2.32.0/2.33.0** on Node.js **22/24**, including TypeScript and Python MCP clients. Other server versions need separate verification.
+- Native server and installed-package tests cover Signal K **2.32.0/2.34.0** on Node.js **22/24**, including TypeScript and Python MCP clients. Other server versions need separate verification.
 - Product-client coverage varies. Earlier Codex and Hermes runtime checks covered reads; the current full tool catalog, desktop/web interfaces and ChatGPT tunnel connection are not all verified. Check the [client evidence](docs/clients.md#verification-status) before choosing a setup.
 - History requires a compatible provider and is subject to the [documented path and source restrictions](docs/history-providers.md). Plugin operations require supported API descriptions and individual review.
 - Restart the full Signal K process when upgrading. In-process whole-server shutdown has a documented upstream cleanup limitation.
