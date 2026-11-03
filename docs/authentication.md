@@ -4,7 +4,9 @@ Scope: the gateway's existing-token authentication and authorization bridge, inc
 
 ## Supported releases
 
-The compatibility set is **Signal K 2.32.0 and 2.33.0**, on Node 22 and 24. CI runs the complete suite for each of the four combinations, including the TypeScript and Python MCP clients. The main development dependency remains pinned to 2.33.0; the older runtime and its matching `@signalk/server-api` package are installed separately and do not replace the project lockfile. Other dependencies resolve using npm normally; this is not a reconstruction of a historical frozen dependency tree.
+The tested compatibility set is **Signal K 2.32.0 and 2.34.0**, on Node 22 and 24. Native CI runs integration and installed-package checks for all four combinations, including the TypeScript and Python MCP clients and real disposable InfluxDB. The official plugin workflow runs portable tests and formatting separately. The main development dependency is pinned to 2.34.0; the older runtime and its matching `@signalk/server-api` package are installed separately and do not replace the project lockfile. Other dependencies resolve using npm normally; this is not a reconstruction of a historical frozen dependency tree.
+
+Signal K **2.34.0** is the recommended tested server. The retained **2.32.0** runtime provides isolated backward-compatibility coverage, not a deployment recommendation: server releases before 2.34.0 are affected by [GHSA-4xm8-rg9h-jhq2](https://github.com/advisories/GHSA-4xm8-rg9h-jhq2). The updated lockfile resolves the patched resources provider **1.5.3**. Updating this plugin’s development dependencies does not upgrade an installed Signal K host.
 
 The integration test prints the actual server version and asserts `MCP_TEST_SERVER_VERSION` when supplied. This prevents a matrix job from silently testing the default dependency instead of its requested release. Tests exercise native plugin loading, routing and token/ACL decisions; mocks are used only for focused invalid-contract cases.
 
@@ -39,6 +41,8 @@ Source review on 2026-10-18 covered the published `@signalk/server-api` declarat
 - [`ServerAPI`](https://github.com/SignalK/signalk-server/blob/340d5bb62c17ec58d2a3497dbbf081cd87af2a96/packages/server-api/src/serverapi.ts) exposes data getters and feature discovery, but no equivalent public authentication/read-authorization bridge was found. Data getters do not accept an authenticated read context.
 - [`tokensecurity.ts`](https://github.com/SignalK/signalk-server/blob/340d5bb62c17ec58d2a3497dbbf081cd87af2a96/src/tokensecurity.ts) supplies the internal hooks used here. The exact release runtime is tested separately; master source inspection alone is not release evidence.
 
+The 2026-11-03 review checked the installed 2.34.0 `tokensecurity` hooks, plugin route registration and native PUT handler against this bridge. The synchronous principal/ACL contract and original-bearer routing remain compatible; the real-server tests cover authentication, revocation, exact-source PUT checks and saved operation approvals. See the [2.34.0 verification checkpoint](verification.md#signal-k-2340-compatibility-2026-11-03).
+
 No verified public replacement is available from this assessment. Keep the private dependency isolated and fail closed. A [local draft of the needed public contract](proposals/signalk-auth-api.md) records the integration gap; it has not been submitted upstream and is not an existing API.
 
 The official Signal K plugin CI warns about `securityStrategy` and `isDummy()` access. These warnings remain visible: native route protection does not replace per-path/source ACL checks or reauthorization while a response is pending. Do not remove the bridge merely to silence the scanner. The upstream lifecycle shim lacks the permission-aware router and uses empty configuration, so a passing generic lifecycle check only establishes safe rejection/cleanup there. It does not prove that the MCP endpoint is enabled or authorized. The separate real-server matrix verifies those behaviors.
@@ -64,13 +68,13 @@ The embedded configuration panel uses the host’s React 19 instance and `server
 
 ## Native PUT boundary
 
-Signal K 2.32.0/2.33.0's HTTP handler calls `shouldAllowPut` with a null source before choosing `body.source`. The gateway additionally checks the exact handler source through native `put` ACLs, then forwards the original bearer over fixed-local HTTP so native role and route checks remain active. It does not use the public in-process PUT helpers, which dispatch without the inbound authenticated request. Targets and sources never use wildcards, and metadata advertising PUT support never grants permission.
+Signal K 2.32.0/2.34.0's HTTP handler calls `shouldAllowPut` with a null source before choosing `body.source`. The gateway additionally checks the exact handler source through native `put` ACLs, then forwards the original bearer over fixed-local HTTP so native role and route checks remain active. It does not use the public in-process PUT helpers, which dispatch without the inbound authenticated request. Targets and sources never use wildcards, and metadata advertising PUT support never grants permission.
 
 Every PUT requires a saved exact path/source/metadata/value-contract review. Identity and permissions are resolved afresh before dispatch; post-response authorization/binding changes produce an explicit unknown outcome because the action may already have happened. Do not apply the generic read error/retry behavior to these results. Status polling reauthenticates and checks same-identity ownership, original target binding, current metadata, ACLs, approval, one-hour expiry and lifecycle state. The gateway never proxies arbitrary native request IDs; the native status route itself lacks an ownership check in the supported releases. See [native PUT behavior and remaining limits](native-puts.md).
 
 ## Plugin HTTP mutation authorization
 
-Individually reviewed plugin POST/PUT/PATCH/DELETE operations require native `readwrite` or `admin` identity even when a provider labels the route readonly. The original bearer passes through native plugin HTTP routing; provider-specific data authorization remains mandatory. Review, lifecycle and identity are checked before dispatch; failures after attempted dispatch preserve an explicit unknown outcome. No telemetry `put` ACL is invented for plugin routes. Supported native versions remain Signal K 2.32.0/2.33.0 on Node 22/24. See [plugin HTTP contracts and tests](plugin-posts.md).
+Individually reviewed plugin POST/PUT/PATCH/DELETE operations require native `readwrite` or `admin` identity even when a provider labels the route readonly. The original bearer passes through native plugin HTTP routing; provider-specific data authorization remains mandatory. Review, lifecycle and identity are checked before dispatch; failures after attempted dispatch preserve an explicit unknown outcome. No telemetry `put` ACL is invented for plugin routes. Supported native versions remain Signal K 2.32.0/2.34.0 on Node 22/24. See [plugin HTTP contracts and tests](plugin-posts.md).
 
 ## Generic native API operations
 

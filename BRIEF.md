@@ -20,7 +20,7 @@ Every supported plugin HTTP operation and native PUT target starts blocked and r
 
 The configurator permits saving unchanged defaults. Its first successful configuration save refreshes the page so Signal K can display the native Enabled switch; saving preserves the existing enable state and does not approve any operation.
 
-Authenticated reads, standard v2 history and reviewed plugin reads are verified under Signal K 2.32.0/2.33.0 on Node 22/24. The unchanged published packages `signalk-to-influxdb` 1.11.0 and `signalk-alert-center` 0.4.1 are exercised with synthetic data; see [history verification](docs/history-providers.md) and [plugin compatibility](docs/plugin-compatibility.md). End-to-end product-client tunnel connections and the complete vessel acceptance procedure remain unverified; publication evidence is recorded by the release workflow.
+Authenticated reads, standard v2 history and reviewed plugin reads are verified under Signal K 2.32.0/2.34.0 on Node 22/24. The unchanged published packages `signalk-to-influxdb` 1.11.0 and `signalk-alert-center` 0.4.1 are exercised with synthetic data; see [history verification](docs/history-providers.md) and [plugin compatibility](docs/plugin-compatibility.md). End-to-end product-client tunnel connections and the complete vessel acceptance procedure remain unverified; publication evidence is recorded by the release workflow.
 
 README.md and docs describe implemented behavior and verification. This brief defines the intended scope; it does not establish upstream API availability or live compatibility.
 

@@ -13,7 +13,7 @@ Use a clean checkout of the reviewed commit. Install development dependencies an
 ```sh
 npm run check
 MCP_TEST_PYTHON=/tmp/signalk-mcp-python-client/bin/python \
-MCP_TEST_SERVER_VERSION=2.33.0 \
+MCP_TEST_SERVER_VERSION=2.34.0 \
 npm run verify:package -- /tmp/signalk-mcp-package-24
 ```
 
