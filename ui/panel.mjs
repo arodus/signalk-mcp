@@ -1,17 +1,27 @@
 import React, { useEffect, useState } from "react";
-import { loadConfiguration, saveConfiguration } from "./configuration.mjs";
+import {
+  loadEditorConfiguration,
+  saveConfiguration,
+  catalogueGroups,
+  approveRows,
+  isWrite,
+} from "./configuration.mjs";
 
 const h = React.createElement;
 const css = `
 .mcp-config { color: inherit; font-size: 14px; container-type:inline-size; }
 .mcp-config h3 { font-size: 20px; margin: 0; }
-.mcp-config .mcp-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
+.mcp-config .mcp-toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px; }
 .mcp-config .mcp-help { color: #52606d; margin: 0 0 14px; line-height:1.5; }
 .mcp-config .mcp-table-wrap { overflow-x:auto; border:1px solid #d8dee4; border-radius:6px; }
 .mcp-config table { width:100%; border-collapse:collapse; min-width:590px; margin:0; }
 .mcp-config th { background:#f5f7f9; color:#52606d; font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
 .mcp-config th, .mcp-config td { padding:10px 12px; border-bottom:1px solid #e5e9ed; vertical-align:middle; }
 .mcp-config tr:last-child td { border-bottom:0; }
+.mcp-config .mcp-group { background:#f5f7f9; overflow-wrap:anywhere; }
+.mcp-config .mcp-group .mcp-toolbar { margin:0; }
+.mcp-config .mcp-available, .mcp-config .mcp-manual { background:#eef4fa; color:#285680; }
+.mcp-config .mcp-unsupported { background:#eee; color:#52606d; }
 .mcp-config .mcp-operation { min-width:180px; overflow-wrap:anywhere; }
 .mcp-config .mcp-operation strong, .mcp-config .mcp-operation small { display:block; }
 .mcp-config .mcp-operation small { color:#52606d; margin-top:2px; }
@@ -52,7 +62,10 @@ const css = `
 @media(max-width:600px) { .mcp-config .mcp-fields { grid-template-columns:1fr; gap:0; } }
 `;
 const status = {
-  pending: "Pending",
+  pending: "Pending request",
+  available: "Not approved",
+  manual: "Manual approval",
+  unsupported: "Unsupported",
   approved: "Accepted",
   rejected: "Rejected",
 };
@@ -75,6 +88,7 @@ export default function Configuration() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(null);
+  const [groupFilter, setGroupFilter] = useState("");
   const dirty =
     base &&
     JSON.stringify({ reviews: base.reviews, settings: base.settings }) !==
@@ -86,7 +100,7 @@ export default function Configuration() {
   };
   useEffect(() => {
     let mounted = true;
-    loadConfiguration()
+    loadEditorConfiguration()
       .then((next) => {
         if (mounted) adopt(next);
       })
@@ -108,7 +122,7 @@ export default function Configuration() {
     setError("");
     setMessage("");
     try {
-      adopt(await loadConfiguration());
+      adopt(await loadEditorConfiguration());
     } catch (err) {
       setError(err.message);
     } finally {
@@ -132,15 +146,17 @@ export default function Configuration() {
       setBusy(false);
     }
   }
-  function review(key, changes) {
+  function stage(rows, decision = "approved") {
     setMessage("");
-    setDraft((value) => ({
-      ...value,
-      reviews: {
-        ...value.reviews,
-        [key]: { ...value.reviews[key], ...changes },
-      },
-    }));
+    setError("");
+    try {
+      const next = approveRows(draft, rows);
+      if (decision !== "approved")
+        for (const row of rows) next.reviews[row.key].decision = decision;
+      setDraft(next);
+    } catch (err) {
+      setError(err.message);
+    }
   }
   function setting(key, value) {
     setMessage("");
@@ -172,7 +188,14 @@ export default function Configuration() {
       }),
     );
   }
-  const rows = draft ? Object.entries(draft.reviews) : [];
+  const groups = draft ? catalogueGroups(base, draft) : [];
+  const rows = groups
+    .filter((group) => !groupFilter || group.id === groupFilter)
+    .flatMap((group) => [{ group }, ...group.rows]);
+  const operationCount = groups.reduce(
+    (count, group) => count + group.rows.length,
+    0,
+  );
   return h(
     "form",
     { className: "mcp-config", onSubmit: save },
@@ -180,18 +203,18 @@ export default function Configuration() {
     h(
       "div",
       { className: "mcp-toolbar" },
-      h("h3", null, "Operation requests", base ? ` (${rows.length})` : ""),
+      h("h3", null, "Operation catalogue", base ? ` (${operationCount})` : ""),
       button("Refresh", refresh, {
         disabled: busy || Boolean(dirty),
         title: dirty
           ? "Save or discard your changes before refreshing"
-          : "Fetch new requests",
+          : "Discover current operations and requests",
       }),
     ),
     h(
       "p",
       { className: "mcp-help" },
-      "Review each plugin/native API operation, native PUT or resource write before accepting it. Check the target, meaning, input constraints and provider permissions. Signal K permissions still apply. Changes take effect when you save.",
+      "Browse current plugin and native API operations. Approve reads or writes together for each plugin, or review them individually. All selections are staged until Save Configuration. New or changed operations need a new review; Signal K permissions still apply.",
     ),
     error
       ? h("div", { role: "alert", className: "mcp-notice mcp-error" }, error)
@@ -205,6 +228,37 @@ export default function Configuration() {
       : h(
           React.Fragment,
           null,
+          base.catalogueError
+            ? h(
+                "div",
+                { role: "alert", className: "mcp-notice mcp-error" },
+                base.catalogueError,
+              )
+            : null,
+          h(
+            "label",
+            null,
+            h("span", null, "Plugin or API"),
+            h(
+              "select",
+              {
+                value: groupFilter,
+                "aria-label": "Plugin or API",
+                disabled: busy,
+                onChange: (event) => setGroupFilter(event.target.value),
+                style: { maxWidth: "100%", padding: "7px 9px" },
+              },
+              h("option", { value: "" }, "All plugins and APIs"),
+              ...groups.map((group) =>
+                h("option", { key: group.id, value: group.id }, group.id),
+              ),
+            ),
+          ),
+          h(
+            "p",
+            { className: "mcp-help" },
+            "Built-in data reads use Signal K permissions without approval. Native PUT and Resources writes appear below when requested: their exact source or provider must be identified. Up to 64 reviews can be saved; browsing does not use review slots.",
+          ),
           h(
             "div",
             {
@@ -231,7 +285,72 @@ export default function Configuration() {
                 "tbody",
                 null,
                 rows.length
-                  ? rows.map(([key, item]) => {
+                  ? rows.map((row) => {
+                      if (row.group) {
+                        const group = row.group;
+                        const reads = group.rows.filter(
+                          (row) =>
+                            row.eligible &&
+                            !isWrite(row.item) &&
+                            row.status !== "approved",
+                        );
+                        const writes = group.rows.filter(
+                          (row) =>
+                            row.eligible &&
+                            isWrite(row.item) &&
+                            row.status !== "approved",
+                        );
+                        const label = group.id.startsWith("plugin.")
+                          ? group.id.slice(7)
+                          : group.id;
+                        return h(
+                          "tr",
+                          { key: `group:${group.id}` },
+                          h(
+                            "td",
+                            { colSpan: 4, className: "mcp-group" },
+                            h(
+                              "div",
+                              { className: "mcp-toolbar" },
+                              h("strong", null, label),
+                              h(
+                                "div",
+                                { className: "mcp-actions" },
+                                button(
+                                  `Approve all current reads (${reads.length})`,
+                                  () => stage(reads),
+                                  {
+                                    disabled: busy || !reads.length,
+                                    "aria-label": `Approve all current reads for ${label}`,
+                                  },
+                                ),
+                                button(
+                                  `Approve all current writes (${writes.length})`,
+                                  () => stage(writes),
+                                  {
+                                    disabled: busy || !writes.length,
+                                    "aria-label": `Approve all current writes for ${label}`,
+                                  },
+                                ),
+                              ),
+                            ),
+                            group.reason
+                              ? h(
+                                  "p",
+                                  {
+                                    className: "mcp-help",
+                                    style: { margin: "8px 0 0" },
+                                  },
+                                  group.reason,
+                                )
+                              : null,
+                            !group.rows.length && !group.reason
+                              ? h("p", null, "No discoverable operations.")
+                              : null,
+                          ),
+                        );
+                      }
+                      const { key, item } = row;
                       const put = item.kind === "put";
                       const post = item.kind === "post";
                       const plugin = item.kind === "plugin";
@@ -303,7 +422,7 @@ export default function Configuration() {
                                 ? description
                                 : "No description provided.",
                             ),
-                            write || api
+                            item.inputSchema || row.operation?.inputSchema
                               ? h(
                                   React.Fragment,
                                   null,
@@ -339,7 +458,12 @@ export default function Configuration() {
                                   h(
                                     "pre",
                                     null,
-                                    JSON.stringify(item.inputSchema, null, 2),
+                                    JSON.stringify(
+                                      item.inputSchema ??
+                                        row.operation?.inputSchema,
+                                      null,
+                                      2,
+                                    ),
                                   ),
                                 )
                               : null,
@@ -361,9 +485,21 @@ export default function Configuration() {
                           null,
                           h(
                             "span",
-                            { className: `mcp-badge mcp-${item.decision}` },
-                            status[item.decision],
+                            { className: `mcp-badge mcp-${row.status}` },
+                            status[row.status],
                           ),
+                          row.reason || (!row.eligible && row.operation?.reason)
+                            ? h(
+                                "small",
+                                {
+                                  style: {
+                                    display: "block",
+                                    overflowWrap: "anywhere",
+                                  },
+                                },
+                                row.reason || row.operation.reason,
+                              )
+                            : null,
                         ),
                         h(
                           "td",
@@ -374,7 +510,7 @@ export default function Configuration() {
                               className: `mcp-badge mcp-${write ? "write" : "read"}`,
                               title: put
                                 ? "Requires native Signal K PUT permission"
-                                : post || plugin || resource || api
+                                : write
                                   ? "Requires a write-capable Signal K identity and provider permission"
                                   : "Requires native Signal K read permission",
                             },
@@ -387,26 +523,29 @@ export default function Configuration() {
                           h(
                             "div",
                             { className: "mcp-actions" },
+                            button("Accept", () => stage([row]), {
+                              disabled:
+                                busy ||
+                                absent ||
+                                !row.eligible ||
+                                item.decision === "approved",
+                              "aria-label": `Accept ${label}`,
+                            }),
                             button(
-                              "Accept",
-                              () => review(key, { decision: "approved" }),
+                              "Reject",
+                              () =>
+                                stage([{ ...row, eligible: true }], "rejected"),
                               {
                                 disabled:
                                   busy ||
-                                  absent ||
-                                  item.decision === "approved",
-                                "aria-label": `Accept ${label}`,
-                              },
-                            ),
-                            button(
-                              "Reject",
-                              () => review(key, { decision: "rejected" }),
-                              {
-                                disabled: busy || item.decision === "rejected",
+                                  (!row.eligible && !draft.reviews[key]) ||
+                                  item.decision === "rejected",
                                 "aria-label": `Reject ${label}`,
                               },
                             ),
-                            (write || api || absent) && deleting !== key
+                            draft.reviews[key] &&
+                              (write || api || absent) &&
+                              deleting !== key
                               ? button("Delete", () => setDeleting(key), {
                                   disabled: busy,
                                   "aria-label": `Delete ${label}`,
@@ -446,7 +585,7 @@ export default function Configuration() {
                       h(
                         "td",
                         { colSpan: 4 },
-                        "No requests yet. Refresh after a client attempts an unapproved plugin/native API operation, native PUT or resource write.",
+                        "No discoverable operations or pending requests. Refresh after enabling a plugin with OpenAPI documentation.",
                       ),
                     ),
               ),
@@ -508,7 +647,7 @@ export default function Configuration() {
             h(
               "p",
               { className: "mcp-help" },
-              "Existing manual approvals are preserved. Use requests above for new reviews. A matching rejection overrides a manual approval.",
+              "Existing manual approvals are preserved. Use the catalogue above for new reviews. A matching rejection overrides a manual approval.",
             ),
             ...draft.settings.pluginOperations.map((item, index) => {
               const update = (changes) =>

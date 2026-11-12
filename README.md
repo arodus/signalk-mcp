@@ -127,13 +127,15 @@ Built-in telemetry, history, notification and resource reads use your Signal K p
 When an agent attempts an eligible operation that has not been approved, it receives `APPROVAL_PENDING`. The operation has not run.
 
 1. Open **Apps & Plugins → Configuration → Signal K MCP** and click **Refresh**.
-2. In **Operation requests**, review the requested operation and its **Read** or **Write** label. Expand the details to check what it does, its inputs and, for native controls, the exact path and source. Review the provider’s behavior and permissions before accepting.
-3. Click **Accept** or **Reject**, then **Save Configuration**. Decisions take effect only after saving.
+2. In **Operation catalogue**, choose a plugin or API to see its current operations before trying them. Review the **Read** or **Write** label, meaning and input constraints. Unsupported operations and unavailable discovery are shown explicitly.
+3. Click **Accept** or **Reject** individually, or **Approve all current reads** / **Approve all current writes** for a plugin or API. Make selections across groups, then click **Save Configuration** once. Each selection saves an exact operation approval; future operations are not automatically approved.
 4. After approval, ask the agent to try the operation again.
 
-![Signal K MCP operation approval table with example requests](docs/images/plugin-post-approvals.png)
+![Signal K MCP operation catalogue with synthetic operations](docs/images/operation-catalogue.png)
 
-_The screenshot uses synthetic example requests, not live vessel data._
+_The screenshot uses synthetic example operations, not live vessel data._
+
+Browsing does not queue requests or execute provider operations. Native PUT and Resources writes still appear when requested because their exact source or provider must be identified. The existing 64-entry limit covers saved reviews and pending requests; oversized bulk selections are refused without partially applying them. Selected plugin/API contracts are checked again before saving.
 
 The generic JSON executor supports GET, POST, PUT, PATCH and DELETE described by the plugin’s or supported native API’s OpenAPI. PATCH is for partial updates; PUT follows the endpoint’s documented save or replacement behavior. See the [cross-plugin schema audit and author guidance](docs/plugin-schema-audit.md) for supported contracts and remaining gaps.
 

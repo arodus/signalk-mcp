@@ -10,7 +10,12 @@ import {
 } from "../auth.js";
 import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
-import { applyReviews, type ApprovalRequests } from "../approvals.js";
+import {
+  applyReviews,
+  operationReview,
+  reviewKey,
+  type ApprovalRequests,
+} from "../approvals.js";
 import type {
   LocalGet,
   LocalPost,
@@ -642,6 +647,34 @@ export class CapabilityRegistry {
         operations: [],
       };
     }
+  }
+  // Admin catalogue discovery never invokes an operation or queues a request.
+  // Return the same exact review records used by execution, without granting them.
+  async catalogue(id: string) {
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    const plugin = await this.plugin(id);
+    if (!plugin.enabled)
+      return { id, reason: "PLUGIN_DISABLED", operations: [] };
+    const operations = discoverOperations(
+      await this.document(plugin),
+      plugin.id,
+      this.config.pluginOperations,
+      this.authorize(),
+      plugin.api,
+    );
+    const result = operations.map((operation) => {
+      const description = operationDescription(operation);
+      if (![null, "NOT_ALLOWLISTED"].includes(operation.reason))
+        return { ...description, review: null, key: null };
+      const review = operationReview(plugin.id, operation);
+      return { ...description, review, key: reviewKey(review) };
+    });
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    const current = await this.plugin(id);
+    if (!current.enabled) throw new GatewayError("PLUGIN_DISABLED", 403);
+    return { id, reason: null, operations: result };
   }
   private async document(plugin: PluginInfo): Promise<unknown> {
     return plugin.api

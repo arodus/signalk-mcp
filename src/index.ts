@@ -2,7 +2,13 @@ import { DiscoveryCache } from "./capabilities/discovery-cache.js";
 import type { Plugin, PluginRouter } from "@signalk/server-api";
 import type { Request, Response } from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { authenticate, GatewayError, type App } from "./auth.js";
+import {
+  authenticate,
+  adminAuthorization,
+  GatewayError,
+  type App,
+} from "./auth.js";
+import { CapabilityRegistry } from "./capabilities/registry.js";
 import { configSchema, schema, uiSchema, type Config } from "./config.js";
 import {
   localActions,
@@ -26,6 +32,70 @@ function pluginFactory(app: App): Plugin {
   let metadataGeneration = 0;
   const active = new Set<ReturnType<typeof createMcpServer>>();
   const pending = new Map<AbortController, Response>();
+  let catalogueReaders = 0;
+  const catalogue = async (req: Request, res: Response) => {
+    res.setHeader("Cache-Control", "no-store");
+    const controller = new AbortController();
+    const closed = () => controller.abort();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let admitted = false;
+    try {
+      validateOrigin(
+        req.get("origin"),
+        res.getHeader("Access-Control-Allow-Origin"),
+      );
+      const cookies: unknown = req.cookies;
+      const bearer = adminAuthorization(
+        app,
+        req.get("authorization"),
+        record(cookies) ? cookies.JAUTHENTICATION : undefined,
+      );
+      if (catalogueReaders >= 4) throw new GatewayError("BUSY", 429);
+      catalogueReaders++;
+      admitted = true;
+      const generation = metadataGeneration;
+      // Catalogue setup also works while the MCP plugin is disabled.
+      const stored: unknown = app.readPluginOptions?.();
+      const settings =
+        config ??
+        configSchema.parse(record(stored) ? (stored.configuration ?? {}) : {});
+      const id = req.query.id;
+      const offset =
+        req.query.offset === undefined ? 0 : Number(req.query.offset);
+      if (
+        (id !== undefined && (typeof id !== "string" || id.length > 160)) ||
+        !Number.isInteger(offset) ||
+        offset < 0 ||
+        offset > 512 ||
+        Object.keys(req.query).some((key) => !["id", "offset"].includes(key))
+      )
+        throw new GatewayError("INVALID_ARGUMENTS");
+      timer = setTimeout(() => controller.abort(), 15000);
+      timer.unref();
+      res.once("close", closed);
+      const registry = new CapabilityRegistry(
+        app,
+        bearer,
+        settings,
+        () => generation === metadataGeneration && !controller.signal.aborted,
+        localGet(req, bearer, controller.signal, settings.localTlsServerName),
+      );
+      const result =
+        typeof id === "string"
+          ? await registry.catalogue(id)
+          : await registry.list(offset);
+      if (registry.authorize().permissions !== "admin")
+        throw new GatewayError("PERMISSION_DENIED", 403);
+      res.type("application/json").send(boundedJson(result, 1024 * 1024));
+    } catch (error) {
+      fail(res, error);
+    } finally {
+      if (timer) clearTimeout(timer);
+      controller.abort();
+      res.off("close", closed);
+      if (admitted) catalogueReaders--;
+    }
+  };
   const guard = (req: Request, res: Response) => {
     if (!config) throw new GatewayError("PLUGIN_UNAVAILABLE", 503);
     validateOrigin(
@@ -225,6 +295,9 @@ function pluginFactory(app: App): Plugin {
         .post("/mcp", handler)
         .get("/mcp", handler)
         .delete("/mcp", handler);
+      // Unclassified native plugin routes are admin-only (access() supports
+      // readonly/readwrite only). The handler also verifies the admin token.
+      router.get("/catalogue", catalogue);
     },
   };
 }

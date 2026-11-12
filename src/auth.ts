@@ -77,6 +77,22 @@ export function authenticate(
     permissions: principal.permissions,
   });
 }
+
+// Only the native admin catalogue accepts the host's browser session cookie.
+// Reuse that original token through the same verifier and local metadata HTTP
+// reads. MCP remains bearer-only; no credentials are minted or returned.
+export function adminAuthorization(
+  app: App,
+  authorization: string | undefined,
+  sessionToken: unknown,
+): string {
+  const bearer =
+    authorization ??
+    (typeof sessionToken === "string" ? `Bearer ${sessionToken}` : undefined);
+  if (authenticate(app, bearer).permissions !== "admin")
+    throw new GatewayError("PERMISSION_DENIED", 403);
+  return bearer!;
+}
 export function canRead(
   app: App,
   principal: Principal,

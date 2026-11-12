@@ -2,6 +2,7 @@ import { resourceCollectionSchema } from "../dist/capabilities/resource-schemas.
 import { approvalSchema } from "../dist/capabilities/schemas.js";
 
 const CONFIG_URL = "/plugins/signalk-mcp/config";
+const CATALOGUE_URL = "/plugins/signalk-mcp/catalogue";
 // Follow the Admin UI routing prefix (normally /skServer).
 const nativeFetch = (url, options) =>
   fetch(`${globalThis.serverRoutesPrefix ?? ""}${url}`, options);
@@ -124,6 +125,167 @@ export async function loadConfiguration(fetcher = nativeFetch) {
   };
 }
 
+async function loadGroup(id, fetcher) {
+  const group = await request(
+    fetcher,
+    `${CATALOGUE_URL}?id=${encodeURIComponent(id)}`,
+  );
+  if (
+    !object(group) ||
+    group.id !== id ||
+    !Array.isArray(group.operations) ||
+    group.operations.length > 128
+  )
+    throw new Error("Invalid operation catalogue. Refresh and try again.");
+  return group;
+}
+
+export async function loadEditorConfiguration(fetcher = nativeFetch) {
+  const base = await loadConfiguration(fetcher);
+  const catalogue = [];
+  let catalogueError = "";
+  try {
+    const capabilities = [];
+    let offset = 0;
+    do {
+      const page = await request(fetcher, `${CATALOGUE_URL}?offset=${offset}`);
+      if (
+        !object(page) ||
+        !Array.isArray(page.capabilities) ||
+        page.discovery !== "complete"
+      )
+        throw new Error(
+          "Operation discovery is unavailable. Existing requests are shown below.",
+        );
+      capabilities.push(...page.capabilities);
+      if (
+        page.nextOffset !== null &&
+        (!Number.isInteger(page.nextOffset) ||
+          page.nextOffset <= offset ||
+          page.nextOffset > 512)
+      )
+        throw new Error("Operation discovery exceeded its limit.");
+      offset = page.nextOffset;
+    } while (offset !== null);
+    // Bound simultaneous metadata reads. Never invoke provider operations.
+    const groups = capabilities.filter(
+      (c) =>
+        c.kind === "plugin" || (c.kind === "api" && c.id !== "api.resources"),
+    );
+    for (let index = 0; index < groups.length; index += 3) {
+      catalogue.push(
+        ...(await Promise.all(
+          groups.slice(index, index + 3).map(async (c) => {
+            if (["disabled", "unsupported-namespace"].includes(c.availability))
+              return { id: c.id, reason: c.availability, operations: [] };
+            try {
+              return await loadGroup(c.id, fetcher);
+            } catch {
+              return {
+                id: c.id,
+                reason: "Discovery unavailable or unsupported OpenAPI document",
+                operations: [],
+              };
+            }
+          }),
+        )),
+      );
+    }
+  } catch (error) {
+    catalogueError = error.message;
+  }
+  return { ...base, catalogue, catalogueError };
+}
+
+export function reviewGroup(review) {
+  return review.kind === "api"
+    ? `api.${review.api}`
+    : review.kind === "put"
+      ? "native.put"
+      : review.kind === "resource"
+        ? `resource.${review.provider}`
+        : `plugin.${review.pluginId}`;
+}
+
+export function isWrite(review) {
+  return (
+    review.kind === "put" ||
+    (review.method !== undefined && review.method !== "GET")
+  );
+}
+
+export function catalogueGroups(base, draft) {
+  const seen = new Set();
+  const groups = (base.catalogue ?? []).map((group) => ({
+    ...group,
+    rows: group.operations.map((operation, index) => {
+      const key = operation.key ?? `unsupported:${group.id}:${index}`;
+      seen.add(key);
+      const item = draft.reviews[key] ??
+        operation.review ?? {
+          ...(group.id.startsWith("api.")
+            ? { kind: "api", api: group.id.slice(4) }
+            : {
+                pluginId: group.id.slice(7),
+                ...(operation.method === "GET" ? {} : { kind: "plugin" }),
+              }),
+          operationId: operation.id,
+          method: operation.method,
+          path: operation.path,
+          description: operation.description,
+          inputSchema: operation.inputSchema,
+        };
+      return {
+        key,
+        item,
+        operation,
+        eligible: Boolean(operation.review),
+        status:
+          draft.reviews[key]?.decision ??
+          (operation.review
+            ? operation.enabled
+              ? "manual"
+              : "available"
+            : "unsupported"),
+      };
+    }),
+  }));
+  for (const [key, item] of Object.entries(draft.reviews)) {
+    if (seen.has(key)) continue;
+    const id = reviewGroup(item);
+    let group = groups.find((group) => group.id === id);
+    if (!group) {
+      group = { id, operations: [], rows: [] };
+      groups.push(group);
+    }
+    // Old plugin/API contracts remain visible but cannot be bulk-approved.
+    const eligible = ["put", "resource"].includes(item.kind);
+    group.rows.push({
+      key,
+      item,
+      eligible,
+      status: item.decision,
+      reason: eligible
+        ? ""
+        : "Not in the current catalogue. Refresh to check availability.",
+    });
+  }
+  return groups;
+}
+
+export function approveRows(draft, rows) {
+  const reviews = { ...draft.reviews };
+  for (const row of rows) {
+    if (!row.eligible) continue;
+    reviews[row.key] = { ...row.item, decision: "approved" };
+  }
+  if (Object.keys(reviews).length > 64)
+    throw new Error(
+      "This selection exceeds the 64 saved-review limit. Select fewer operations or remove obsolete reviews before saving.",
+    );
+  return { ...draft, reviews };
+}
+
 export function validateSettings(settings) {
   const seconds = settings.staleAfterSeconds;
   if (!Number.isInteger(seconds) || seconds < 1 || seconds > 86400)
@@ -177,7 +339,15 @@ export function mergeChanges(base, draft, current) {
     ...Object.keys(draft.reviews),
   ])) {
     if (same(base.reviews[key], draft.reviews[key])) continue;
-    if (!same(base.reviews[key], current.reviews[key])) conflict();
+    const newlyPending =
+      !base.reviews[key] &&
+      current.reviews[key]?.decision === "pending" &&
+      same(
+        { ...current.reviews[key], decision: draft.reviews[key]?.decision },
+        draft.reviews[key],
+      );
+    if (!same(base.reviews[key], current.reviews[key]) && !newlyPending)
+      conflict();
     if (!draft.reviews[key]) {
       if (
         !base.reviews[key].kind &&
@@ -191,6 +361,10 @@ export function mergeChanges(base, draft, current) {
       reviews[key] = draft.reviews[key];
     }
   }
+  if (Object.keys(reviews).length > 64)
+    throw new Error(
+      "The 64 saved-review limit has been reached. Remove obsolete reviews before saving.",
+    );
   const configuration = {
     ...current.options.configuration,
     readRequests: reviews,
@@ -206,6 +380,31 @@ export function mergeChanges(base, draft, current) {
 }
 
 export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
+  if (base.catalogue) {
+    const groups = new Map();
+    for (const [key, review] of Object.entries(draft.reviews)) {
+      if (
+        same(base.reviews[key], review) ||
+        review.decision !== "approved" ||
+        ["put", "resource"].includes(review.kind)
+      )
+        continue;
+      const id = reviewGroup(review);
+      if (!groups.has(id)) groups.set(id, await loadGroup(id, fetcher));
+      const latest = groups.get(id);
+      if (
+        latest.reason ||
+        !latest.operations.some(
+          (operation) => operation.key === key && operation.review,
+        )
+      )
+        throw new Error(
+          "A selected operation changed or is unavailable. Discard changes and refresh the catalogue before approving it.",
+        );
+    }
+  }
+  // Read configuration after metadata checks so requests/edits arriving during
+  // discovery are included in the merge immediately before the native save.
   const current = await loadConfiguration(fetcher);
   const options = mergeChanges(base, draft, current);
   // Only Signal K's existing admin configuration route writes settings.
@@ -221,6 +420,9 @@ export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
     );
   return {
     ...current,
+    ...(base.catalogue
+      ? { catalogue: base.catalogue, catalogueError: base.catalogueError }
+      : {}),
     options: saved,
     reviews: options.configuration.readRequests,
     settings: {

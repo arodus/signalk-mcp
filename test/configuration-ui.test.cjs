@@ -566,3 +566,253 @@ test("native API read and write reviews retain contracts through save and revoke
     {},
   );
 });
+
+function catalogueFixture() {
+  const { discoverOperations } = require("../dist/capabilities/openapi.js");
+  const { operationReview } = require("../dist/approvals.js");
+  const document = {
+    openapi: "3.0.3",
+    paths: {
+      "/read": { get: { operationId: "read" } },
+      "/write": { post: { operationId: "write", summary: "Change fixture" } },
+      "/settings": { put: { operationId: "unsafe" } },
+    },
+  };
+  const operations = discoverOperations(document, "fixture", [], {
+    permissions: "admin",
+  }).map((o) => {
+    const review =
+      o.reason === "NOT_ALLOWLISTED" ? operationReview("fixture", o) : null;
+    return {
+      id: o.id,
+      method: o.method,
+      path: o.path,
+      description: o.description,
+      enabled: o.enabled,
+      reason: o.reason,
+      inputSchema: o.inputSchema,
+      key: review && reviewKey(review),
+      review,
+    };
+  });
+  return { id: "plugin.fixture", reason: null, operations };
+}
+
+test("catalogue loads before requests; bulk reads and writes stage only current supported contracts for one native save", async () => {
+  const {
+    loadEditorConfiguration,
+    catalogueGroups,
+    approveRows,
+    isWrite,
+    saveConfiguration,
+  } = await ui();
+  const catalogue = catalogueFixture();
+  const list = inventory({});
+  let saved;
+  let writes = 0;
+  const fetcher = async (url, options) => {
+    if (url === "/plugins") return response(list);
+    if (url.includes("?offset="))
+      return response({
+        discovery: "complete",
+        nextOffset: null,
+        capabilities: [
+          {
+            id: "plugin.fixture",
+            kind: "plugin",
+            availability: "inspect-required",
+          },
+        ],
+      });
+    if (url.includes("?id=")) return response(catalogue);
+    if (options.method === "POST") {
+      writes++;
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  };
+  const base = await loadEditorConfiguration(fetcher);
+  assert.deepEqual(base.reviews, {});
+  let draft = draftOf(base);
+  const rows = catalogueGroups(base, draft)[0].rows;
+  assert.equal(rows.length, 3);
+  assert.equal(rows.filter((r) => r.eligible).length, 2);
+  draft = approveRows(
+    draft,
+    rows.filter((r) => !isWrite(r.item)),
+  );
+  assert.equal(Object.keys(draft.reviews).length, 1);
+  draft = approveRows(
+    draft,
+    rows.filter((r) => isWrite(r.item)),
+  );
+  assert.equal(Object.keys(draft.reviews).length, 2);
+  assert.equal(writes, 0);
+  assert.deepEqual(base.reviews, {});
+  await saveConfiguration(base, draft, fetcher);
+  assert.equal(writes, 1);
+  assert.equal(configSchema.safeParse(saved.configuration).success, true);
+  assert.equal(
+    Object.values(saved.configuration.readRequests).every(
+      (r) => r.decision === "approved",
+    ),
+    true,
+  );
+  assert.equal(catalogue.operations[0].review.decision, "pending");
+});
+
+test("catalogue save rejects changed, removed or disabled contracts before writing", async () => {
+  const { saveConfiguration, approveRows, catalogueGroups } = await ui();
+  const base = await snapshot(inventory({}));
+  base.catalogue = [catalogueFixture()];
+  const draft = approveRows(
+    draftOf(base),
+    catalogueGroups(base, draftOf(base))[0].rows,
+  );
+  for (const latest of [
+    { ...catalogueFixture(), operations: [] },
+    { ...catalogueFixture(), reason: "PLUGIN_DISABLED" },
+    {
+      ...catalogueFixture(),
+      operations: catalogueFixture().operations.map((o) => ({
+        ...o,
+        key: "changed",
+      })),
+    },
+  ]) {
+    let writes = 0;
+    await assert.rejects(
+      saveConfiguration(base, draft, async (url, options) => {
+        if (options.method === "POST") writes++;
+        return response(url === "/plugins" ? inventory({}) : latest);
+      }),
+      /changed or is unavailable/,
+    );
+    assert.equal(writes, 0);
+  }
+});
+
+test("catalogue bulk selection preserves stricter reviews and rejects capacity overflow atomically", async () => {
+  const { approveRows, catalogueGroups, mergeChanges } = await ui();
+  const group = catalogueFixture();
+  const operation = group.operations.find((o) => o.method === "GET");
+  const stored = {
+    ...operation.review,
+    decision: "rejected",
+    permission: "admin",
+  };
+  const base = await snapshot(inventory({ [operation.key]: stored }));
+  base.catalogue = [group];
+  const draft = approveRows(
+    draftOf(base),
+    catalogueGroups(base, draftOf(base))[0].rows,
+  );
+  assert.equal(draft.reviews[operation.key].permission, "admin");
+  assert.equal(draft.reviews[operation.key].decision, "approved");
+  const full = draftOf(base);
+  for (let i = 0; i < 63; i++) full.reviews[`existing-${i}`] = clone(stored);
+  assert.throws(
+    () => approveRows(full, catalogueGroups(base, full)[0].rows),
+    /64 saved-review limit/,
+  );
+  assert.equal(Object.keys(full.reviews).length, 64);
+  const fresh = await snapshot(inventory({}));
+  const pending = await snapshot(
+    inventory({ [operation.key]: operation.review }),
+  );
+  const selected = draftOf(fresh);
+  selected.reviews[operation.key] = {
+    ...operation.review,
+    decision: "approved",
+  };
+  assert.equal(
+    mergeChanges(fresh, selected, pending).configuration.readRequests[
+      operation.key
+    ].decision,
+    "approved",
+  );
+  pending.reviews[operation.key].decision = "rejected";
+  assert.throws(
+    () => mergeChanges(fresh, selected, pending),
+    /another session/,
+  );
+});
+
+test("catalogue reports partial discovery and disabled groups without hiding usable operations", async () => {
+  const { loadEditorConfiguration, catalogueGroups } = await ui();
+  const calls = [];
+  const base = await loadEditorConfiguration(async (url) => {
+    calls.push(url);
+    if (url === "/plugins") return response(inventory({}));
+    if (url.includes("?offset="))
+      return response({
+        discovery: "complete",
+        nextOffset: null,
+        capabilities: [
+          {
+            id: "plugin.fixture",
+            kind: "plugin",
+            availability: "inspect-required",
+          },
+          {
+            id: "plugin.missing-document",
+            kind: "plugin",
+            availability: "inspect-required",
+          },
+          { id: "plugin.disabled", kind: "plugin", availability: "disabled" },
+          {
+            id: "api.unknown",
+            kind: "api",
+            availability: "unsupported-namespace",
+          },
+        ],
+      });
+    return url.endsWith("plugin.fixture")
+      ? response(catalogueFixture())
+      : response({}, 404);
+  });
+  const groups = catalogueGroups(base, draftOf(base));
+  assert.equal(groups.length, 4);
+  assert.equal(groups[0].rows.filter((row) => row.eligible).length, 2);
+  assert.match(groups[1].reason, /Discovery unavailable/);
+  assert.equal(groups[2].reason, "disabled");
+  assert.equal(groups[3].reason, "unsupported-namespace");
+  assert.equal(
+    calls.some(
+      (url) =>
+        url.includes("?id=plugin.disabled") || url.includes("?id=api.unknown"),
+    ),
+    false,
+  );
+  assert.deepEqual(base.reviews, {});
+});
+
+test("catalogue save preserves requests arriving during contract revalidation", async () => {
+  const { saveConfiguration, approveRows, catalogueGroups } = await ui();
+  const base = await snapshot(inventory({}));
+  base.catalogue = [catalogueFixture()];
+  const draft = approveRows(
+    draftOf(base),
+    catalogueGroups(base, draftOf(base))[0].rows,
+  );
+  let revalidated = false;
+  let saved;
+  await saveConfiguration(base, draft, async (url, options) => {
+    if (url.includes("?id=")) {
+      revalidated = true;
+      return response(catalogueFixture());
+    }
+    if (url === "/plugins") {
+      assert.equal(revalidated, true);
+      return response(inventory({ [putKey]: put }));
+    }
+    if (options.method === "POST") {
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  });
+  assert.deepEqual(saved.configuration.readRequests[putKey], put);
+  assert.equal(Object.keys(saved.configuration.readRequests).length, 3);
+});

@@ -296,7 +296,7 @@ export const reviewsSchema = z
       ),
     "Invalid or excessive operation reviews",
   );
-function candidate(
+export function operationReview(
   pluginId: string,
   operation: DiscoveredOperation,
 ):
@@ -390,7 +390,7 @@ export class ApprovalRequests {
   request(pluginId: string, operation: DiscoveredOperation): never {
     if (operation.reason !== "NOT_ALLOWLISTED")
       throw new GatewayError("OPERATION_DISABLED", 403);
-    return this.enqueue(candidate(pluginId, operation));
+    return this.enqueue(operationReview(pluginId, operation));
   }
   requestPut(target: PutTarget): never {
     return this.enqueue(putReview(target));
@@ -506,7 +506,7 @@ export function applyReviews(
       ![null, "NOT_ALLOWLISTED", "PERMISSION_DENIED"].includes(operation.reason)
     )
       continue;
-    const review = reviews[reviewKey(candidate(pluginId, operation))];
+    const review = reviews[reviewKey(operationReview(pluginId, operation))];
     if (
       !review ||
       ("kind" in review && !["post", "plugin", "api"].includes(review.kind))

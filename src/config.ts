@@ -106,6 +106,6 @@ export const uiSchema = {
       },
     },
     "ui:help":
-      "Normally use Operation requests above. This advanced list approves GET reads only. Existing manual approvals are preserved. A matching rejected request blocks a manual approval too.",
+      "Normally use the Operation catalogue above. This advanced list approves GET reads only. Existing manual approvals are preserved. A matching rejected request blocks a manual approval too.",
   },
 };
