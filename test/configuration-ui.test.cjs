@@ -775,7 +775,7 @@ test("catalogue reports partial discovery and disabled groups without hiding usa
   const groups = catalogueGroups(base, draftOf(base));
   assert.equal(groups.length, 4);
   assert.equal(groups[0].rows.filter((row) => row.eligible).length, 2);
-  assert.match(groups[1].reason, /Discovery unavailable/);
+  assert.equal(groups[1].reason, "HTTP 404");
   assert.equal(groups[2].reason, "disabled");
   assert.equal(groups[3].reason, "unsupported-namespace");
   assert.equal(
@@ -815,4 +815,166 @@ test("catalogue save preserves requests arriving during contract revalidation", 
   });
   assert.deepEqual(saved.configuration.readRequests[putKey], put);
   assert.equal(Object.keys(saved.configuration.readRequests).length, 3);
+});
+
+test("explicit save upgrades only verified legacy contracts, preserves rejection and detects concurrent edits", async () => {
+  const { saveConfiguration, catalogueGroups } = await ui();
+  const catalogue = catalogueFixture();
+  const op = catalogue.operations.find((o) => o.method === "POST");
+  const old = {
+    ...op.review,
+    contractHash: "b".repeat(64),
+    decision: "approved",
+  };
+  delete old.contractVersion;
+  const oldKey = reviewKey(old);
+  op.compatibleKeys = [oldKey];
+  for (const decision of ["approved", "rejected"]) {
+    old.decision = decision;
+    const base = await snapshot(inventory({ [oldKey]: old }));
+    base.catalogue = [catalogue];
+    assert.equal(catalogueGroups(base, draftOf(base))[0].rows.length, 3);
+    let saved;
+    const fetcher = async (url, options) => {
+      if (url.includes("?id=")) return response(catalogue);
+      if (url === "/plugins") return response(inventory({ [oldKey]: old }));
+      if (options.method === "POST") {
+        saved = JSON.parse(options.body);
+        return response("saved");
+      }
+      return response(saved);
+    };
+    await saveConfiguration(base, draftOf(base), fetcher);
+    assert.equal(saved.configuration.readRequests[oldKey], undefined);
+    assert.equal(saved.configuration.readRequests[op.key].decision, decision);
+    assert.equal(saved.configuration.readRequests[op.key].contractVersion, 2);
+    assert.ok(configSchema.safeParse(saved.configuration).success);
+    await assert.rejects(
+      saveConfiguration(base, draftOf(base), async (url) => {
+        if (url.includes("?id=")) return response(catalogue);
+        return response(
+          inventory({ [oldKey]: { ...old, decision: "pending" } }),
+        );
+      }),
+      /another session/,
+    );
+    await assert.rejects(
+      saveConfiguration(base, draftOf(base), async () =>
+        response({ ...catalogue, operations: [] }),
+      ),
+      /legacy operation changed/,
+    );
+  }
+});
+
+test("catalogue distinguishes invalidation, missing operations, failed discovery and unknown legacy differences", async () => {
+  const { unavailableReviewReason, catalogueGroups } = await ui();
+  const catalogue = catalogueFixture();
+  const op = catalogue.operations.find((o) => o.method === "POST");
+  const saved = {
+    ...op.review,
+    inputSchema: { type: "object" },
+    description: "Old meaning",
+  };
+  assert.match(
+    unavailableReviewReason(saved, catalogue),
+    /documented meaning, accepted inputs changed/,
+  );
+  assert.match(
+    unavailableReviewReason(saved, { operations: [], reason: "HTTP 503" }),
+    /Discovery unavailable: HTTP 503/,
+  );
+  assert.match(
+    unavailableReviewReason(saved, { operations: [] }),
+    /no longer advertised/,
+  );
+  const read = catalogue.operations.find((o) => o.method === "GET");
+  assert.match(
+    unavailableReviewReason(
+      { ...read.review, schemaHash: "a".repeat(64) },
+      catalogue,
+    ),
+    /accepted inputs changed/,
+  );
+  const legacy = { ...op.review };
+  delete legacy.contractVersion;
+  assert.match(
+    unavailableReviewReason(legacy, catalogue),
+    /old response details were not stored/,
+  );
+  const base = await snapshot(inventory({ [reviewKey(legacy)]: legacy }));
+  base.catalogue = [catalogue];
+  const stale = catalogueGroups(base, draftOf(base))[0].rows.find(
+    (r) => r.key === reviewKey(legacy),
+  );
+  assert.equal(stale.eligible, false);
+  const draft = draftOf(base);
+  draft.reviews[reviewKey(legacy)].decision = "approved";
+  assert.equal(
+    catalogueGroups(base, draft)[0].rows.at(-1).status,
+    "invalidated",
+  );
+  base.catalogue = [];
+  base.catalogueError = "Discovery failed: HTTP 503";
+  const unavailable = catalogueGroups(base, draft)[0].rows[0];
+  assert.equal(unavailable.status, "unavailable");
+  assert.match(unavailable.reason, /Discovery failed: HTTP 503/);
+});
+
+test("resource reads need no approval and resource writes are revalidated per provider at save", async () => {
+  const { catalogueGroups, approveRows, saveConfiguration } = await ui();
+  const review = resourceReview({
+    collection: "routes",
+    provider: "example",
+    method: "PUT",
+    path: "/signalk/v2/api/resources/routes/{id}",
+    description: "Replace route",
+    inputSchema: { type: "object" },
+  });
+  const op = {
+    id: "put_resource",
+    method: "PUT",
+    key: reviewKey(review),
+    review,
+    provider: "example",
+    collection: "routes",
+    path: review.path,
+  };
+  const group = {
+    id: "resource.routes",
+    operations: [
+      {
+        id: "list_resources",
+        method: "GET",
+        approvalRequired: false,
+        review: null,
+        provider: "example",
+        collection: "routes",
+      },
+      op,
+    ],
+  };
+  const base = await snapshot(inventory({}));
+  base.catalogue = [group];
+  const rows = catalogueGroups(base, draftOf(base))[0].rows;
+  assert.equal(rows[0].status, "native");
+  assert.equal(rows[0].eligible, false);
+  const draft = approveRows(draftOf(base), rows);
+  assert.equal(Object.keys(draft.reviews).length, 1);
+  await assert.rejects(
+    saveConfiguration(base, draft, async () =>
+      response({
+        ...group,
+        operations: [
+          {
+            ...op,
+            key: null,
+            review: null,
+            reason: "RESOURCE_PUT_PROVIDER_AMBIGUOUS",
+          },
+        ],
+      }),
+    ),
+    /RESOURCE_PUT_PROVIDER_AMBIGUOUS/,
+  );
 });

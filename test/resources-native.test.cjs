@@ -289,6 +289,49 @@ test(
         },
       });
     }
+    const nativeCatalogue = (path, token) =>
+      fetch(`${f.baseUrl}${path}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    const catalogueRoot = "/plugins/signalk-mcp/catalogue";
+    const indexResponse = await nativeCatalogue(
+      catalogueRoot + "?offset=0",
+      f.tokens.admin,
+    );
+    assert.equal(indexResponse.status, 200);
+    const index = await indexResponse.json();
+    for (const collection of [
+      "routes",
+      "waypoints",
+      "regions",
+      "notes",
+      "charts",
+      "logentries",
+    ]) {
+      assert.ok(
+        index.capabilities.some((c) => c.id === `resource.${collection}`),
+      );
+      const response = await nativeCatalogue(
+        catalogueRoot + `?id=resource.${collection}`,
+        f.tokens.admin,
+      );
+      assert.equal(response.status, 200);
+      const catalogue = await response.json();
+      assert.ok(
+        catalogue.operations.some(
+          (o) =>
+            o.provider === "resource-fixture" &&
+            o.method === "POST" &&
+            o.review,
+        ),
+      );
+      assert.ok(
+        catalogue.operations.some(
+          (o) => o.method === "GET" && o.approvalRequired === false,
+        ),
+      );
+    }
+    assert.equal(calls.length, 0, "catalogue must read metadata only");
     const mutate = (operation, collection, body, id, principal = "writer") =>
       f.call(
         "execute_mutation",

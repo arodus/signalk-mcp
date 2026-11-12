@@ -83,7 +83,7 @@ function pluginFactory(app: App): Plugin {
       const result =
         typeof id === "string"
           ? await registry.catalogue(id)
-          : await registry.list(offset);
+          : await registry.catalogueIndex(offset);
       if (registry.authorize().permissions !== "admin")
         throw new GatewayError("PERMISSION_DENIED", 403);
       res.type("application/json").send(boundedJson(result, 1024 * 1024));

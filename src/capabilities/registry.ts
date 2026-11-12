@@ -33,6 +33,7 @@ import {
 } from "../puts.js";
 import {
   describeResource,
+  resourceCatalogue,
   describeResourceInput,
   mutateResource,
   isResourceMutation,
@@ -653,6 +654,15 @@ export class CapabilityRegistry {
   async catalogue(id: string) {
     if (this.authorize().permissions !== "admin")
       throw new GatewayError("PERMISSION_DENIED", 403);
+    if (id.startsWith("resource.")) {
+      const result = await resourceCatalogue(
+        { authorize: () => this.authorize(), get: this.get },
+        id.slice(9),
+      );
+      if (this.authorize().permissions !== "admin")
+        throw new GatewayError("PERMISSION_DENIED", 403);
+      return result;
+    }
     const plugin = await this.plugin(id);
     if (!plugin.enabled)
       return { id, reason: "PLUGIN_DISABLED", operations: [] };
@@ -668,13 +678,57 @@ export class CapabilityRegistry {
       if (![null, "NOT_ALLOWLISTED"].includes(operation.reason))
         return { ...description, review: null, key: null };
       const review = operationReview(plugin.id, operation);
-      return { ...description, review, key: reviewKey(review) };
+      const compatibleKeys =
+        !operation.api &&
+        operation.method !== "GET" &&
+        operation.legacyContractHash
+          ? [reviewKey(operationReview(plugin.id, operation, true))]
+          : [];
+      return { ...description, review, key: reviewKey(review), compatibleKeys };
     });
     if (this.authorize().permissions !== "admin")
       throw new GatewayError("PERMISSION_DENIED", 403);
     const current = await this.plugin(id);
     if (!current.enabled) throw new GatewayError("PLUGIN_DISABLED", 403);
     return { id, reason: null, operations: result };
+  }
+  async catalogueIndex(offset = 0) {
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    // The feature inventory is bounded at 256 plugins and 64 APIs.
+    const listing = await this.list(0, 512);
+    const capabilities = listing.capabilities.filter(
+      (c) => (c as { id: string }).id !== "api.resources",
+    );
+    try {
+      const { collections } = await listResourceCollections(
+        () => this.authorize(),
+        this.get,
+      );
+      for (const collection of Object.keys(collections).sort())
+        capabilities.push({
+          id: `resource.${collection}`,
+          kind: "resource",
+          availability: "inspect-required",
+        });
+    } catch (error) {
+      capabilities.push({
+        id: "resource.unavailable",
+        kind: "resource",
+        availability: "unavailable",
+        reason:
+          error instanceof GatewayError
+            ? error.code
+            : "RESOURCE_DISCOVERY_UNAVAILABLE",
+      });
+    }
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    return {
+      ...listing,
+      capabilities: capabilities.slice(offset, offset + 100),
+      nextOffset: offset + 100 < capabilities.length ? offset + 100 : null,
+    };
   }
   private async document(plugin: PluginInfo): Promise<unknown> {
     return plugin.api

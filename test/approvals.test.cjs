@@ -622,8 +622,12 @@ test("plugin HTTP mutation approvals bind each method separately and preserve PO
     (item) => item.kind === "post",
   );
   const { createHash } = require("node:crypto");
+  const legacy = { ...post };
+  delete legacy.contractVersion;
+  assert.equal(post.contractVersion, 2);
+  assert.notEqual(reviewKey(post), reviewKey(legacy));
   assert.equal(
-    reviewKey(post),
+    reviewKey(legacy),
     createHash("sha256")
       .update(
         JSON.stringify([

@@ -124,6 +124,7 @@ const postReviewSchema = z
     path: pluginRouteSchema,
     description: z.string().max(4096),
     inputSchema: z.record(z.string(), z.unknown()),
+    contractVersion: z.literal(2).optional(),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -147,6 +148,7 @@ const pluginReviewSchema = z
     path: pluginRouteSchema,
     description: z.string().max(4096),
     inputSchema: z.record(z.string(), z.unknown()),
+    contractVersion: z.literal(2).optional(),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -250,7 +252,7 @@ export function reviewKey(review: Review): string {
     return digest(["RESOURCE", review.contractHash]);
   if ("kind" in review && review.kind === "post")
     return digest([
-      "POST",
+      review.contractVersion === 2 ? "POST_V2" : "POST",
       review.pluginId,
       review.operationId,
       review.path,
@@ -260,7 +262,7 @@ export function reviewKey(review: Review): string {
     ]);
   if ("kind" in review && review.kind === "plugin")
     return digest([
-      "PLUGIN",
+      review.contractVersion === 2 ? "PLUGIN_V2" : "PLUGIN",
       review.method,
       review.pluginId,
       review.operationId,
@@ -299,6 +301,7 @@ export const reviewsSchema = z
 export function operationReview(
   pluginId: string,
   operation: DiscoveredOperation,
+  legacy = false,
 ):
   | ReadReview
   | z.infer<typeof apiReviewSchema>
@@ -325,7 +328,10 @@ export function operationReview(
       path: operation.path,
       description: operation.description,
       inputSchema: operation.inputSchema,
-      contractHash: operation.contractHash,
+      ...(!legacy ? { contractVersion: 2 as const } : {}),
+      contractHash: legacy
+        ? operation.legacyContractHash
+        : operation.contractHash,
       decision: "pending",
     });
   if (
@@ -341,7 +347,10 @@ export function operationReview(
       path: operation.path,
       description: operation.description,
       inputSchema: operation.inputSchema,
-      contractHash: operation.contractHash,
+      ...(!legacy ? { contractVersion: 2 as const } : {}),
+      contractHash: legacy
+        ? operation.legacyContractHash
+        : operation.contractHash,
       decision: "pending",
     });
   if (
@@ -506,7 +515,22 @@ export function applyReviews(
       ![null, "NOT_ALLOWLISTED", "PERMISSION_DENIED"].includes(operation.reason)
     )
       continue;
-    const review = reviews[reviewKey(operationReview(pluginId, operation))];
+    const candidates = [
+      reviews[reviewKey(operationReview(pluginId, operation))],
+    ];
+    if (
+      !operation.api &&
+      operation.method !== "GET" &&
+      operation.legacyContractHash
+    )
+      candidates.push(
+        reviews[reviewKey(operationReview(pluginId, operation, true))],
+      );
+    // A matching rejection must win across old and new contract formats.
+    const review =
+      candidates.find((r) => r?.decision === "rejected") ??
+      candidates.find((r) => r?.decision === "approved") ??
+      candidates.find(Boolean);
     if (
       !review ||
       ("kind" in review && !["post", "plugin", "api"].includes(review.kind))

@@ -50,7 +50,12 @@ test("all pinned plugin, native API and resource reviews retain their Zod 3 iden
         const key = `${native ? "native" : "plugin"}/${id}/${operation.method}/${operation.id}`;
         const queue = new ApprovalRequests();
         assert.throws(() => queue.request(id, operation), /APPROVAL_PENDING/);
-        const review = Object.values(queue.schema().properties)[0].default;
+        const proposed = Object.values(queue.schema().properties)[0].default;
+        const review = { ...proposed };
+        if (review.contractVersion === 2) {
+          delete review.contractVersion;
+          review.contractHash = operation.legacyContractHash;
+        }
         actual[key] = reviewKey(review);
         assert.equal(actual[key], baseline.reviews[key], key);
         const saved = configSchema.parse({

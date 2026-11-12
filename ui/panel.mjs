@@ -30,7 +30,7 @@ const css = `
 .mcp-config .mcp-operation pre { max-width:520px; max-height:220px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; margin:6px 0; font-size:11px; }
 .mcp-config .mcp-badge { display:inline-block; padding:3px 7px; border-radius:4px; font-size:12px; font-weight:600; white-space:nowrap; }
 .mcp-config .mcp-approved { background:#e6f4ea; color:#1e6234; }
-.mcp-config .mcp-pending { background:#fff2cc; color:#715400; }
+.mcp-config .mcp-pending, .mcp-config .mcp-invalidated, .mcp-config .mcp-unavailable { background:#fff2cc; color:#715400; }
 .mcp-config .mcp-rejected { background:#fce8e6; color:#97332c; }
 .mcp-config .mcp-actions { display:flex; gap:5px; flex-wrap:wrap; min-width:136px; }
 .mcp-config button { font:inherit; }
@@ -66,6 +66,9 @@ const status = {
   available: "Not approved",
   manual: "Manual approval",
   unsupported: "Unsupported",
+  invalidated: "Needs review",
+  unavailable: "Unavailable",
+  native: "Native permissions",
   approved: "Accepted",
   rejected: "Rejected",
 };
@@ -203,7 +206,16 @@ export default function Configuration() {
     h(
       "div",
       { className: "mcp-toolbar" },
-      h("h3", null, "Operation catalogue", base ? ` (${operationCount})` : ""),
+      h(
+        "h3",
+        null,
+        "Operation catalogue",
+        base
+          ? groupFilter
+            ? ` (${rows.filter((row) => !row.group).length} shown · ${operationCount} total)`
+            : ` (${operationCount} total)`
+          : "",
+      ),
       button("Refresh", refresh, {
         disabled: busy || Boolean(dirty),
         title: dirty
@@ -214,7 +226,7 @@ export default function Configuration() {
     h(
       "p",
       { className: "mcp-help" },
-      "Browse current plugin and native API operations. Approve reads or writes together for each plugin, or review them individually. All selections are staged until Save Configuration. New or changed operations need a new review; Signal K permissions still apply.",
+      "Browse current plugin, native API and resource operations. Approve reads or writes together for each plugin, or review them individually. All selections are staged until Save Configuration. New or changed actions need review; additional response fields do not. Save also upgrades verified legacy approvals. Signal K permissions still apply.",
     ),
     error
       ? h("div", { role: "alert", className: "mcp-notice mcp-error" }, error)
@@ -238,17 +250,17 @@ export default function Configuration() {
           h(
             "label",
             null,
-            h("span", null, "Plugin or API"),
+            h("span", null, "Plugin, API or resource"),
             h(
               "select",
               {
                 value: groupFilter,
-                "aria-label": "Plugin or API",
+                "aria-label": "Plugin, API or resource",
                 disabled: busy,
                 onChange: (event) => setGroupFilter(event.target.value),
                 style: { maxWidth: "100%", padding: "7px 9px" },
               },
-              h("option", { value: "" }, "All plugins and APIs"),
+              h("option", { value: "" }, "All groups"),
               ...groups.map((group) =>
                 h("option", { key: group.id, value: group.id }, group.id),
               ),
@@ -257,7 +269,7 @@ export default function Configuration() {
           h(
             "p",
             { className: "mcp-help" },
-            "Built-in data reads use Signal K permissions without approval. Native PUT and Resources writes appear below when requested: their exact source or provider must be identified. Up to 64 reviews can be saved; browsing does not use review slots.",
+            "Built-in data reads use Signal K permissions without approval. Resources lists each collection and provider. Native telemetry PUTs appear when requested, with an explicit path and handler source. Up to 64 reviews can be saved; browsing does not use review slots.",
           ),
           h(
             "div",
@@ -356,12 +368,7 @@ export default function Configuration() {
                       const plugin = item.kind === "plugin";
                       const resource = item.kind === "resource";
                       const api = item.kind === "api";
-                      const write =
-                        put ||
-                        post ||
-                        plugin ||
-                        resource ||
-                        (api && item.method !== "GET");
+                      const write = isWrite(item);
                       const absent =
                         !put &&
                         !resource &&
@@ -472,11 +479,13 @@ export default function Configuration() {
                               null,
                               put
                                 ? "Accept only this exact path and source after checking what it controls. Metadata and schema changes require a new review."
-                                : resource
-                                  ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
-                                  : post || plugin || api
-                                    ? "Approval applies to this exact method and route. Changes to the input schema or meaning require a new review. Check the provider's side effects and data permissions."
-                                    : "Check the provider's implementation for side effects and data permissions.",
+                                : row.status === "native"
+                                  ? "Native route and provider permissions apply; no gateway approval is required."
+                                  : resource
+                                    ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
+                                    : post || plugin || api
+                                      ? "Approval applies to this exact method and route. Changes to the input schema or meaning require a new review. Check the provider's side effects and data permissions."
+                                      : "Check the provider's implementation for side effects and data permissions.",
                             ),
                           ),
                         ),
@@ -523,26 +532,33 @@ export default function Configuration() {
                           h(
                             "div",
                             { className: "mcp-actions" },
-                            button("Accept", () => stage([row]), {
-                              disabled:
-                                busy ||
-                                absent ||
-                                !row.eligible ||
-                                item.decision === "approved",
-                              "aria-label": `Accept ${label}`,
-                            }),
-                            button(
-                              "Reject",
-                              () =>
-                                stage([{ ...row, eligible: true }], "rejected"),
-                              {
-                                disabled:
-                                  busy ||
-                                  (!row.eligible && !draft.reviews[key]) ||
-                                  item.decision === "rejected",
-                                "aria-label": `Reject ${label}`,
-                              },
-                            ),
+                            row.status === "native"
+                              ? h("small", null, "No approval needed")
+                              : button("Accept", () => stage([row]), {
+                                  disabled:
+                                    busy ||
+                                    absent ||
+                                    !row.eligible ||
+                                    item.decision === "approved",
+                                  "aria-label": `Accept ${label}`,
+                                }),
+                            row.status === "native"
+                              ? null
+                              : button(
+                                  "Reject",
+                                  () =>
+                                    stage(
+                                      [{ ...row, eligible: true }],
+                                      "rejected",
+                                    ),
+                                  {
+                                    disabled:
+                                      busy ||
+                                      (!row.eligible && !draft.reviews[key]) ||
+                                      item.decision === "rejected",
+                                    "aria-label": `Reject ${label}`,
+                                  },
+                                ),
                             draft.reviews[key] &&
                               (write || api || absent) &&
                               deleting !== key

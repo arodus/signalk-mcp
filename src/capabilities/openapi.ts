@@ -33,6 +33,7 @@ export interface DiscoveredOperation {
   inputSchema?: object;
   schemaIssue?: { location: string; keyword: string };
   contractHash?: string;
+  legacyContractHash?: string;
   input?: z.ZodObject<z.ZodRawShape>;
   parameters?: { name: string; location: "path" | "query" }[];
 }
@@ -313,48 +314,50 @@ export function discoverOperations(
               .join("\n");
             if (entry.description.length > 4096)
               throw new GatewayError("UNSUPPORTED_SCHEMA");
-            entry.contractHash = createHash("sha256")
-              .update(
-                boundedJson(
-                  resolvedContract(document, {
-                    parameters: raw.parameters ?? [],
-                    pathSummary: raw.summary ?? null,
-                    pathDescription: raw.description ?? null,
-                    security: operation.security ?? document.security ?? null,
-                    operation: nativeApi
-                      ? {
-                          ...operation,
-                          // Outputs are forwarded, not schema-validated. Bind their
-                          // transport and meaning without compiling response models.
-                          responses: record(operation.responses)
-                            ? Object.fromEntries(
-                                Object.entries(operation.responses).map(
-                                  ([status, response]) => {
-                                    const resolved = resolve(
-                                      document,
-                                      response,
-                                    );
-                                    return [
-                                      status,
-                                      {
-                                        description:
-                                          resolved.description ?? null,
-                                        mediaTypes: record(resolved.content)
-                                          ? Object.keys(resolved.content).sort()
-                                          : [],
-                                      },
-                                    ];
-                                  },
-                                ),
-                              )
-                            : null,
-                        }
-                      : operation,
-                  }),
-                  32768,
-                ),
-              )
-              .digest("hex");
+            // Outputs are forwarded, not schema-validated. Bind their transport
+            // and documented meaning without binding individual payload fields.
+            const responses = record(operation.responses)
+              ? Object.fromEntries(
+                  Object.entries(operation.responses).map(
+                    ([status, response]) => {
+                      const resolved = resolve(document, response);
+                      return [
+                        status,
+                        {
+                          description: resolved.description ?? null,
+                          mediaTypes: record(resolved.content)
+                            ? Object.keys(resolved.content).sort()
+                            : [],
+                        },
+                      ];
+                    },
+                  ),
+                )
+              : null;
+            const fingerprint = (contract: unknown) =>
+              createHash("sha256")
+                .update(
+                  boundedJson(
+                    resolvedContract(document, {
+                      parameters: raw.parameters ?? [],
+                      pathSummary: raw.summary ?? null,
+                      pathDescription: raw.description ?? null,
+                      security: operation.security ?? document.security ?? null,
+                      operation: contract,
+                    }),
+                    32768,
+                  ),
+                )
+                .digest("hex");
+            entry.contractHash = fingerprint({ ...operation, responses });
+            if (!nativeApi) {
+              try {
+                entry.legacyContractHash = fingerprint(operation);
+              } catch {
+                // Legacy matching is optional: unsupported output references
+                // cannot disable an otherwise supported action contract.
+              }
+            }
           }
           if (!nativeApi && approval && method === "get") {
             entry.enabled =

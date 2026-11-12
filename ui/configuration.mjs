@@ -18,6 +18,14 @@ async function request(fetcher, url, options = {}) {
     ...options,
   });
   if (!response.ok) {
+    if (url.startsWith(CATALOGUE_URL)) {
+      const body = await response.json().catch(() => null);
+      const code =
+        typeof body?.error === "string" && /^[A-Z_]{1,80}$/.test(body.error)
+          ? body.error
+          : `HTTP ${response.status}`;
+      throw new Error(code);
+    }
     throw new Error(
       response.status === 401 || response.status === 403
         ? "Sign in to Signal K as an administrator to manage these settings."
@@ -134,7 +142,7 @@ async function loadGroup(id, fetcher) {
     !object(group) ||
     group.id !== id ||
     !Array.isArray(group.operations) ||
-    group.operations.length > 128
+    group.operations.length > (id.startsWith("resource.") ? 384 : 128)
   )
     throw new Error("Invalid operation catalogue. Refresh and try again.");
   return group;
@@ -170,20 +178,30 @@ export async function loadEditorConfiguration(fetcher = nativeFetch) {
     // Bound simultaneous metadata reads. Never invoke provider operations.
     const groups = capabilities.filter(
       (c) =>
-        c.kind === "plugin" || (c.kind === "api" && c.id !== "api.resources"),
+        c.kind === "resource" ||
+        c.kind === "plugin" ||
+        (c.kind === "api" && c.id !== "api.resources"),
     );
     for (let index = 0; index < groups.length; index += 3) {
       catalogue.push(
         ...(await Promise.all(
           groups.slice(index, index + 3).map(async (c) => {
-            if (["disabled", "unsupported-namespace"].includes(c.availability))
-              return { id: c.id, reason: c.availability, operations: [] };
-            try {
-              return await loadGroup(c.id, fetcher);
-            } catch {
+            if (
+              ["disabled", "unsupported-namespace", "unavailable"].includes(
+                c.availability,
+              )
+            )
               return {
                 id: c.id,
-                reason: "Discovery unavailable or unsupported OpenAPI document",
+                reason: c.reason ?? c.availability,
+                operations: [],
+              };
+            try {
+              return await loadGroup(c.id, fetcher);
+            } catch (error) {
+              return {
+                id: c.id,
+                reason: error.message,
                 operations: [],
               };
             }
@@ -203,7 +221,7 @@ export function reviewGroup(review) {
     : review.kind === "put"
       ? "native.put"
       : review.kind === "resource"
-        ? `resource.${review.provider}`
+        ? `resource.${review.collection}`
         : `plugin.${review.pluginId}`;
 }
 
@@ -219,16 +237,30 @@ export function catalogueGroups(base, draft) {
   const groups = (base.catalogue ?? []).map((group) => ({
     ...group,
     rows: group.operations.map((operation, index) => {
-      const key = operation.key ?? `unsupported:${group.id}:${index}`;
-      seen.add(key);
+      const keys = [operation.key, ...(operation.compatibleKeys ?? [])].filter(
+        Boolean,
+      );
+      const key =
+        keys.find((key) => draft.reviews[key]?.decision === "rejected") ??
+        keys.find((key) => draft.reviews[key]?.decision === "approved") ??
+        keys.find((key) => draft.reviews[key]) ??
+        operation.key ??
+        `unsupported:${group.id}:${index}`;
+      keys.forEach((key) => seen.add(key));
       const item = draft.reviews[key] ??
         operation.review ?? {
-          ...(group.id.startsWith("api.")
-            ? { kind: "api", api: group.id.slice(4) }
-            : {
-                pluginId: group.id.slice(7),
-                ...(operation.method === "GET" ? {} : { kind: "plugin" }),
-              }),
+          ...(group.id.startsWith("resource.")
+            ? {
+                kind: "resource",
+                collection: operation.collection,
+                provider: operation.provider,
+              }
+            : group.id.startsWith("api.")
+              ? { kind: "api", api: group.id.slice(4) }
+              : {
+                  pluginId: group.id.slice(7),
+                  ...(operation.method === "GET" ? {} : { kind: "plugin" }),
+                }),
           operationId: operation.id,
           method: operation.method,
           path: operation.path,
@@ -246,7 +278,9 @@ export function catalogueGroups(base, draft) {
             ? operation.enabled
               ? "manual"
               : "available"
-            : "unsupported"),
+            : operation.approvalRequired === false
+              ? "native"
+              : "unsupported"),
       };
     }),
   }));
@@ -255,22 +289,68 @@ export function catalogueGroups(base, draft) {
     const id = reviewGroup(item);
     let group = groups.find((group) => group.id === id);
     if (!group) {
-      group = { id, operations: [], rows: [] };
+      group = { id, operations: [], rows: [], reason: base.catalogueError };
       groups.push(group);
     }
     // Old plugin/API contracts remain visible but cannot be bulk-approved.
-    const eligible = ["put", "resource"].includes(item.kind);
+    const eligible = item.kind === "put";
     group.rows.push({
       key,
       item,
       eligible,
-      status: item.decision,
-      reason: eligible
-        ? ""
-        : "Not in the current catalogue. Refresh to check availability.",
+      status:
+        !eligible && item.decision === "approved"
+          ? group.reason
+            ? "unavailable"
+            : "invalidated"
+          : item.decision,
+      reason: eligible ? "" : unavailableReviewReason(item, group),
     });
   }
   return groups;
+}
+
+export function unavailableReviewReason(review, group) {
+  if (group.reason)
+    return `Discovery unavailable: ${group.reason}. The saved approval is retained; availability could not be checked.`;
+  const operations =
+    review.kind === "resource"
+      ? group.operations.filter((op) => op.provider === review.provider)
+      : group.operations;
+  const current =
+    operations.find(
+      (operation) =>
+        operation.id === review.operationId &&
+        operation.method === (review.method ?? "GET"),
+    ) ??
+    operations.find(
+      (operation) =>
+        operation.path === review.path &&
+        operation.method === (review.method ?? "GET"),
+    );
+  if (!current)
+    return "Operation no longer advertised by this provider. The saved approval is retained.";
+  if (!current.review)
+    return `Operation is currently unsupported: ${current.reason ?? "unsupported contract"}.`;
+  const changes = [];
+  if (review.operationId && current.id !== review.operationId)
+    changes.push("operation ID");
+  if (current.path !== review.path) changes.push("endpoint path");
+  if (current.description !== review.description)
+    changes.push("documented meaning");
+  if (
+    (review.inputSchema && !same(review.inputSchema, current.inputSchema)) ||
+    (review.schemaHash && review.schemaHash !== current.review.schemaHash)
+  )
+    changes.push("accepted inputs");
+  if (changes.length)
+    return `Approval invalidated: ${changes.join(", ")} changed. Review the current operation above.`;
+  if (
+    (review.kind === "post" || review.kind === "plugin") &&
+    review.contractVersion !== 2
+  )
+    return "Legacy approval no longer matches. Its fingerprint included response fields; the old response details were not stored. Review the current operation once to use the new action-only binding.";
+  return "Approval invalidated: security requirements, parameter documentation, or response status/transport/meaning changed. Review the current operation above.";
 }
 
 export function approveRows(draft, rows) {
@@ -380,13 +460,13 @@ export function mergeChanges(base, draft, current) {
 }
 
 export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
+  const groups = new Map();
   if (base.catalogue) {
-    const groups = new Map();
     for (const [key, review] of Object.entries(draft.reviews)) {
       if (
         same(base.reviews[key], review) ||
         review.decision !== "approved" ||
-        ["put", "resource"].includes(review.kind)
+        review.kind === "put"
       )
         continue;
       const id = reviewGroup(review);
@@ -395,18 +475,59 @@ export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
       if (
         latest.reason ||
         !latest.operations.some(
-          (operation) => operation.key === key && operation.review,
+          (operation) =>
+            (operation.key === key ||
+              operation.compatibleKeys?.includes(key)) &&
+            operation.review,
         )
       )
         throw new Error(
-          "A selected operation changed or is unavailable. Discard changes and refresh the catalogue before approving it.",
+          `${review.method ?? "GET"} ${review.path}: selected operation changed or is unavailable. ${unavailableReviewReason(review, latest)} Refresh before approving it.`,
         );
     }
   }
   // Read configuration after metadata checks so requests/edits arriving during
   // discovery are included in the merge immediately before the native save.
+  let saving = draft;
+  if (base.catalogue) {
+    const reviews = { ...draft.reviews };
+    for (const group of base.catalogue)
+      for (const operation of group.operations) {
+        if (!operation.review) continue;
+        for (const previous of operation.compatibleKeys ?? []) {
+          const old = reviews[previous];
+          if (!old) continue;
+          // An exact legacy match supplies evidence for migration; never infer an
+          // action binding from an unmatched hash or from inputs alone.
+          if (!groups.has(group.id))
+            groups.set(group.id, await loadGroup(group.id, fetcher));
+          const fresh = groups.get(group.id);
+          if (
+            fresh.reason ||
+            !fresh.operations.some(
+              (op) =>
+                op.key === operation.key &&
+                op.compatibleKeys?.includes(previous),
+            )
+          )
+            throw new Error(
+              "A legacy operation changed during approval migration. Refresh before saving.",
+            );
+          const existing = reviews[operation.key];
+          reviews[operation.key] = {
+            ...operation.review,
+            decision:
+              old.decision === "rejected" || existing?.decision === "rejected"
+                ? "rejected"
+                : (existing?.decision ?? old.decision),
+          };
+          delete reviews[previous];
+        }
+      }
+    saving = { ...draft, reviews };
+  }
   const current = await loadConfiguration(fetcher);
-  const options = mergeChanges(base, draft, current);
+  const options = mergeChanges(base, saving, current);
   // Only Signal K's existing admin configuration route writes settings.
   await request(fetcher, CONFIG_URL, {
     method: "POST",
