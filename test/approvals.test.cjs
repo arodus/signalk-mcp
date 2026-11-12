@@ -777,3 +777,38 @@ test("standing PUT rules match path segments, deny before allow, and cannot auth
     false,
   );
 });
+
+test("saved decisions do not consume the 64 unsaved request slots", () => {
+  const { operationReview } = require("../dist/approvals.js");
+  const [read] = operations();
+  const saved = Object.fromEntries(
+    Array.from({ length: 150 }, (_, i) => {
+      const review = operationReview(`saved-${i}`, read);
+      review.decision = ["approved", "rejected", "pending"][i % 3];
+      return [reviewKey(review), review];
+    }),
+  );
+  const config = configSchema.parse({ readRequests: saved });
+  assert.equal(Object.keys(config.readRequests).length, 150);
+  const requests = new ApprovalRequests();
+  requests.reset(config.readRequests);
+  assert.throws(() => requests.request("saved-1", read), /APPROVAL_REJECTED/);
+  assert.throws(() => requests.request("saved-2", read), /APPROVAL_PENDING/);
+  for (let i = 0; i < 64; i++)
+    assert.throws(() => requests.request(`new-${i}`, read), /APPROVAL_PENDING/);
+  assert.throws(() => requests.request("new-0", read), /APPROVAL_PENDING/);
+  assert.throws(
+    () => requests.request("overflow", read),
+    /APPROVAL_QUEUE_FULL/,
+  );
+  assert.equal(Object.keys(queued(requests)).length, 214);
+  assert.equal(
+    applyReviews([read], "new-0", config.readRequests, reader)[0].enabled,
+    false,
+  );
+  // Native Save/restart adopts the persisted entries and starts a fresh queue.
+  const persisted = configSchema.parse({ readRequests: queued(requests) });
+  requests.reset(persisted.readRequests);
+  assert.throws(() => requests.request("after-save", read), /APPROVAL_PENDING/);
+  assert.equal(Object.keys(queued(requests)).length, 215);
+});

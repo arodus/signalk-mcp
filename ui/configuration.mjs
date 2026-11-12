@@ -392,10 +392,6 @@ export function approveRows(draft, rows) {
     if (!row.eligible) continue;
     reviews[row.key] = { ...row.item, decision: "approved" };
   }
-  if (Object.keys(reviews).length > 64)
-    throw new Error(
-      "This selection exceeds the 64 saved-review limit. Select fewer operations or remove obsolete reviews before saving.",
-    );
   return { ...draft, reviews };
 }
 
@@ -422,7 +418,6 @@ export function validateSettings(settings) {
   const approvals = settings.pluginOperations;
   if (
     !Array.isArray(approvals) ||
-    approvals.length > 64 ||
     approvals.some(
       (approval) =>
         !approvalSchema.safeParse(approval).success ||
@@ -435,7 +430,7 @@ export function validateSettings(settings) {
     ).size !== approvals.length
   )
     throw new Error(
-      "Check manual approvals: unique plugin and operation IDs, a GET path and confirmed read-only behavior are required (maximum 64).",
+      "Check manual approvals: unique plugin and operation IDs, a GET path and confirmed read-only behavior are required.",
     );
 }
 
@@ -474,10 +469,6 @@ export function mergeChanges(base, draft, current) {
       reviews[key] = draft.reviews[key];
     }
   }
-  if (Object.keys(reviews).length > 64)
-    throw new Error(
-      "The 64 saved-review limit has been reached. Remove obsolete reviews before saving.",
-    );
   const configuration = {
     ...current.options.configuration,
     readRequests: reviews,

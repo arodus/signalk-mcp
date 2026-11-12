@@ -305,11 +305,10 @@ export const reviewsSchema = z
   .record(z.string().regex(/^[a-f0-9]{64}$/), reviewSchema)
   .refine(
     (reviews) =>
-      Object.keys(reviews).length <= 64 &&
       Object.entries(reviews).every(
         ([key, review]) => key === reviewKey(review),
       ),
-    "Invalid or excessive operation reviews",
+    "Invalid operation reviews",
   )
   .transform(migratePutReviews);
 
@@ -424,8 +423,10 @@ export function putReview(target: PutTarget): PutReview {
 // Pending requests stay in memory until the admin saves the native settings form.
 export class ApprovalRequests {
   private reviews: Record<string, Review> = {};
+  private unsavedCount = 0;
   reset(reviews: Record<string, Review> = {}) {
     this.reviews = structuredClone(reviews);
+    this.unsavedCount = 0;
   }
   request(pluginId: string, operation: DiscoveredOperation): never {
     if (operation.reason !== "NOT_ALLOWLISTED")
@@ -449,9 +450,10 @@ export class ApprovalRequests {
   private enqueue(review: Review): never {
     const key = reviewKey(review);
     if (!this.reviews[key]) {
-      if (Object.keys(this.reviews).length >= 64)
+      if (this.unsavedCount >= 64)
         throw new GatewayError("APPROVAL_QUEUE_FULL", 429);
       this.reviews[key] = review;
+      this.unsavedCount++;
     }
     throw new GatewayError(
       this.reviews[key].decision === "rejected"
@@ -466,7 +468,7 @@ export class ApprovalRequests {
       title: "Operation requests",
       additionalProperties: false,
       description:
-        "Refresh this page after a blocked MCP request. Review each plugin operation, exact native PUT target or resource write, select Accept or Reject, then Save Configuration. Check the target, provider, meaning and input constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
+        "Refresh this page after a blocked MCP request. Review each plugin operation, exact native PUT target or resource write, select Accept or Reject, then Save Configuration. Check the target, provider, meaning and input constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 new unsaved pending requests are retained. Saved decisions do not count toward this limit.",
       properties: Object.fromEntries(
         Object.entries(this.reviews).map(([key, review]) => [
           key,

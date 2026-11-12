@@ -17,7 +17,7 @@ export const configSchema = z.preprocess(
   },
   z
     .object({
-      pluginOperations: z.array(approvalSchema).max(64).default([]),
+      pluginOperations: z.array(approvalSchema).default([]),
       readRequests: reviewsSchema.default({}),
       localTlsServerName: z
         .string()
@@ -55,7 +55,6 @@ export const schema = {
       type: "array",
       title: "Manual plugin read approvals (advanced)",
       default: [],
-      maxItems: 64,
       items: {
         type: "object",
         required: ["pluginId", "operationId", "method", "path", "readOnly"],

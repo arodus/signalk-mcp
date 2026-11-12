@@ -614,7 +614,7 @@ export default function Configuration() {
           h(
             "p",
             { className: "mcp-help" },
-            "Built-in data reads use Signal K permissions without approval. Resources lists each collection and provider. Telemetry PUTs have their own table below. Up to 64 reviews can be saved; browsing does not use review slots.",
+            "Built-in data reads use Signal K permissions without approval. Resources lists each collection and provider. Telemetry PUTs have their own table below. Saved approvals and rejections have no entry limit. Only new unsaved pending requests are capped at 64.",
           ),
           approvalTable(
             rows,
@@ -853,7 +853,7 @@ export default function Configuration() {
                   },
                 ]),
               {
-                disabled: busy || draft.settings.pluginOperations.length >= 64,
+                disabled: busy,
               },
             ),
           ),

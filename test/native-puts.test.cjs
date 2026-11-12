@@ -626,7 +626,22 @@ test(
     settings.configuration.readRequests = {
       [op.key]: { ...op.review, decision: "approved" },
     };
+    // Saved approvals and rejections may exceed the unsolicited request cap.
+    const { reviewKey } = require("../dist/approvals.js");
+    for (let i = 0; i < 100; i++) {
+      const rule = {
+        ...op.review,
+        path: `electrical.fixture${i}.*`,
+        decision: i % 2 ? "approved" : "rejected",
+      };
+      settings.configuration.readRequests[reviewKey(rule)] = rule;
+    }
     await f.saveConfig(settings);
+    assert.equal(Object.keys(f.reviews()).length, 101);
+    assert.equal(
+      Object.keys((await f.readConfig()).configuration.readRequests).length,
+      101,
+    );
     // Registered only AFTER the standing rule was saved.
     const future = "electrical.switches.mcpTest.future";
     let calls = 0;

@@ -691,7 +691,7 @@ test("catalogue save rejects changed, removed or disabled contracts before writi
   }
 });
 
-test("catalogue bulk selection preserves stricter reviews and rejects capacity overflow atomically", async () => {
+test("catalogue bulk selection preserves stricter reviews beyond 64 saved entries", async () => {
   const { approveRows, catalogueGroups, mergeChanges } = await ui();
   const group = catalogueFixture();
   const operation = group.operations.find((o) => o.method === "GET");
@@ -710,10 +710,8 @@ test("catalogue bulk selection preserves stricter reviews and rejects capacity o
   assert.equal(draft.reviews[operation.key].decision, "approved");
   const full = draftOf(base);
   for (let i = 0; i < 63; i++) full.reviews[`existing-${i}`] = clone(stored);
-  assert.throws(
-    () => approveRows(full, catalogueGroups(base, full)[0].rows),
-    /64 saved-review limit/,
-  );
+  const expanded = approveRows(full, catalogueGroups(base, full)[0].rows);
+  assert.ok(Object.keys(expanded.reviews).length > 64);
   assert.equal(Object.keys(full.reviews).length, 64);
   const fresh = await snapshot(inventory({}));
   const pending = await snapshot(
@@ -1059,4 +1057,41 @@ test("UI migration preserves saved telemetry decisions and saves source-free app
     return response(saved);
   });
   assert.deepEqual(saved.configuration.readRequests, { [putKey]: migrated });
+});
+
+test("one save persists more than 64 reviews and advanced manual approvals", async () => {
+  const { approveRows, saveConfiguration } = await ui();
+  const base = await snapshot(inventory({}));
+  const rows = Array.from({ length: 150 }, (_, i) => {
+    const item = { ...review, operationId: `read-${i}`, path: `/read-${i}` };
+    return { key: reviewKey(item), item, eligible: true };
+  });
+  const draft = approveRows(draftOf(base), rows);
+  draft.reviews[rows[0].key].decision = "rejected";
+  draft.settings.pluginOperations = Array.from({ length: 100 }, (_, i) => ({
+    pluginId: "fixture",
+    operationId: `manual-${i}`,
+    method: "GET",
+    path: `/manual-${i}`,
+    readOnly: true,
+    permission: "readonly",
+  }));
+  let saved;
+  let writes = 0;
+  const result = await saveConfiguration(base, draft, async (url, options) => {
+    if (url === "/plugins") return response(inventory({}));
+    if (options.method === "POST") {
+      writes++;
+      saved = JSON.parse(options.body);
+      assert.equal(configSchema.safeParse(saved.configuration).success, true);
+      return response("saved");
+    }
+    return response(saved);
+  });
+  assert.equal(writes, 1);
+  assert.equal(Object.keys(result.reviews).length, 150);
+  assert.equal(result.reviews[rows[0].key].decision, "rejected");
+  assert.equal(result.settings.pluginOperations.length, 100);
+  const { schema } = require("../dist/config.js");
+  assert.equal(schema.properties.pluginOperations.maxItems, undefined);
 });
