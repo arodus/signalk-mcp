@@ -265,6 +265,11 @@ test(
         "x-fixture": { keep: null },
       },
     };
+    resourceBodies.wiringDevices = {
+      name: "Synthetic lamp",
+      watts: 0,
+      spare: null,
+    };
     for (const type of Object.keys(resourceBodies)) {
       resourcesApi.register("resource-fixture", {
         type,
@@ -300,14 +305,7 @@ test(
     );
     assert.equal(indexResponse.status, 200);
     const index = await indexResponse.json();
-    for (const collection of [
-      "routes",
-      "waypoints",
-      "regions",
-      "notes",
-      "charts",
-      "logentries",
-    ]) {
+    for (const collection of Object.keys(resourceBodies)) {
       assert.ok(
         index.capabilities.some((c) => c.id === `resource.${collection}`),
       );

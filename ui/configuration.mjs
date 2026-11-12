@@ -103,7 +103,8 @@ export async function loadConfiguration(fetcher = nativeFetch) {
               "permission" in review
             : review.kind === "resource"
               ? !["POST", "PUT", "DELETE"].includes(review.method) ||
-                !resourceCollectionSchema.safeParse(review.collection).success ||
+                !resourceCollectionSchema.safeParse(review.collection)
+                  .success ||
                 typeof review.provider !== "string" ||
                 !review.provider ||
                 review.path !==

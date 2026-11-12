@@ -324,3 +324,9 @@ Telemetry PUTs now use a separate admin table with manual exact paths and standi
 Local `npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 152 portable tests, 69 native passes and three existing optional skips. Native tests cover admin-only metadata previews, no dispatch during review, handler ambiguity, registration of a new path after a rule was saved, invalid values, native permissions and saved rejection. `git diff --check` passed. These changes were not freshly tested across the entire Node 22/24 and Signal K 2.32.0/2.34.0 matrix.
 
 The real native Admin UI was checked at 390, 1280 and 1920 pixels without horizontal page overflow. A synthetic legacy approval appeared accepted automatically. Manual exact-path and wildcard entries plus an API read were staged across both tables and persisted in one native Save, then verified after navigation. The saved fixture contained four approvals and no legacy source fields. No provider command was invoked during UI review. The [telemetry screenshot](images/telemetry-put-approvals.jpg) contains only synthetic data.
+
+## Catalogue rebase onto custom Resources support (2026-11-12)
+
+Rebased the catalogue and telemetry approval work onto `41fe20e` from `main` (custom resource collections, PR #54). Conflict resolution retains both standing telemetry rules and the shared custom collection validation. Catalogue tests now include discovered custom collections and a real temporary native `wiringDevices` provider; existing native read/write permissions and sole-provider PUT restrictions remain intact.
+
+`npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 155 portable tests and 69 native tests, with four optional skips (production History, Codex, Hermes and the separately installed published Wiring package). The native custom-provider tests run with synthetic data. `git diff --check` passed. Remote CI and the complete compatibility matrix were not rerun locally.

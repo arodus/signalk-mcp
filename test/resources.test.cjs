@@ -818,10 +818,7 @@ test("admin resource catalogue covers every advertised type and provider without
   assert.ok(!index.capabilities.some((c) => c.id === "api.resources"));
   for (const collection of Object.keys(f.state.collections)) {
     const group = await f.registry.catalogue(`resource.${collection}`);
-    if (collection === "custom") {
-      assert.equal(group.reason, "UNSUPPORTED_RESOURCE_COLLECTION");
-      continue;
-    }
+    assert.equal(group.reason, null);
     assert.equal(group.operations.length, collection === "logentries" ? 6 : 5);
     for (const op of group.operations) {
       assert.equal(op.provider, "example");

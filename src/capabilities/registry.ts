@@ -517,7 +517,7 @@ export class CapabilityRegistry {
             reason: "PER_TARGET_APPROVAL_REQUIRED",
             executionTool: "put_value",
             description:
-              "Submit one approved path/source action. Never automatically retry an unknown outcome. Use put_value or execute_mutation; execute_capability only reads.",
+              "Submit one approved telemetry path action using native handler selection. Never automatically retry an unknown outcome. Use put_value or execute_mutation; execute_capability only reads.",
             inputSchema: toJsonSchema(putInput),
           },
         ],
