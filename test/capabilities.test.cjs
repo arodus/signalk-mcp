@@ -594,3 +594,81 @@ test("TLS verification names accept DNS names and reject destination syntax", ()
       name,
     );
 });
+
+test("admin catalogue discovers exact review candidates without execution or queued approvals", async () => {
+  const { app, user } = registryFixture();
+  const { ApprovalRequests, reviewKey } = require("../dist/approvals.js");
+  const requests = new ApprovalRequests();
+  const document = spec();
+  document.paths["/toggle"] = {
+    post: { operationId: "toggle", summary: "Toggle fixture" },
+  };
+  document.paths["/settings"] = { put: { operationId: "settings" } };
+  const calls = [];
+  const registry = new CapabilityRegistry(
+    app,
+    "Bearer token",
+    configSchema.parse({}),
+    () => true,
+    async (route) => {
+      calls.push(route);
+      return document;
+    },
+    requests,
+  );
+  await assert.rejects(
+    registry.catalogue("plugin.example"),
+    /PERMISSION_DENIED/,
+  );
+  assert.deepEqual(calls, []);
+  user.permissions = "admin";
+  const catalogue = await registry.catalogue("plugin.example");
+  assert.deepEqual(calls, ["/skServer/openapi/plugins/example"]);
+  assert.equal(catalogue.operations.length, 3);
+  for (const operation of catalogue.operations.filter((o) => o.review)) {
+    assert.equal(operation.key, reviewKey(operation.review));
+    assert.equal(operation.review.decision, "pending");
+    assert.equal(operation.enabled, false);
+  }
+  assert.equal(
+    catalogue.operations.find((o) => o.id === "settings").review,
+    null,
+  );
+  assert.deepEqual(requests.schema().properties, {});
+  assert.deepEqual(
+    (await registry.catalogue("plugin.disabled")).operations,
+    [],
+  );
+  assert.equal(calls.length, 1);
+  await assert.rejects(
+    registry.catalogue("plugin.missing"),
+    /CAPABILITY_NOT_FOUND/,
+  );
+  const first = catalogue.operations.find((o) => o.id === "toggle").key;
+  document.paths["/toggle"].post.summary = "Changed meaning";
+  assert.notEqual(
+    (await registry.catalogue("plugin.example")).operations.find(
+      (o) => o.id === "toggle",
+    ).key,
+    first,
+  );
+});
+
+test("catalogue rechecks administrator access after metadata discovery", async () => {
+  const { app, user } = registryFixture();
+  user.permissions = "admin";
+  const registry = new CapabilityRegistry(
+    app,
+    "Bearer token",
+    configSchema.parse({}),
+    () => true,
+    async () => {
+      user.permissions = "readonly";
+      return spec();
+    },
+  );
+  await assert.rejects(
+    registry.catalogue("plugin.example"),
+    /PERMISSION_DENIED/,
+  );
+});

@@ -235,7 +235,7 @@ export function localActions(
           )
       )
         throw new GatewayError("INVALID_LOCAL_ROUTE");
-      return send("PUT", path, body);
+      return send("PUT", path, { value: body.value });
     },
     getRequest: (id) => {
       if (

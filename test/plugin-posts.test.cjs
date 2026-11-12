@@ -559,3 +559,77 @@ test("fixed-local plugin mutation transport preserves methods, bearer and mixed-
   );
   assert.equal(calls.length, 5);
 });
+
+test("all plugin mutation approvals survive added response fields but still bind action and response meaning", async () => {
+  const { operationReview, reviewKey } = require("../dist/approvals.js");
+  for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+    const f = fixture(method);
+    const op = f.doc.paths["/action/{id}"][method.toLowerCase()];
+    op.responses[200].content = {
+      "application/json": {
+        schema: { type: "object", properties: { ok: { type: "boolean" } } },
+      },
+    };
+    const discovered = () =>
+      discoverOperations(f.doc, "fixture", [], writer)[0];
+    const legacy = operationReview("fixture", discovered(), true);
+    legacy.decision = "approved";
+    f.config.readRequests = { [reviewKey(legacy)]: legacy };
+    await f.execute(); // Old reviews still work when the full old contract matches.
+    await assert.rejects(
+      (async () => {
+        op.responses[200].content["application/json"].schema.properties.extra =
+          { type: "string" };
+        await f.execute();
+      })(),
+      /APPROVAL_PENDING/,
+    );
+    f.approve();
+    const v2 = Object.values(f.config.readRequests)[0];
+    assert.equal(v2.contractVersion, 2);
+    const key = reviewKey(v2);
+    op.responses[200].content["application/json"].schema.properties.more = {
+      type: "number",
+    };
+    assert.equal(reviewKey(operationReview("fixture", discovered())), key);
+    await f.execute();
+    assert.equal(f.calls.length, 2);
+    for (const change of [
+      (o) => {
+        o.security = [{ bearerAuth: [] }];
+      },
+      (o) => {
+        o.parameters[0].description = "Different target";
+      },
+      (o) => {
+        o.requestBody.content[
+          "application/json"
+        ].schema.properties.level.maximum = 9;
+      },
+      (o) => {
+        o.description = "Different action";
+      },
+      (o) => {
+        o.responses[200].description = "Different response meaning";
+      },
+      (o) => {
+        o.responses[202] = { description: "Accepted" };
+      },
+      (o) => {
+        o.responses[200].content["application/problem+json"] = {};
+      },
+    ]) {
+      const original = globalThis.structuredClone(op);
+      change(op);
+      await assert.rejects(f.execute(), /APPROVAL_PENDING/);
+      for (const k of Object.keys(op)) delete op[k];
+      Object.assign(op, original);
+    }
+    assert.equal(f.calls.length, 2);
+    // Matching legacy rejections also override a new-format approval.
+    const rejected = operationReview("fixture", discovered(), true);
+    rejected.decision = "rejected";
+    f.config.readRequests[reviewKey(rejected)] = rejected;
+    await assert.rejects(f.execute(), /APPROVAL_REJECTED/);
+  }
+});

@@ -1,7 +1,9 @@
 import { resourceCollectionSchema } from "../dist/capabilities/resource-schemas.js";
+import { putRuleSchema } from "../dist/put-rules.js";
 import { approvalSchema } from "../dist/capabilities/schemas.js";
 
 const CONFIG_URL = "/plugins/signalk-mcp/config";
+const CATALOGUE_URL = "/plugins/signalk-mcp/catalogue";
 // Follow the Admin UI routing prefix (normally /skServer).
 const nativeFetch = (url, options) =>
   fetch(`${globalThis.serverRoutesPrefix ?? ""}${url}`, options);
@@ -17,6 +19,14 @@ async function request(fetcher, url, options = {}) {
     ...options,
   });
   if (!response.ok) {
+    if (url.startsWith(CATALOGUE_URL)) {
+      const body = await response.json().catch(() => null);
+      const code =
+        typeof body?.error === "string" && /^[A-Z_]{1,80}$/.test(body.error)
+          ? body.error
+          : `HTTP ${response.status}`;
+      throw new Error(code);
+    }
     throw new Error(
       response.status === 401 || response.status === 403
         ? "Sign in to Signal K as an administrator to manage these settings."
@@ -48,65 +58,97 @@ export async function loadConfiguration(fetcher = nativeFetch) {
     Object.entries(properties).map(([key, schema]) => [key, schema.default]),
   );
   // Saves can precede the host's asynchronous restart.
-  Object.assign(reviews, configuration.readRequests ?? {});
+  // The server exposes migrated path approvals in schema defaults. Overlay
+  // saved decisions after collapsing legacy source-specific entries to those keys.
+  const saved = {};
+  const rank = { pending: 0, approved: 1, rejected: 2 };
+  for (const [key, raw] of Object.entries(configuration.readRequests ?? {})) {
+    let currentKey = key;
+    const review = { ...raw };
+    if (review.kind === "put" && review.source !== undefined) {
+      const match = Object.entries(reviews).find(
+        ([, candidate]) =>
+          candidate.kind === "put" &&
+          candidate.source === undefined &&
+          candidate.context === review.context &&
+          candidate.path === review.path &&
+          candidate.schemaHash === review.schemaHash,
+      );
+      if (!match)
+        throw new Error(
+          "Telemetry approval migration is not ready. Refresh after the plugin restarts.",
+        );
+      currentKey = match[0];
+      delete review.source;
+    }
+    if (
+      !saved[currentKey] ||
+      rank[review.decision] > rank[saved[currentKey].decision]
+    )
+      saved[currentKey] = review;
+  }
+  Object.assign(reviews, saved);
   if (
     Object.values(reviews).some(
       (review) =>
         !object(review) ||
-        (review.kind === "put"
-          ? review.context !== "vessels.self" ||
-            typeof review.path !== "string" ||
-            typeof review.source !== "string" ||
-            !object(review.metadata) ||
-            !object(review.inputSchema) ||
-            "permission" in review
-          : review.kind === "resource"
-            ? !["POST", "PUT", "DELETE"].includes(review.method) ||
-              !resourceCollectionSchema.safeParse(review.collection).success ||
-              typeof review.provider !== "string" ||
-              !review.provider ||
-              review.path !==
-                `/signalk/v2/api/resources/${review.collection}${review.method === "POST" ? "" : "/{id}"}` ||
-              typeof review.description !== "string" ||
+        (review.kind === "put-rule"
+          ? !putRuleSchema.safeParse(review).success
+          : review.kind === "put"
+            ? review.context !== "vessels.self" ||
+              typeof review.path !== "string" ||
+              review.source !== undefined ||
+              !object(review.metadata) ||
               !object(review.inputSchema) ||
-              typeof review.contractHash !== "string" ||
-              !/^[a-f0-9]{64}$/.test(review.contractHash) ||
               "permission" in review
-            : review.kind === "api"
-              ? !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(
-                  review.method,
-                ) ||
-                ![
-                  "course",
-                  "weather",
-                  "autopilot",
-                  "radar",
-                  "ble",
-                  "tracks",
-                  "sensors",
-                ].includes(review.api) ||
-                typeof review.operationId !== "string" ||
-                typeof review.path !== "string" ||
-                !review.path.startsWith("/signalk/v2/api/") ||
+            : review.kind === "resource"
+              ? !["POST", "PUT", "DELETE"].includes(review.method) ||
+                !resourceCollectionSchema.safeParse(review.collection)
+                  .success ||
+                typeof review.provider !== "string" ||
+                !review.provider ||
+                review.path !==
+                  `/signalk/v2/api/resources/${review.collection}${review.method === "POST" ? "" : "/{id}"}` ||
                 typeof review.description !== "string" ||
                 !object(review.inputSchema) ||
                 typeof review.contractHash !== "string" ||
                 !/^[a-f0-9]{64}$/.test(review.contractHash) ||
                 "permission" in review
-              : review.kind === "post" || review.kind === "plugin"
-                ? (review.kind === "post"
-                    ? review.method !== "POST"
-                    : !["PUT", "PATCH", "DELETE"].includes(review.method)) ||
-                  typeof review.pluginId !== "string" ||
-                  review.pluginId === "signalk-mcp" ||
+              : review.kind === "api"
+                ? !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(
+                    review.method,
+                  ) ||
+                  ![
+                    "course",
+                    "weather",
+                    "autopilot",
+                    "radar",
+                    "ble",
+                    "tracks",
+                    "sensors",
+                  ].includes(review.api) ||
                   typeof review.operationId !== "string" ||
                   typeof review.path !== "string" ||
+                  !review.path.startsWith("/signalk/v2/api/") ||
                   typeof review.description !== "string" ||
                   !object(review.inputSchema) ||
                   typeof review.contractHash !== "string" ||
                   !/^[a-f0-9]{64}$/.test(review.contractHash) ||
                   "permission" in review
-                : "kind" in review || typeof review.pluginId !== "string"),
+                : review.kind === "post" || review.kind === "plugin"
+                  ? (review.kind === "post"
+                      ? review.method !== "POST"
+                      : !["PUT", "PATCH", "DELETE"].includes(review.method)) ||
+                    typeof review.pluginId !== "string" ||
+                    review.pluginId === "signalk-mcp" ||
+                    typeof review.operationId !== "string" ||
+                    typeof review.path !== "string" ||
+                    typeof review.description !== "string" ||
+                    !object(review.inputSchema) ||
+                    typeof review.contractHash !== "string" ||
+                    !/^[a-f0-9]{64}$/.test(review.contractHash) ||
+                    "permission" in review
+                  : "kind" in review || typeof review.pluginId !== "string"),
     )
   )
     throw new Error(
@@ -122,6 +164,314 @@ export async function loadConfiguration(fetcher = nativeFetch) {
       pluginOperations: configuration.pluginOperations ?? [],
     },
   };
+}
+
+async function loadGroup(id, fetcher) {
+  const group = await request(
+    fetcher,
+    `${CATALOGUE_URL}?id=${encodeURIComponent(id)}`,
+  );
+  if (
+    !object(group) ||
+    group.id !== id ||
+    !Array.isArray(group.operations) ||
+    group.operations.length > (id.startsWith("resource.") ? 384 : 128)
+  )
+    throw new Error("Invalid operation catalogue. Refresh and try again.");
+  return group;
+}
+
+export async function loadEditorConfiguration(fetcher = nativeFetch) {
+  const base = await loadConfiguration(fetcher);
+  const catalogue = [];
+  let catalogueError = "";
+  try {
+    const capabilities = [];
+    let offset = 0;
+    do {
+      const page = await request(fetcher, `${CATALOGUE_URL}?offset=${offset}`);
+      if (
+        !object(page) ||
+        !Array.isArray(page.capabilities) ||
+        page.discovery !== "complete"
+      )
+        throw new Error(
+          "Operation discovery is unavailable. Existing requests are shown below.",
+        );
+      capabilities.push(...page.capabilities);
+      if (
+        page.nextOffset !== null &&
+        (!Number.isInteger(page.nextOffset) ||
+          page.nextOffset <= offset ||
+          page.nextOffset > 512)
+      )
+        throw new Error("Operation discovery exceeded its limit.");
+      offset = page.nextOffset;
+    } while (offset !== null);
+    // Bound simultaneous metadata reads. Never invoke provider operations.
+    const groups = capabilities.filter(
+      (c) =>
+        c.kind === "resource" ||
+        c.kind === "plugin" ||
+        (c.kind === "api" && c.id !== "api.resources"),
+    );
+    for (let index = 0; index < groups.length; index += 3) {
+      catalogue.push(
+        ...(await Promise.all(
+          groups.slice(index, index + 3).map(async (c) => {
+            if (
+              ["disabled", "unsupported-namespace", "unavailable"].includes(
+                c.availability,
+              )
+            )
+              return {
+                id: c.id,
+                reason: c.reason ?? c.availability,
+                operations: [],
+              };
+            try {
+              return await loadGroup(c.id, fetcher);
+            } catch (error) {
+              return {
+                id: c.id,
+                reason: error.message,
+                operations: [],
+              };
+            }
+          }),
+        )),
+      );
+    }
+  } catch (error) {
+    catalogueError = error.message;
+  }
+  return { ...base, catalogue, catalogueError };
+}
+
+export function reviewGroup(review) {
+  return review.kind === "api"
+    ? `api.${review.api}`
+    : ["put", "put-rule"].includes(review.kind)
+      ? "native.put"
+      : review.kind === "resource"
+        ? `resource.${review.collection}`
+        : `plugin.${review.pluginId}`;
+}
+
+export function isWrite(review) {
+  return (
+    ["put", "put-rule"].includes(review.kind) ||
+    (review.method !== undefined && review.method !== "GET")
+  );
+}
+
+const manualMatches = (approval, item) =>
+  !item.kind &&
+  approval.pluginId === item.pluginId &&
+  approval.operationId === item.operationId &&
+  approval.method === (item.method ?? "GET") &&
+  approval.path === item.path;
+const manualKey = (approval) =>
+  `manual:${JSON.stringify([approval.pluginId, approval.operationId, approval.method, approval.path])}`;
+
+export function removeApprovalRow(draft, row) {
+  const reviews = { ...draft.reviews };
+  delete reviews[row.key];
+  return {
+    ...draft,
+    reviews,
+    settings: {
+      ...draft.settings,
+      pluginOperations: row.manual
+        ? draft.settings.pluginOperations.filter(
+            (entry) => !manualMatches(entry, row.manual),
+          )
+        : draft.settings.pluginOperations,
+    },
+  };
+}
+
+export function catalogueGroups(base, draft) {
+  const seen = new Set();
+  const manualSeen = new Set();
+  const manuals = draft.settings.pluginOperations;
+  const groups = (base.catalogue ?? []).map((group) => ({
+    ...group,
+    rows: group.operations.map((operation, index) => {
+      const keys = [operation.key, ...(operation.compatibleKeys ?? [])].filter(
+        Boolean,
+      );
+      const key =
+        keys.find((key) => draft.reviews[key]?.decision === "rejected") ??
+        keys.find((key) => draft.reviews[key]?.decision === "approved") ??
+        keys.find((key) => draft.reviews[key]) ??
+        operation.key ??
+        `unsupported:${group.id}:${index}`;
+      keys.forEach((key) => seen.add(key));
+      let item = draft.reviews[key] ??
+        operation.review ?? {
+          ...(group.id.startsWith("resource.")
+            ? {
+                kind: "resource",
+                collection: operation.collection,
+                provider: operation.provider,
+              }
+            : group.id.startsWith("api.")
+              ? { kind: "api", api: group.id.slice(4) }
+              : {
+                  pluginId: group.id.slice(7),
+                  ...(operation.method === "GET" ? {} : { kind: "plugin" }),
+                }),
+          operationId: operation.id,
+          method: operation.method,
+          path: operation.path,
+          description: operation.description,
+          inputSchema: operation.inputSchema,
+        };
+      const manual = group.id.startsWith("plugin.")
+        ? manuals.find((approval) =>
+            manualMatches(approval, {
+              pluginId: group.id.slice(7),
+              operationId: operation.id,
+              method: operation.method,
+              path: operation.path,
+            }),
+          )
+        : undefined;
+      if (manual) {
+        manualSeen.add(manualKey(manual));
+        item = {
+          ...item,
+          permission:
+            item.permission === "admin" || manual.permission === "admin"
+              ? "admin"
+              : "readonly",
+        };
+      }
+      const decision = draft.reviews[key]?.decision;
+      return {
+        key,
+        item,
+        manual,
+        operation,
+        eligible: Boolean(operation.review),
+        status:
+          decision === "rejected"
+            ? "rejected"
+            : operation.review && manual
+              ? "approved"
+              : (decision ??
+                (operation.review
+                  ? "available"
+                  : operation.approvalRequired === false
+                    ? "native"
+                    : "unsupported")),
+      };
+    }),
+  }));
+  for (const [key, item] of Object.entries(draft.reviews)) {
+    if (seen.has(key)) continue;
+    const id = reviewGroup(item);
+    let group = groups.find((group) => group.id === id);
+    if (!group) {
+      group = { id, operations: [], rows: [], reason: base.catalogueError };
+      groups.push(group);
+    }
+    // Old plugin/API contracts remain visible but cannot be bulk-approved.
+    const eligible = ["put", "put-rule"].includes(item.kind);
+    const manual = manuals.find(
+      (entry) =>
+        !manualSeen.has(manualKey(entry)) && manualMatches(entry, item),
+    );
+    if (manual) manualSeen.add(manualKey(manual));
+    group.rows.push({
+      key,
+      item:
+        manual?.permission === "admin"
+          ? { ...item, permission: "admin" }
+          : item,
+      manual,
+      eligible,
+      status:
+        !eligible && item.decision === "approved"
+          ? group.reason
+            ? "unavailable"
+            : "invalidated"
+          : item.decision,
+      reason: eligible ? "" : unavailableReviewReason(item, group),
+    });
+  }
+  for (const manual of manuals) {
+    const key = manualKey(manual);
+    if (manualSeen.has(key)) continue;
+    const id = `plugin.${manual.pluginId}`;
+    let group = groups.find((entry) => entry.id === id);
+    if (!group) {
+      group = { id, operations: [], rows: [], reason: base.catalogueError };
+      groups.push(group);
+    }
+    group.rows.push({
+      key,
+      item: { ...manual, description: "Saved read approval." },
+      manual,
+      eligible: false,
+      status: "unavailable",
+      reason: "Saved approval kept. This operation is not currently available.",
+    });
+  }
+  return groups;
+}
+
+export function unavailableReviewReason(review, group) {
+  if (group.reason)
+    return `Discovery unavailable: ${group.reason}. The saved approval is retained; availability could not be checked.`;
+  const operations =
+    review.kind === "resource"
+      ? group.operations.filter((op) => op.provider === review.provider)
+      : group.operations;
+  const current =
+    operations.find(
+      (operation) =>
+        operation.id === review.operationId &&
+        operation.method === (review.method ?? "GET"),
+    ) ??
+    operations.find(
+      (operation) =>
+        operation.path === review.path &&
+        operation.method === (review.method ?? "GET"),
+    );
+  if (!current)
+    return "Operation no longer advertised by this provider. The saved approval is retained.";
+  if (!current.review)
+    return `Operation is currently unsupported: ${current.reason ?? "unsupported contract"}.`;
+  const changes = [];
+  if (review.operationId && current.id !== review.operationId)
+    changes.push("operation ID");
+  if (current.path !== review.path) changes.push("endpoint path");
+  if (current.description !== review.description)
+    changes.push("documented meaning");
+  if (
+    (review.inputSchema && !same(review.inputSchema, current.inputSchema)) ||
+    (review.schemaHash && review.schemaHash !== current.review.schemaHash)
+  )
+    changes.push("accepted inputs");
+  if (changes.length)
+    return `Approval invalidated: ${changes.join(", ")} changed. Review the current operation above.`;
+  if (
+    (review.kind === "post" || review.kind === "plugin") &&
+    review.contractVersion !== 2
+  )
+    return "Legacy approval no longer matches. Its fingerprint included response fields; the old response details were not stored. Review the current operation once to use the new action-only binding.";
+  return "Approval invalidated: security requirements, parameter documentation, or response status/transport/meaning changed. Review the current operation above.";
+}
+
+export function approveRows(draft, rows) {
+  const reviews = { ...draft.reviews };
+  for (const row of rows) {
+    if (!row.eligible) continue;
+    reviews[row.key] = { ...row.item, decision: "approved" };
+  }
+  return { ...draft, reviews };
 }
 
 export function validateSettings(settings) {
@@ -147,7 +497,6 @@ export function validateSettings(settings) {
   const approvals = settings.pluginOperations;
   if (
     !Array.isArray(approvals) ||
-    approvals.length > 64 ||
     approvals.some(
       (approval) =>
         !approvalSchema.safeParse(approval).success ||
@@ -160,7 +509,7 @@ export function validateSettings(settings) {
     ).size !== approvals.length
   )
     throw new Error(
-      "Check manual approvals: unique plugin and operation IDs, a GET path and confirmed read-only behavior are required (maximum 64).",
+      "Check manual approvals: unique plugin and operation IDs, a GET path and confirmed read-only behavior are required.",
     );
 }
 
@@ -172,16 +521,45 @@ export function mergeChanges(base, draft, current) {
       "These settings changed in another session. Refresh before saving your changes.",
     );
   };
+  const removedManuals = base.settings.pluginOperations.filter(
+    (entry) =>
+      !draft.settings.pluginOperations.some((current) =>
+        manualMatches(entry, current),
+      ),
+  );
+  for (const [key, review] of Object.entries(current.reviews)) {
+    if (
+      removedManuals.some((entry) => manualMatches(entry, review)) &&
+      !same(base.reviews[key], review)
+    )
+      conflict();
+  }
   for (const key of new Set([
     ...Object.keys(base.reviews),
     ...Object.keys(draft.reviews),
   ])) {
     if (same(base.reviews[key], draft.reviews[key])) continue;
-    if (!same(base.reviews[key], current.reviews[key])) conflict();
+    const newlyPending =
+      !base.reviews[key] &&
+      current.reviews[key]?.decision === "pending" &&
+      same(
+        { ...current.reviews[key], decision: draft.reviews[key]?.decision },
+        draft.reviews[key],
+      );
+    if (!same(base.reviews[key], current.reviews[key]) && !newlyPending)
+      conflict();
     if (!draft.reviews[key]) {
       if (
         !base.reviews[key].kind &&
-        current.installed.includes(base.reviews[key].pluginId)
+        current.installed.includes(base.reviews[key].pluginId) &&
+        !(
+          base.settings.pluginOperations.some((entry) =>
+            manualMatches(entry, base.reviews[key]),
+          ) &&
+          !draft.settings.pluginOperations.some((entry) =>
+            manualMatches(entry, base.reviews[key]),
+          )
+        )
       )
         throw new Error(
           "This plugin is installed again. Refresh before deleting its review.",
@@ -206,8 +584,78 @@ export function mergeChanges(base, draft, current) {
 }
 
 export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
+  const groups = new Map();
+  if (base.catalogue) {
+    for (const [key, review] of Object.entries(draft.reviews)) {
+      if (same(base.reviews[key], review) || review.decision !== "approved")
+        continue;
+      if (["put", "put-rule"].includes(review.kind)) {
+        const current = await previewTelemetryPut(review.path, fetcher);
+        if (!current.review || current.key !== key)
+          throw new Error(
+            `${review.path}: telemetry contract changed or is unavailable. Inspect it again before saving.`,
+          );
+        continue;
+      }
+      const id = reviewGroup(review);
+      if (!groups.has(id)) groups.set(id, await loadGroup(id, fetcher));
+      const latest = groups.get(id);
+      if (
+        latest.reason ||
+        !latest.operations.some(
+          (operation) =>
+            (operation.key === key ||
+              operation.compatibleKeys?.includes(key)) &&
+            operation.review,
+        )
+      )
+        throw new Error(
+          `${review.method ?? "GET"} ${review.path}: selected operation changed or is unavailable. ${unavailableReviewReason(review, latest)} Refresh before approving it.`,
+        );
+    }
+  }
+  // Read configuration after metadata checks so requests/edits arriving during
+  // discovery are included in the merge immediately before the native save.
+  let saving = draft;
+  if (base.catalogue) {
+    const reviews = { ...draft.reviews };
+    for (const group of base.catalogue)
+      for (const operation of group.operations) {
+        if (!operation.review) continue;
+        for (const previous of operation.compatibleKeys ?? []) {
+          const old = reviews[previous];
+          if (!old) continue;
+          // An exact legacy match supplies evidence for migration; never infer an
+          // action binding from an unmatched hash or from inputs alone.
+          if (!groups.has(group.id))
+            groups.set(group.id, await loadGroup(group.id, fetcher));
+          const fresh = groups.get(group.id);
+          if (
+            fresh.reason ||
+            !fresh.operations.some(
+              (op) =>
+                op.key === operation.key &&
+                op.compatibleKeys?.includes(previous),
+            )
+          )
+            throw new Error(
+              "A legacy operation changed during approval migration. Refresh before saving.",
+            );
+          const existing = reviews[operation.key];
+          reviews[operation.key] = {
+            ...operation.review,
+            decision:
+              old.decision === "rejected" || existing?.decision === "rejected"
+                ? "rejected"
+                : (existing?.decision ?? old.decision),
+          };
+          delete reviews[previous];
+        }
+      }
+    saving = { ...draft, reviews };
+  }
   const current = await loadConfiguration(fetcher);
-  const options = mergeChanges(base, draft, current);
+  const options = mergeChanges(base, saving, current);
   // Only Signal K's existing admin configuration route writes settings.
   await request(fetcher, CONFIG_URL, {
     method: "POST",
@@ -221,6 +669,9 @@ export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
     );
   return {
     ...current,
+    ...(base.catalogue
+      ? { catalogue: base.catalogue, catalogueError: base.catalogueError }
+      : {}),
     options: saved,
     reviews: options.configuration.readRequests,
     settings: {
@@ -229,4 +680,19 @@ export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
       pluginOperations: options.configuration.pluginOperations ?? [],
     },
   };
+}
+
+export async function previewTelemetryPut(path, fetcher = nativeFetch) {
+  const group = await request(
+    fetcher,
+    `${CATALOGUE_URL}?id=native.put&path=${encodeURIComponent(path)}`,
+  );
+  const operation = group?.operations?.[0];
+  if (group?.id !== "native.put" || !operation || operation.path !== path)
+    throw new Error("Invalid telemetry approval preview.");
+  if (!operation.review)
+    throw new Error(
+      `${operation.reason ?? "PUT_UNAVAILABLE"}: this path cannot be approved. Check its native PUT metadata and value constraints.`,
+    );
+  return operation;
 }

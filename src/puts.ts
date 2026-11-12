@@ -14,11 +14,6 @@ import { pathSchema } from "./paths.js";
 import type { LocalActions, PutTarget } from "./put-types.js";
 import { NativeActionHttpError } from "./capabilities/http.js";
 
-const sourceSchema = z
-  .string()
-  .min(1)
-  .max(256)
-  .refine((source) => !/[\s*?[\]\p{Cc}]/u.test(source));
 const putPathSchema = pathSchema.refine(
   (path) => !path.split(".").includes("meta"),
   "Metadata writes are not native action targets",
@@ -65,15 +60,12 @@ function jsonValue(value: unknown): boolean {
 
 export const putPathsInput = z
   .object({
-    source: sourceSchema,
     prefix: putPathSchema.optional(),
     offset: z.number().int().min(0).max(20000).default(0),
     limit: z.number().int().min(1).max(500).default(100),
   })
   .strict();
-export const describePutInput = z
-  .object({ path: putPathSchema, source: sourceSchema })
-  .strict();
+export const describePutInput = z.object({ path: putPathSchema }).strict();
 export const putInput = describePutInput
   .extend({
     value: z.unknown().refine(jsonValue, "Bounded JSON value required"),
@@ -110,7 +102,7 @@ const schemaFields = [
   "title",
 ];
 
-interface SchemaDiagnostic {
+export interface SchemaDiagnostic {
   code: string;
   field: string;
   message: string;
@@ -468,7 +460,6 @@ interface Correlation {
   inFlight: boolean;
   requestId?: string;
 }
-const sourceVerification = "native-handler-on-dispatch";
 
 export class NativePuts {
   private readonly correlations = new Map<symbol, Correlation>();
@@ -518,9 +509,12 @@ export class NativePuts {
   private target(
     principal: Principal,
     path: string,
-    source: string,
+    adminReview = false,
   ): PutTarget {
-    if (!canPut(this.app, principal, path, source))
+    if (
+      !(adminReview && principal.permissions === "admin") &&
+      !canPut(this.app, principal, path)
+    )
       throw new GatewayError("PERMISSION_DENIED", 403);
     if (typeof this.app.getMetadata !== "function")
       throw new GatewayError("SIGNALK_METADATA_UNAVAILABLE", 503);
@@ -534,7 +528,6 @@ export class NativePuts {
     return {
       context: "vessels.self",
       path,
-      source,
       metadata: copy,
       inputSchema: valueSchema(copy).schema,
     };
@@ -558,7 +551,7 @@ export class NativePuts {
         pathSchema.safeParse(path).success &&
         !path.split(".").includes("meta") &&
         (!prefix || path === prefix || path.startsWith(prefix + ".")) &&
-        canPut(this.app, principal, path, input.source)
+        canPut(this.app, principal, path)
       ) {
         const metadata: unknown = this.app.getMetadata(`vessels.self.${path}`);
         if (record(metadata) && metadata.supportsPut === true) paths.add(path);
@@ -591,7 +584,7 @@ export class NativePuts {
     for (const path of this.metadataPaths) {
       if (
         (!prefix || path === prefix || path.startsWith(prefix + ".")) &&
-        canPut(this.app, principal, path, input.source)
+        canPut(this.app, principal, path)
       ) {
         const metadata: unknown = this.app.getMetadata(`vessels.self.${path}`);
         if (record(metadata) && metadata.supportsPut === true) paths.add(path);
@@ -601,14 +594,12 @@ export class NativePuts {
     const sorted = [...paths].sort();
     return {
       context: "vessels.self",
-      source: input.source,
       paths: sorted.slice(input.offset, input.offset + input.limit),
       nextOffset:
         input.offset + input.limit < sorted.length
           ? input.offset + input.limit
           : null,
-      sourceVerified: false,
-      sourceVerification,
+      handlerSelection: "native-default",
       discoveryCoverage: "model-and-observed-metadata",
       historicalMetadataOnlyPaths: "explicit-describe-required",
       metadataPathLimit: 2048,
@@ -621,10 +612,11 @@ export class NativePuts {
     args: unknown,
     reviews: Config["readRequests"] = {},
     requests?: ApprovalRequests,
+    adminReview = false,
   ) {
     const input = describePutInput.parse(args);
     const principal = authorize();
-    const target = this.target(principal, input.path, input.source);
+    const target = this.target(principal, input.path, adminReview);
     const schema = valueSchema(target.metadata);
     const approval = applyPutReview(target, reviews, principal);
     const approvalStatus =
@@ -649,8 +641,7 @@ export class NativePuts {
           ? "APPROVAL_PENDING"
           : approval.reason,
       nativeHandlerValidation: true,
-      sourceVerified: false,
-      sourceVerification,
+      handlerSelection: "native-default",
     };
   }
 
@@ -724,7 +715,6 @@ export class NativePuts {
     return {
       context: entry.target.context,
       path: entry.target.path,
-      source: entry.target.source,
       submitted: true,
       outcome: "unknown",
       retrySafe: false,
@@ -739,7 +729,7 @@ export class NativePuts {
     // Refresh identity immediately before approval, capacity reservation and
     // native dispatch. No value or bearer token is retained in correlation.
     const principal = context.authorize();
-    const target = this.target(principal, input.path, input.source);
+    const target = this.target(principal, input.path);
     if (!valueSchema(target.metadata).supported)
       throw new GatewayError("UNSUPPORTED_PUT_SCHEMA");
     if (!matchesSchema(input.value, target.inputSchema))
@@ -749,7 +739,7 @@ export class NativePuts {
     try {
       const raw = await context.http.put(
         `/signalk/v1/api/vessels/self/${input.path.split(".").join("/")}`,
-        { value: input.value, source: input.source },
+        { value: input.value },
       );
       const reply = this.nativeReply(raw, entry.principal);
       const requestId = reply.requestId as string;
@@ -766,7 +756,7 @@ export class NativePuts {
         const current = context.authorize();
         if (current.identifier !== entry.principal)
           throw new GatewayError("PERMISSION_DENIED", 403);
-        const latest = this.target(current, input.path, input.source);
+        const latest = this.target(current, input.path);
         if (!this.sameTarget(entry.target, latest))
           throw new GatewayError("PUT_TARGET_CHANGED");
         this.approved(context, latest, current, false);
@@ -776,7 +766,6 @@ export class NativePuts {
       return {
         context: target.context,
         path: target.path,
-        source: target.source,
         submitted: true,
         outcome: reply.state === "PENDING" ? "pending" : "completed",
         retrySafe: false,
@@ -806,11 +795,7 @@ export class NativePuts {
         candidate.expiresAt > Date.now(),
     );
     if (!entry) throw new GatewayError("PUT_REQUEST_UNAVAILABLE", 404);
-    const before = this.target(
-      principal,
-      entry.target.path,
-      entry.target.source,
-    );
+    const before = this.target(principal, entry.target.path);
     if (!this.sameTarget(entry.target, before))
       throw new GatewayError("PUT_REQUEST_UNAVAILABLE", 404);
     this.approved(context, before, principal, false);
@@ -822,7 +807,7 @@ export class NativePuts {
       ![...this.correlations.values()].includes(entry)
     )
       throw new GatewayError("PUT_REQUEST_UNAVAILABLE", 404);
-    const latest = this.target(current, entry.target.path, entry.target.source);
+    const latest = this.target(current, entry.target.path);
     if (!this.sameTarget(entry.target, latest))
       throw new GatewayError("PUT_REQUEST_UNAVAILABLE", 404);
     this.approved(context, latest, current, false);
@@ -830,7 +815,6 @@ export class NativePuts {
     return {
       context: entry.target.context,
       path: entry.target.path,
-      source: entry.target.source,
       submitted: true,
       outcome: reply.state === "PENDING" ? "pending" : "completed",
       retrySafe: false,

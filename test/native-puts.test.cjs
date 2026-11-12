@@ -35,21 +35,18 @@ test(
     t.diagnostic(`Node ${process.version}; native Signal K ${f.version}`);
     const { provider, gateway, server } = f;
     const paths = provider.testPaths;
-    const target = (path = paths.state, source = "public") => ({
-      path,
-      source,
-    });
-    const put = (value, path = paths.state, source = "public", principal) =>
-      f.call("put_value", { ...target(path, source), value }, principal);
+    const target = (path = paths.state) => ({ path });
+    const put = (value, path = paths.state, principal) =>
+      f.call("put_value", { ...target(path), value }, principal);
     const status = (requestId, principal) =>
       f.call("get_put_status", { requestId }, principal);
-    async function approve(path, source = "public") {
-      error(await put(false, path, source), "APPROVAL_PENDING");
-      await f.decide(target(path, source));
+    async function approve(path) {
+      error(await put(false, path), "APPROVAL_PENDING");
+      await f.decide(target(path));
     }
 
     await t.test(
-      "metadata-only discovery requires an explicit source",
+      "metadata-only discovery uses native default routing",
       async () => {
         assert.equal(
           Object.hasOwn(provider.readPath(paths.state) || {}, "value"),
@@ -63,13 +60,11 @@ test(
         }
         const listed = success(
           await f.call("list_put_paths", {
-            source: "public",
             prefix: "electrical.switches.mcpTest",
           }),
         );
         assert.equal(listed.context, "vessels.self");
-        assert.equal(listed.source, "public");
-        assert.equal(listed.sourceVerification, "native-handler-on-dispatch");
+        assert.equal(listed.handlerSelection, "native-default");
         assert.equal(listed.discoveryCoverage, "model-and-observed-metadata");
         assert.equal(
           listed.historicalMetadataOnlyPaths,
@@ -79,34 +74,27 @@ test(
         assert.ok(listed.paths.includes(paths.state));
         assert.ok(!listed.paths.includes(paths.unsupported));
         assert.ok(!listed.paths.includes(paths.missing));
-        const page = success(
-          await f.call("list_put_paths", { source: "public", limit: 1 }),
-        );
+        const page = success(await f.call("list_put_paths", { limit: 1 }));
         assert.equal(page.paths.length, 1);
         assert.equal(page.nextOffset, 1);
         const description = success(await f.call("describe_put", target()));
         assert.equal(description.path, paths.state);
-        assert.equal(description.source, "public");
+        assert.equal(Object.hasOwn(description, "source"), false);
         assert.equal(description.metadata.supportsPut, true);
         assert.equal(description.nativeHandlerValidation, true);
         assert.equal(description.schemaDiagnostics[0].code, "NO_INPUT_TYPE");
         assert.equal(description.approvalStatus, "required");
         assert.equal(description.approvalSaved, false);
         assert.equal(description.enabled, false);
-        assert.equal(description.sourceVerified, false);
-        assert.equal(
-          description.sourceVerification,
-          "native-handler-on-dispatch",
-        );
-        error(await f.call("list_put_paths", {}), "INVALID_ARGUMENTS");
+        assert.equal(description.handlerSelection, "native-default");
         error(
-          await f.call("describe_put", { path: paths.state }),
+          await f.call("list_put_paths", { source: "public" }),
           "INVALID_ARGUMENTS",
         );
-        const privatePaths = success(
-          await f.call("list_put_paths", { source: "private" }),
+        error(
+          await f.call("describe_put", { path: paths.state, source: "public" }),
+          "INVALID_ARGUMENTS",
         );
-        assert.deepEqual(privatePaths.paths, []);
         assert.equal(provider.testCalls.length, 0);
       },
     );
@@ -116,7 +104,6 @@ test(
       async () => {
         const before = JSON.stringify(f.reviews());
         for (const args of [
-          { path: paths.state, value: 0 },
           { ...target(), source: "*", value: 0 },
           { ...target(), source: "", value: 0 },
           { ...target(), context: "vessels.other", value: 0 },
@@ -144,44 +131,22 @@ test(
     );
 
     await t.test(
-      "native PUT ACLs apply to the exact source and role before dispatch",
+      "native path PUT ACL and write-capable identity precede dispatch",
       async () => {
-        assert.equal(
-          server.app.securityStrategy.checkACL(
-            "writer",
-            "vessels.self",
-            paths.state,
-            "private",
-            "put",
-          ),
-          false,
-        );
         const before = provider.testCalls.length;
-        for (const [principal, source] of [
-          ["writer", "private"],
-          ["reader", "public"],
-          ["writeonly", "public"],
-          ["admin", "public"],
-          ["other", "public"],
-        ])
-          error(
-            await put(0, paths.state, source, principal),
-            "PERMISSION_DENIED",
-          );
+        for (const principal of ["reader", "writeonly", "admin", "other"])
+          error(await put(0, paths.state, principal), "PERMISSION_DENIED");
         assert.equal(provider.testCalls.length, before);
         assert.deepEqual(f.reviews(), {});
-        // The native HTTP route checks a null source. The gateway closes this gap
-        // by checking the explicit source before dispatching to that native route.
         const raw = await f.http(
           `/signalk/v1/api/vessels/self/${paths.state.replaceAll(".", "/")}`,
           "writer",
           "PUT",
-          { source: "private", value: "synthetic-native-source-check" },
+          { value: "synthetic-default-routing" },
         );
         assert.equal(raw.status, 200);
         assert.equal(provider.testCalls.length, before + 1);
-        error(await put(0, paths.state, "private"), "PERMISSION_DENIED");
-        assert.equal(provider.testCalls.length, before + 1);
+        assert.equal(provider.testCalls.at(-1).source, "public");
       },
     );
 
@@ -213,7 +178,7 @@ test(
         assert.equal(review.kind, "put");
         assert.equal(review.context, "vessels.self");
         assert.equal(review.path, paths.state);
-        assert.equal(review.source, "public");
+        assert.equal(Object.hasOwn(review, "source"), false);
         assert.equal(review.decision, "pending");
         for (const field of ["value", "token", "authorization", "requestId"])
           assert.equal(Object.hasOwn(review, field), false);
@@ -474,30 +439,23 @@ test(
         await gateway.stop();
         gateway.start(settings.configuration);
         error(await status(pending.requestId), "PUT_REQUEST_UNAVAILABLE");
-        const beforeDescribe = success(
-          await f.call("list_put_paths", { source: "public" }),
-        );
+        const beforeDescribe = success(await f.call("list_put_paths", {}));
         assert.equal(beforeDescribe.paths.includes(paths.state), false);
         success(await f.call("describe_put", target()));
-        const afterDescribe = success(
-          await f.call("list_put_paths", { source: "public" }),
-        );
+        const afterDescribe = success(await f.call("list_put_paths", {}));
         assert.ok(afterDescribe.paths.includes(paths.state));
         provider.complete(paths.pending);
       },
     );
 
     await t.test(
-      "an explicit nonexistent source receives native 405 without widening approval",
+      "native default routing refuses ambiguous handlers without dispatch",
       async () => {
-        error(await put(0, paths.state, "absent"), "APPROVAL_PENDING");
-        await f.decide(target(paths.state, "absent"));
+        await approve(paths.ambiguous);
         const before = provider.testCalls.length;
-        const result = success(await put(0, paths.state, "absent"));
+        const result = success(await put(0, paths.ambiguous));
         assert.equal(result.outcome, "completed");
-        assert.equal(result.reply.statusCode, 405);
-        assert.equal(provider.testCalls.length, before);
-        error(await put(0, paths.state, "another"), "APPROVAL_PENDING");
+        assert.equal(result.reply.statusCode, 400);
         assert.equal(provider.testCalls.length, before);
       },
     );
@@ -550,7 +508,7 @@ test(
         assert.equal(description.approvalStatus, "approved");
         assert.equal(description.approvalSaved, true);
         assert.equal(description.enabled, true);
-        assert.equal(description.sourceVerified, false);
+        assert.equal(description.handlerSelection, "native-default");
         assert.equal(description.reason, null);
         const generic = success(
           await f.call("execute_capability", {
@@ -566,11 +524,15 @@ test(
         );
         assert.equal(provider.testCalls.at(-1).value, "off");
         error(await put(0, paths.choices), "INVALID_PUT_VALUE");
-        error(await put("off", paths.choices, "private"), "PERMISSION_DENIED");
         error(
-          await put("off", paths.choices, "public", "reader"),
-          "PERMISSION_DENIED",
+          await f.call("put_value", {
+            path: paths.choices,
+            source: "private",
+            value: "off",
+          }),
+          "INVALID_ARGUMENTS",
         );
+        error(await put("off", paths.choices, "reader"), "PERMISSION_DENIED");
         assert.equal(provider.testCalls.length, before + 1);
         provider.setMetadata(paths.choices, {
           supportsPut: true,
@@ -623,5 +585,95 @@ test(
         assert.equal(provider.testCalls.length, before);
       },
     );
+  },
+);
+
+test(
+  "native admin manually reviews telemetry paths and standing rules; future paths use native default routing",
+  { timeout: 30000 },
+  async (t) => {
+    const f = await start();
+    t.after(async () => {
+      try {
+        await f.stop();
+      } finally {
+        f.remove();
+      }
+    });
+    const endpoint = (path) =>
+      `/plugins/signalk-mcp/catalogue?id=native.put&path=${encodeURIComponent(path)}`;
+    const path = f.provider.testPaths.state;
+    for (const principal of [null, "reader", "writer"])
+      assert.ok(
+        [401, 403].includes((await f.http(endpoint(path), principal)).status),
+      );
+    const exact = await f.http(endpoint(path), "admin");
+    assert.equal(exact.status, 200, JSON.stringify(exact.body));
+    assert.equal(exact.body.operations[0].review.path, path);
+    assert.equal(
+      Object.hasOwn(exact.body.operations[0].review, "source"),
+      false,
+    );
+    const pattern = "electrical.switches.mcpTest.**";
+    const preview = await f.http(endpoint(pattern), "admin");
+    assert.equal(preview.status, 200);
+    const op = preview.body.operations[0];
+    assert.equal(op.review.kind, "put-rule");
+    assert.deepEqual(f.reviews(), {});
+    assert.equal(f.provider.testCalls.length, 0);
+    assert.equal((await f.http(endpoint("**"), "admin")).status, 400);
+    const settings = await f.readConfig();
+    settings.configuration.readRequests = {
+      [op.key]: { ...op.review, decision: "approved" },
+    };
+    // Saved approvals and rejections may exceed the unsolicited request cap.
+    const { reviewKey } = require("../dist/approvals.js");
+    for (let i = 0; i < 100; i++) {
+      const rule = {
+        ...op.review,
+        path: `electrical.fixture${i}.*`,
+        decision: i % 2 ? "approved" : "rejected",
+      };
+      settings.configuration.readRequests[reviewKey(rule)] = rule;
+    }
+    await f.saveConfig(settings);
+    assert.equal(Object.keys(f.reviews()).length, 101);
+    assert.equal(
+      Object.keys((await f.readConfig()).configuration.readRequests).length,
+      101,
+    );
+    // Registered only AFTER the standing rule was saved.
+    const future = "electrical.switches.mcpTest.future";
+    let calls = 0;
+    f.provider.registerTestPut(
+      future,
+      () => {
+        calls++;
+        return { state: "COMPLETED", statusCode: 200 };
+      },
+      "new-provider",
+    );
+    f.provider.setMetadata(future, { supportsPut: true, type: "boolean" });
+    const result = success(
+      await f.call("put_value", { path: future, value: false }),
+    );
+    assert.equal(result.reply.statusCode, 200);
+    assert.equal(calls, 1);
+    error(
+      await f.call("put_value", { path: future, value: 1 }),
+      "INVALID_PUT_VALUE",
+    );
+    error(
+      await f.call("put_value", { path: future, value: true }, "reader"),
+      "PERMISSION_DENIED",
+    );
+    const current = await f.readConfig();
+    current.configuration.readRequests[op.key].decision = "rejected";
+    await f.saveConfig(current);
+    error(
+      await f.call("put_value", { path: future, value: true }),
+      "APPROVAL_REJECTED",
+    );
+    assert.equal(calls, 1);
   },
 );

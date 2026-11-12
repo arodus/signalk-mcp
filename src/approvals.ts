@@ -12,6 +12,11 @@ import type { DiscoveredOperation } from "./capabilities/openapi.js";
 import { pathSchema } from "./paths.js";
 import type { PutTarget } from "./put-types.js";
 import { boundedJson } from "./json.js";
+import {
+  putRuleSchema,
+  matchesPutPattern,
+  putRuleMeaning,
+} from "./put-rules.js";
 
 import {
   nativeApiSchema,
@@ -98,7 +103,8 @@ const putReviewSchema = z
       .string()
       .min(1)
       .max(256)
-      .refine((source) => !/[\s*?[\]\p{Cc}]/u.test(source)),
+      .refine((source) => !/[\s*?[\]\p{Cc}]/u.test(source))
+      .optional(),
     metadata: z.record(z.string(), z.unknown()),
     inputSchema: z.record(z.string(), z.unknown()),
     schemaHash: z.string().regex(/^[a-f0-9]{64}$/),
@@ -124,6 +130,7 @@ const postReviewSchema = z
     path: pluginRouteSchema,
     description: z.string().max(4096),
     inputSchema: z.record(z.string(), z.unknown()),
+    contractVersion: z.literal(2).optional(),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -147,6 +154,7 @@ const pluginReviewSchema = z
     path: pluginRouteSchema,
     description: z.string().max(4096),
     inputSchema: z.record(z.string(), z.unknown()),
+    contractVersion: z.literal(2).optional(),
     contractHash: z.string().regex(/^[a-f0-9]{64}$/),
     decision: z.enum(["pending", "approved", "rejected"]).default("pending"),
   })
@@ -229,12 +237,15 @@ export const reviewSchema = z.union([
   readReviewSchema,
   apiReviewSchema,
   putReviewSchema,
+  putRuleSchema,
   postReviewSchema,
   pluginReviewSchema,
   resourceReviewSchema,
 ]);
 export type Review = z.infer<typeof reviewSchema>;
 export function reviewKey(review: Review): string {
+  if ("kind" in review && review.kind === "put-rule")
+    return digest(["PUT_RULE_V1", review.context, review.path]);
   if ("kind" in review && review.kind === "api")
     return digest([
       "API",
@@ -250,7 +261,7 @@ export function reviewKey(review: Review): string {
     return digest(["RESOURCE", review.contractHash]);
   if ("kind" in review && review.kind === "post")
     return digest([
-      "POST",
+      review.contractVersion === 2 ? "POST_V2" : "POST",
       review.pluginId,
       review.operationId,
       review.path,
@@ -260,7 +271,7 @@ export function reviewKey(review: Review): string {
     ]);
   if ("kind" in review && review.kind === "plugin")
     return digest([
-      "PLUGIN",
+      review.contractVersion === 2 ? "PLUGIN_V2" : "PLUGIN",
       review.method,
       review.pluginId,
       review.operationId,
@@ -270,13 +281,17 @@ export function reviewKey(review: Review): string {
       canonicalJson(review.inputSchema),
     ]);
   if ("kind" in review && review.kind === "put")
-    return digest([
-      "PUT",
-      review.context,
-      review.path,
-      review.source,
-      review.schemaHash,
-    ]);
+    return digest(
+      review.source === undefined
+        ? ["PUT_PATH", review.context, review.path, review.schemaHash]
+        : [
+            "PUT",
+            review.context,
+            review.path,
+            review.source,
+            review.schemaHash,
+          ],
+    );
   return digest([
     review.pluginId,
     review.operationId,
@@ -290,15 +305,33 @@ export const reviewsSchema = z
   .record(z.string().regex(/^[a-f0-9]{64}$/), reviewSchema)
   .refine(
     (reviews) =>
-      Object.keys(reviews).length <= 64 &&
       Object.entries(reviews).every(
         ([key, review]) => key === reviewKey(review),
       ),
-    "Invalid or excessive operation reviews",
-  );
-function candidate(
+    "Invalid operation reviews",
+  )
+  .transform(migratePutReviews);
+
+export function migratePutReviews(
+  reviews: Record<string, Review>,
+): Record<string, Review> {
+  const result: Record<string, Review> = {};
+  const rank = { pending: 0, approved: 1, rejected: 2 };
+  for (const [oldKey, review] of Object.entries(reviews)) {
+    if (!reviewSchema.safeParse(review).success || reviewKey(review) !== oldKey)
+      continue;
+    const current = structuredClone(review);
+    if ("kind" in current && current.kind === "put") delete current.source;
+    const key = reviewKey(current);
+    if (!result[key] || rank[current.decision] > rank[result[key]!.decision])
+      result[key] = current;
+  }
+  return result;
+}
+export function operationReview(
   pluginId: string,
   operation: DiscoveredOperation,
+  legacy = false,
 ):
   | ReadReview
   | z.infer<typeof apiReviewSchema>
@@ -325,7 +358,10 @@ function candidate(
       path: operation.path,
       description: operation.description,
       inputSchema: operation.inputSchema,
-      contractHash: operation.contractHash,
+      ...(!legacy ? { contractVersion: 2 as const } : {}),
+      contractHash: legacy
+        ? operation.legacyContractHash
+        : operation.contractHash,
       decision: "pending",
     });
   if (
@@ -341,7 +377,10 @@ function candidate(
       path: operation.path,
       description: operation.description,
       inputSchema: operation.inputSchema,
-      contractHash: operation.contractHash,
+      ...(!legacy ? { contractVersion: 2 as const } : {}),
+      contractHash: legacy
+        ? operation.legacyContractHash
+        : operation.contractHash,
       decision: "pending",
     });
   if (
@@ -369,7 +408,7 @@ export function putReview(target: PutTarget): PutReview {
       kind: "put",
       context: target.context,
       path: target.path,
-      source: target.source,
+      ...(target.source === undefined ? {} : { source: target.source }),
       metadata: structuredClone(target.metadata),
       inputSchema: structuredClone(target.inputSchema),
       schemaHash,
@@ -384,13 +423,15 @@ export function putReview(target: PutTarget): PutReview {
 // Pending requests stay in memory until the admin saves the native settings form.
 export class ApprovalRequests {
   private reviews: Record<string, Review> = {};
+  private unsavedCount = 0;
   reset(reviews: Record<string, Review> = {}) {
     this.reviews = structuredClone(reviews);
+    this.unsavedCount = 0;
   }
   request(pluginId: string, operation: DiscoveredOperation): never {
     if (operation.reason !== "NOT_ALLOWLISTED")
       throw new GatewayError("OPERATION_DISABLED", 403);
-    return this.enqueue(candidate(pluginId, operation));
+    return this.enqueue(operationReview(pluginId, operation));
   }
   requestPut(target: PutTarget): never {
     return this.enqueue(putReview(target));
@@ -409,9 +450,10 @@ export class ApprovalRequests {
   private enqueue(review: Review): never {
     const key = reviewKey(review);
     if (!this.reviews[key]) {
-      if (Object.keys(this.reviews).length >= 64)
+      if (this.unsavedCount >= 64)
         throw new GatewayError("APPROVAL_QUEUE_FULL", 429);
       this.reviews[key] = review;
+      this.unsavedCount++;
     }
     throw new GatewayError(
       this.reviews[key].decision === "rejected"
@@ -426,7 +468,7 @@ export class ApprovalRequests {
       title: "Operation requests",
       additionalProperties: false,
       description:
-        "Refresh this page after a blocked MCP request. Review each plugin operation, exact native PUT target or resource write, select Accept or Reject, then Save Configuration. Check the target, provider, meaning and input constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 requests are retained.",
+        "Review requested operations, choose Accept or Reject, then save your changes. Refresh to see new requests.",
       properties: Object.fromEntries(
         Object.entries(this.reviews).map(([key, review]) => [
           key,
@@ -435,17 +477,20 @@ export class ApprovalRequests {
             title:
               "kind" in review && review.kind === "resource"
                 ? `Resource ${review.method}: ${review.collection} (${review.provider})`
-                : "kind" in review && review.kind === "put"
-                  ? `Native PUT: ${review.path}`
+                : "kind" in review &&
+                    (review.kind === "put" || review.kind === "put-rule")
+                  ? `Native PUT${review.kind === "put-rule" ? " standing rule" : ""}: ${review.path}`
                   : "kind" in review && review.kind === "api"
                     ? `Native API ${review.api}: ${review.operationId}`
                     : `${review.pluginId}: ${review.operationId}`,
             description:
               "kind" in review && review.kind === "resource"
                 ? `${review.method} ${review.path} — provider ${review.provider}. ${review.description}; input ${canonicalJson(review.inputSchema)}`
-                : "kind" in review && review.kind === "put"
-                  ? `PUT ${review.context}:${review.path} — source ${review.source}. Metadata: ${canonicalJson(review.metadata)}. Value constraints: ${canonicalJson(review.inputSchema)}`
-                  : `${"kind" in review ? review.method : "GET"} ${review.path}${review.description ? ` — ${review.description}` : ""}${"kind" in review ? `; input ${canonicalJson(review.inputSchema)}` : ""}`,
+                : "kind" in review && review.kind === "put-rule"
+                  ? `${review.path}: ${putRuleMeaning}`
+                  : "kind" in review && review.kind === "put"
+                    ? `PUT ${review.context}:${review.path}. Metadata: ${canonicalJson(review.metadata)}. Value constraints: ${canonicalJson(review.inputSchema)}`
+                    : `${"kind" in review ? review.method : "GET"} ${review.path}${review.description ? ` — ${review.description}` : ""}${"kind" in review ? `; input ${canonicalJson(review.inputSchema)}` : ""}`,
             default: structuredClone(review),
             additionalProperties: false,
             required: Object.keys(review),
@@ -506,7 +551,22 @@ export function applyReviews(
       ![null, "NOT_ALLOWLISTED", "PERMISSION_DENIED"].includes(operation.reason)
     )
       continue;
-    const review = reviews[reviewKey(candidate(pluginId, operation))];
+    const candidates = [
+      reviews[reviewKey(operationReview(pluginId, operation))],
+    ];
+    if (
+      !operation.api &&
+      operation.method !== "GET" &&
+      operation.legacyContractHash
+    )
+      candidates.push(
+        reviews[reviewKey(operationReview(pluginId, operation, true))],
+      );
+    // A matching rejection must win across old and new contract formats.
+    const review =
+      candidates.find((r) => r?.decision === "rejected") ??
+      candidates.find((r) => r?.decision === "approved") ??
+      candidates.find(Boolean);
     if (
       !review ||
       ("kind" in review && !["post", "plugin", "api"].includes(review.kind))
@@ -553,26 +613,28 @@ export function applyPutReview(
   reason: string | null;
   status: "required" | "pending" | "approved" | "rejected";
 } {
-  const key = reviewKey(putReview(target));
-  const parsed = putReviewSchema.safeParse(reviews[key]);
-  if (!parsed.success || reviewKey(parsed.data) !== key)
+  const normalized = migratePutReviews(reviews);
+  const nativeTarget = { ...target };
+  delete nativeTarget.source;
+  const key = reviewKey(putReview(nativeTarget));
+  const parsed = putReviewSchema.safeParse(normalized[key]);
+  const candidates: Review[] = parsed.success ? [parsed.data] : [];
+  for (const [ruleKey, raw] of Object.entries(normalized)) {
+    const rule = putRuleSchema.safeParse(raw);
+    if (
+      rule.success &&
+      ruleKey === reviewKey(rule.data) &&
+      matchesPutPattern(rule.data.path, target.path)
+    )
+      candidates.push(rule.data);
+  }
+  if (candidates.some((r) => r.decision === "rejected"))
+    return { enabled: false, reason: "APPROVAL_REJECTED", status: "rejected" };
+  if (!candidates.some((r) => r.decision === "approved"))
     return {
       enabled: false,
       reason: "NOT_ALLOWLISTED",
-      status: "required",
-    };
-  const review = parsed.data;
-  if (review.decision === "rejected")
-    return {
-      enabled: false,
-      reason: "APPROVAL_REJECTED",
-      status: "rejected",
-    };
-  if (review.decision !== "approved")
-    return {
-      enabled: false,
-      reason: "NOT_ALLOWLISTED",
-      status: "pending",
+      status: candidates.length ? "pending" : "required",
     };
   const enabled = ["readwrite", "admin"].includes(principal.permissions);
   return {

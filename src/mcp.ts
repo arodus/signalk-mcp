@@ -157,13 +157,13 @@ export function createMcpServer(
   registerCore(
     "list_put_paths",
     "signalk.put",
-    "List permission-filtered native PUT path candidates advertised by metadata for an explicit handler source. No current values or complete handler catalog.",
+    "List permission-filtered native PUT path candidates advertised by metadata with native default routing. No current values or complete handler catalog.",
     putPathsInput,
   );
   registerCore(
     "describe_put",
     "signalk.put",
-    "Inspect a native PUT target's metadata, value constraints, precise schema diagnostics and exact approval state for an explicit source. A queued pending review is not saved approval. Handler source remains unverified until native dispatch; discovery never approves execution.",
+    "Inspect a native PUT target's metadata, value constraints, precise schema diagnostics and exact approval state for native default routing. A queued pending review is not saved approval; discovery never approves execution.",
     describePutInput,
   );
   registerCore(
@@ -182,7 +182,7 @@ export function createMcpServer(
     "put_value",
     {
       description:
-        "Submit one native Signal K PUT action for an exact path and source. Requires saved administrator approval and native PUT permission. An eligible unapproved target returns APPROVAL_PENDING without dispatch; review it in native Plugin Config. Never retry an unknown/submitted outcome automatically; check the original request status when available. Completion is not physical proof.",
+        "Submit one native Signal K PUT action for an exact path, using Signal K default handler selection. Requires an exact saved approval or matching standing path rule and native PUT permission. An eligible unapproved target returns APPROVAL_PENDING without dispatch; review it in native Plugin Config. Never retry an unknown/submitted outcome automatically; check the original request status when available. Completion is not physical proof.",
       inputSchema: putInput,
       annotations: mutationAnnotations,
     },
@@ -236,7 +236,7 @@ export function createMcpServer(
     "execute_capability",
     {
       description:
-        "Execute a core or Resources read, or an individually approved plugin/native API GET as the current Signal K user. Every generic plugin/native API operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require their own individual approval through put_value or execute_mutation; plugin/native API POST/PUT/PATCH/DELETE operations and Resources writes require execute_mutation and their own saved approval. Never claim approval or retry repeatedly while waiting.",
+        "Execute a core or Resources read, or an individually approved plugin/native API GET as the current Signal K user. Every generic plugin/native API operation starts blocked; an eligible unapproved GET returns APPROVAL_PENDING and adds a review to Signal K plugin settings. Ask an administrator to approve that exact operation and save it, then retry. Native PUTs require a saved exact approval or standing path rule through put_value or execute_mutation; plugin/native API POST/PUT/PATCH/DELETE operations and Resources writes require execute_mutation and their own saved approval. Never claim approval or retry repeatedly while waiting.",
       inputSchema: {
         id: z.string().min(1).max(160),
         operation: z.string().min(1).max(128),

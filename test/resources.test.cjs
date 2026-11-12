@@ -6,7 +6,7 @@ const { localGet } = require("../dist/capabilities/http.js");
 const { GatewayError } = require("../dist/auth.js");
 const root = "/signalk/v2/api/resources";
 const uuid = "00000000-0000-4000-8000-000000000001";
-function fixture() {
+function fixture(permissions = "readonly") {
   let allowed = true;
   let identity = "reader";
   const calls = [];
@@ -19,7 +19,7 @@ function fixture() {
         connection.skIsAuthenticated = allowed;
         connection.skPrincipal = {
           identifier: identity,
-          permissions: "readonly",
+          permissions,
         };
       },
     },
@@ -805,4 +805,50 @@ test("Generic resource HTTP writes cannot reach native configuration or control 
     ["PUT", `${root}/custom/id?provider=example&provider=other`, {}],
   ])
     await assert.rejects(send(method, path, body), /INVALID_LOCAL_ROUTE/);
+});
+test("admin resource catalogue covers every advertised type and provider without reading resource bodies", async () => {
+  const f = fixture("admin");
+  const index = await f.registry.catalogueIndex();
+  assert.deepEqual(
+    index.capabilities.filter((c) => c.kind === "resource").map((c) => c.id),
+    Object.keys(f.state.collections)
+      .sort()
+      .map((c) => `resource.${c}`),
+  );
+  assert.ok(!index.capabilities.some((c) => c.id === "api.resources"));
+  for (const collection of Object.keys(f.state.collections)) {
+    const group = await f.registry.catalogue(`resource.${collection}`);
+    assert.equal(group.reason, null);
+    assert.equal(group.operations.length, collection === "logentries" ? 6 : 5);
+    for (const op of group.operations) {
+      assert.equal(op.provider, "example");
+      assert.equal(op.approvalRequired, op.method !== "GET");
+      if (op.method !== "GET")
+        assert.ok(
+          configSchema.safeParse({ readRequests: { [op.key]: op.review } })
+            .success,
+        );
+    }
+  }
+  assert.ok(f.calls.every((p) => p === root || p.endsWith("/_providers")));
+  f.state.providers.push("other");
+  const ambiguous = await f.registry.catalogue("resource.routes");
+  assert.equal(ambiguous.operations.length, 10);
+  assert.ok(
+    ambiguous.operations
+      .filter((o) => o.method === "PUT")
+      .every(
+        (o) =>
+          o.review === null && o.reason === "RESOURCE_PUT_PROVIDER_AMBIGUOUS",
+      ),
+  );
+  f.state.providers = [];
+  assert.equal(
+    (await f.registry.catalogue("resource.routes")).reason,
+    "RESOURCE_PROVIDER_UNAVAILABLE",
+  );
+  await assert.rejects(
+    fixture().registry.catalogueIndex(),
+    /PERMISSION_DENIED/,
+  );
 });

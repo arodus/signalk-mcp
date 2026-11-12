@@ -15,7 +15,14 @@ import type { Config } from "../config.js";
 import { record } from "../data.js";
 import { boundedJson } from "../json.js";
 import { pathSchema } from "../paths.js";
-import { listResourceProviders } from "./resources.js";
+import {
+  listResourceProviders,
+  listResourceCollections,
+  resourceInput,
+  resourcesInput,
+  logentriesInput,
+  logentryDatesInput,
+} from "./resources.js";
 import { pluginIdSchema } from "./schemas.js";
 import type {
   LocalGet,
@@ -324,6 +331,99 @@ export async function describeResource(
         inputSchema: target.inputSchema,
       };
     }),
+  };
+}
+
+// Read collection/provider metadata only. Discovery never reads resource bodies
+// or attempts a mutation to find out whether a provider implements it.
+export async function resourceCatalogue(
+  context: Pick<ResourceMutationContext, "authorize" | "get">,
+  collection: string,
+) {
+  const collections = await listResourceCollections(
+    context.authorize,
+    context.get,
+  );
+  if (!Object.hasOwn(collections.collections, collection))
+    throw new GatewayError("RESOURCE_COLLECTION_UNAVAILABLE");
+  const parsed = collectionSchema.safeParse(collection);
+  if (!parsed.success)
+    return {
+      id: `resource.${collection}`,
+      reason: "UNSUPPORTED_RESOURCE_COLLECTION",
+      operations: [],
+    };
+  const { providers } = await listResourceProviders(
+    context.authorize,
+    context.get,
+    collection,
+  );
+  const result = providers.flatMap((provider) => {
+    const reads = [
+      {
+        id: collection === "logentries" ? "list_logentries" : "list_resources",
+        path: `/signalk/v2/api/resources/${collection}`,
+        input: collection === "logentries" ? logentriesInput : resourcesInput,
+      },
+      {
+        id: "get_resource",
+        path: `/signalk/v2/api/resources/${collection}/{id}`,
+        input: resourceInput,
+      },
+      ...(collection === "logentries"
+        ? [
+            {
+              id: "list_logentry_dates",
+              path: "/signalk/v2/api/resources/logentries?dates=true",
+              input: logentryDatesInput,
+            },
+          ]
+        : []),
+    ].map((read) => ({
+      id: read.id,
+      method: "GET",
+      path: read.path,
+      collection,
+      provider,
+      description: `Read ${collection} using ${provider}. Native route and provider permissions apply; no gateway approval is required.`,
+      inputSchema: toJsonSchema(read.input),
+      enabled: true,
+      reason: null,
+      review: null,
+      key: null,
+      approvalRequired: false,
+    }));
+    const writes = Object.keys(operations).map((operation) => {
+      const review = candidate(
+        parsed.data,
+        provider,
+        operation as ResourceOperation,
+      );
+      const reason =
+        review.method === "PUT" && providers.length !== 1
+          ? "RESOURCE_PUT_PROVIDER_AMBIGUOUS"
+          : null;
+      return {
+        id: operation,
+        method: review.method,
+        path: review.path,
+        collection,
+        provider,
+        description: review.description,
+        inputSchema: review.inputSchema,
+        enabled: false,
+        reason,
+        review: reason ? null : review,
+        key: reason ? null : reviewKey(review),
+        approvalRequired: true,
+      };
+    });
+    return [...reads, ...writes];
+  });
+  return {
+    id: `resource.${collection}`,
+    reason: providers.length ? null : "RESOURCE_PROVIDER_UNAVAILABLE",
+    operations: result,
   };
 }
 export async function mutateResource(

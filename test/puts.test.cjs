@@ -17,7 +17,6 @@ const {
 } = require("../dist/capabilities/http.js");
 
 const path = "electrical.switches.fixture.state";
-const source = "fixture.public";
 function fixture(metadata = { supportsPut: true, units: "ratio" }) {
   const principal = { identifier: "writer", permissions: "readwrite" };
   const state = { allowed: true, metadata, calls: [], replies: new Map() };
@@ -31,7 +30,7 @@ function fixture(metadata = { supportsPut: true, units: "ratio" }) {
         id === principal.identifier &&
         context === "vessels.self" &&
         checkedPath === path &&
-        checkedSource === source &&
+        checkedSource === null &&
         operation === "put",
     },
     getMetadata: (fullPath) =>
@@ -46,7 +45,7 @@ function fixture(metadata = { supportsPut: true, units: "ratio" }) {
   const authorize = () => ({ ...principal });
   const requests = new ApprovalRequests();
   const config = configSchema.parse({});
-  const target = puts.describe(authorize, { path, source });
+  const target = puts.describe(authorize, { path });
   const review = { ...putReview(target), decision: "approved" };
   config.readRequests[reviewKey(review)] = review;
   const nativeReply = (
@@ -83,36 +82,36 @@ function fixture(metadata = { supportsPut: true, units: "ratio" }) {
   };
 }
 
-test("native PUT discovery exposes metadata-only candidates with exact source ACLs and no values", () => {
+test("native PUT discovery exposes metadata-only candidates with native path ACLs and no values", () => {
   const f = fixture();
-  assert.deepEqual(f.puts.list(f.authorize, { source }).paths, [path]);
-  assert.equal(f.puts.list(f.authorize, { source: "private" }).paths.length, 0);
-  assert.throws(() => putPathsInput.parse({}), /source/);
-  const description = f.puts.describe(f.authorize, { path, source });
+  assert.deepEqual(f.puts.list(f.authorize, {}).paths, [path]);
+  assert.throws(
+    () => f.puts.list(f.authorize, { source: "private" }),
+    /Unrecognized/,
+  );
+  assert.ok(putPathsInput.safeParse({}).success);
+  const description = f.puts.describe(f.authorize, { path });
   assert.equal(description.metadata.supportsPut, true);
   assert.equal(description.metadata.units, "ratio");
   assert.equal(description.schemaStatus, "unspecified");
-  assert.equal(description.sourceVerification, "native-handler-on-dispatch");
+  assert.equal(description.handlerSelection, "native-default");
   assert.equal(description.nativeHandlerValidation, true);
   assert.equal(Object.hasOwn(description, "value"), false);
   assert.throws(
     () => f.puts.describe(f.authorize, { path, source: "private" }),
-    /PERMISSION_DENIED/,
+    /Unrecognized/,
   );
   for (const permissions of ["readonly", "unknown"]) {
     f.principal.permissions = permissions;
-    assert.equal(canPut(f.app, f.principal, path, source), false);
-    assert.throws(
-      () => f.puts.list(f.authorize, { source }),
-      /PERMISSION_DENIED/,
-    );
+    assert.equal(canPut(f.app, f.principal, path), false);
+    assert.throws(() => f.puts.list(f.authorize, {}), /PERMISSION_DENIED/);
   }
 });
 
-test("PUT descriptions explain schema gaps, saved approvals and unverified handler sources without queueing", () => {
+test("PUT descriptions explain schema gaps, saved approvals and native default routing without queueing", () => {
   const f = fixture();
   const describe = () =>
-    f.puts.describe(f.authorize, { path, source }, f.config.readRequests);
+    f.puts.describe(f.authorize, { path }, f.config.readRequests);
   const queueBefore = JSON.stringify(f.requests.schema());
   let result = describe();
   assert.equal(result.schemaDiagnostics[0].code, "NO_INPUT_TYPE");
@@ -121,7 +120,7 @@ test("PUT descriptions explain schema gaps, saved approvals and unverified handl
   assert.equal(result.approvalStatus, "approved");
   assert.equal(result.enabled, true);
   assert.equal(result.reason, null);
-  assert.equal(result.sourceVerified, false);
+  assert.equal(result.handlerSelection, "native-default");
   const review = Object.values(f.config.readRequests)[0];
   review.decision = "pending";
   assert.equal(describe().approvalStatus, "pending");
@@ -161,7 +160,7 @@ test("native possibleValues supply exact enum constraints without coercion or au
     const f = fixture(metadata);
     const description = f.puts.describe(
       f.authorize,
-      { path, source },
+      { path },
       f.config.readRequests,
     );
     assert.equal(description.schemaStatus, "available");
@@ -170,26 +169,26 @@ test("native possibleValues supply exact enum constraints without coercion or au
     assert.deepEqual(description.inputSchema, { enum: values });
     assert.deepEqual(description.metadata, metadata);
     for (const value of values) {
-      await f.puts.execute(f.context, { path, source, value });
-      assert.deepEqual(f.state.calls.at(-1).body, { value, source });
+      await f.puts.execute(f.context, { path, value });
+      assert.deepEqual(f.state.calls.at(-1).body, { value });
     }
     const count = f.state.calls.length;
     for (const value of ["OFF", "false", "unlisted", {}, []])
       await assert.rejects(
-        f.puts.execute(f.context, { path, source, value }),
+        f.puts.execute(f.context, { path, value }),
         /INVALID_PUT_VALUE/,
       );
     assert.equal(f.state.calls.length, count);
     f.config.readRequests = {};
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value: values[0] }),
+      f.puts.execute(f.context, { path, value: values[0] }),
       /APPROVAL_PENDING/,
     );
     assert.equal(f.state.calls.length, count);
     assert.equal(Object.keys(f.requests.schema().properties).length, 1);
     f.state.allowed = false;
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value: values[0] }),
+      f.puts.execute(f.context, { path, value: values[0] }),
       /PERMISSION_DENIED/,
     );
     assert.equal(f.state.calls.length, count);
@@ -216,7 +215,7 @@ test("malformed, ambiguous or conflicting native choices cannot queue or dispatc
     f.config.readRequests = {};
     const description = f.puts.describe(
       f.authorize,
-      { path, source },
+      { path },
       f.config.readRequests,
     );
     assert.equal(description.schemaStatus, "unsupported");
@@ -225,7 +224,7 @@ test("malformed, ambiguous or conflicting native choices cannot queue or dispatc
       /NATIVE_CHOICES|UNSUPPORTED_INPUT_TYPE/,
     );
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value: "off" }),
+      f.puts.execute(f.context, { path, value: "off" }),
       /UNSUPPORTED_PUT_SCHEMA/,
     );
     assert.equal(Object.keys(f.requests.schema().properties).length, 0);
@@ -242,12 +241,11 @@ test("explicit schemas retain precedence and nested diagnostics; native choices 
   });
   const description = explicit.puts.describe(explicit.authorize, {
     path,
-    source,
   });
   assert.equal(description.schemaSource, "explicit-schema");
   assert.equal(description.schemaDiagnostics[0].field, "schema.pattern");
   await assert.rejects(
-    explicit.puts.execute(explicit.context, { path, source, value: "off" }),
+    explicit.puts.execute(explicit.context, { path, value: "off" }),
     /UNSUPPORTED_PUT_SCHEMA/,
   );
   const nested = fixture({
@@ -255,8 +253,7 @@ test("explicit schemas retain precedence and nested diagnostics; native choices 
     schema: { type: "object", properties: { mode: { type: "multiple" } } },
   });
   assert.equal(
-    nested.puts.describe(nested.authorize, { path, source })
-      .schemaDiagnostics[0].field,
+    nested.puts.describe(nested.authorize, { path }).schemaDiagnostics[0].field,
     "schema.properties.mode.type",
   );
   const constrained = fixture({
@@ -267,17 +264,15 @@ test("explicit schemas retain precedence and nested diagnostics; native choices 
     possibleValues: [{ value: 0 }, { value: 4 }],
   });
   assert.deepEqual(
-    constrained.puts.describe(constrained.authorize, { path, source })
-      .inputSchema,
+    constrained.puts.describe(constrained.authorize, { path }).inputSchema,
     { type: "integer", minimum: 0, maximum: 4, enum: [0, 4] },
   );
   await assert.rejects(
-    constrained.puts.execute(constrained.context, { path, source, value: 1 }),
+    constrained.puts.execute(constrained.context, { path, value: 1 }),
     /INVALID_PUT_VALUE/,
   );
   await constrained.puts.execute(constrained.context, {
     path,
-    source,
     value: 0,
   });
 });
@@ -290,22 +285,22 @@ test("changed native choices or meaning require a new exact saved review", async
   });
   f.state.metadata.possibleValues.push({ title: "On", value: "on" });
   assert.equal(
-    f.puts.describe(f.authorize, { path, source }, f.config.readRequests)
+    f.puts.describe(f.authorize, { path }, f.config.readRequests)
       .approvalStatus,
     "required",
   );
   await assert.rejects(
-    f.puts.execute(f.context, { path, source, value: "on" }),
+    f.puts.execute(f.context, { path, value: "on" }),
     /APPROVAL_PENDING/,
   );
   assert.equal(f.state.calls.length, 0);
-  const target = f.puts.describe(f.authorize, { path, source });
+  const target = f.puts.describe(f.authorize, { path });
   const review = { ...putReview(target), decision: "approved" };
   f.config.readRequests[reviewKey(review)] = review;
-  await f.puts.execute(f.context, { path, source, value: "on" });
+  await f.puts.execute(f.context, { path, value: "on" });
   f.state.metadata.possibleValues[0].title = "Different meaning";
   await assert.rejects(
-    f.puts.execute(f.context, { path, source, value: "off" }),
+    f.puts.execute(f.context, { path, value: "off" }),
     /APPROVAL_PENDING/,
   );
   assert.equal(f.state.calls.length, 1);
@@ -315,12 +310,12 @@ test("metadata observation indexes only bounded self paths, including targets wi
   const f = fixture();
   f.app.getPath = () => ({});
   const puts = new NativePuts(f.app);
-  assert.deepEqual(puts.list(f.authorize, { source }).paths, []);
+  assert.deepEqual(puts.list(f.authorize, {}).paths, []);
   puts.observeDelta({
     context: "vessels.foreign",
     updates: [{ meta: [{ path, value: { supportsPut: true } }] }],
   });
-  assert.deepEqual(puts.list(f.authorize, { source }).paths, []);
+  assert.deepEqual(puts.list(f.authorize, {}).paths, []);
   puts.observeDelta({
     context: f.app.selfContext,
     updates: [
@@ -332,7 +327,7 @@ test("metadata observation indexes only bounded self paths, including targets wi
       },
     ],
   });
-  const discovered = puts.list(f.authorize, { source });
+  const discovered = puts.list(f.authorize, {});
   assert.deepEqual(discovered.paths, [path]);
   assert.equal(discovered.discoveryCoverage, "model-and-observed-metadata");
   assert.equal(
@@ -340,12 +335,12 @@ test("metadata observation indexes only bounded self paths, including targets wi
     "explicit-describe-required",
   );
   f.state.allowed = false;
-  assert.deepEqual(puts.list(f.authorize, { source }).paths, []);
+  assert.deepEqual(puts.list(f.authorize, {}).paths, []);
   f.state.allowed = true;
   puts.reset();
-  assert.deepEqual(puts.list(f.authorize, { source }).paths, []);
-  puts.describe(f.authorize, { path, source });
-  assert.deepEqual(puts.list(f.authorize, { source }).paths, [path]);
+  assert.deepEqual(puts.list(f.authorize, {}).paths, []);
+  puts.describe(f.authorize, { path });
+  assert.deepEqual(puts.list(f.authorize, {}).paths, [path]);
   puts.observeDelta({
     updates: [
       {
@@ -356,18 +351,18 @@ test("metadata observation indexes only bounded self paths, including targets wi
       },
     ],
   });
-  assert.equal(puts.list(f.authorize, { source }).discoveryTruncated, true);
-  assert.equal(puts.list(f.authorize, { source }).metadataPathLimit, 2048);
+  assert.equal(puts.list(f.authorize, {}).discoveryTruncated, true);
+  assert.equal(puts.list(f.authorize, {}).metadataPathLimit, 2048);
 });
 
-test("PUT input requires a literal source and bounded JSON, preserving false, zero and null", async () => {
+test("PUT input uses default routing and bounded JSON, preserving false, zero and null", async () => {
   const f = fixture();
   for (const value of [0, false, null, "", { value: 0 }, [false, null]]) {
-    const result = await f.puts.execute(f.context, { path, source, value });
+    const result = await f.puts.execute(f.context, { path, value });
     assert.equal(result.outcome, "completed");
     assert.equal(result.submitted, true);
     assert.equal(result.retrySafe, false);
-    assert.deepEqual(f.state.calls.at(-1).body, { value, source });
+    assert.deepEqual(f.state.calls.at(-1).body, { value });
     assert.equal(
       f.state.calls.at(-1).route,
       "/signalk/v1/api/vessels/self/electrical/switches/fixture/state",
@@ -389,8 +384,8 @@ test("PUT input requires a literal source and bounded JSON, preserving false, ze
     "x".repeat(32769),
     Array(1025).fill(0),
   ])
-    assert.equal(putInput.safeParse({ path, source, value }).success, false);
-  assert.equal(putInput.safeParse({ path, source }).success, false);
+    assert.equal(putInput.safeParse({ path, value }).success, false);
+  assert.equal(putInput.safeParse({ path }).success, false);
   for (const invalidSource of [
     undefined,
     "",
@@ -400,7 +395,7 @@ test("PUT input requires a literal source and bounded JSON, preserving false, ze
     "x\ny",
   ])
     assert.equal(
-      putInput.safeParse({ path, source: invalidSource, value: 1 }).success,
+      putInput.safeParse({ path: invalidSource, value: 1 }).success,
       false,
     );
   for (const invalidPath of [
@@ -410,7 +405,7 @@ test("PUT input requires a literal source and bounded JSON, preserving false, ze
     "constructor.x",
   ])
     assert.equal(
-      putInput.safeParse({ path: invalidPath, source, value: 1 }).success,
+      putInput.safeParse({ path: invalidPath, value: 1 }).success,
       false,
     );
 });
@@ -423,31 +418,29 @@ test("native constraints are explicit; display ranges and current telemetry inve
     minimum: 0,
     maximum: 2,
   });
-  const description = f.puts.describe(f.authorize, { path, source });
+  const description = f.puts.describe(f.authorize, { path });
   assert.equal(description.schemaStatus, "available");
   assert.deepEqual(description.inputSchema.enum, [0, 1, 2]);
   for (const value of [-1, 3, false, null, "1"])
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value }),
+      f.puts.execute(f.context, { path, value }),
       /INVALID_PUT_VALUE/,
     );
   assert.equal(f.state.calls.length, 0);
-  await f.puts.execute(f.context, { path, source, value: 0 });
+  await f.puts.execute(f.context, { path, value: 0 });
   const unspecified = fixture({
     supportsPut: true,
     displayScale: { lower: 1, upper: 2 },
     zones: [{ lower: 5 }],
   });
   assert.equal(
-    unspecified.puts.describe(unspecified.authorize, { path, source })
-      .schemaStatus,
+    unspecified.puts.describe(unspecified.authorize, { path }).schemaStatus,
     "unspecified",
   );
   assert.equal(
     (
       await unspecified.puts.execute(unspecified.context, {
         path,
-        source,
         value: null,
       })
     ).outcome,
@@ -475,11 +468,11 @@ test("unsupported or malformed explicit schemas block queueing and dispatch with
     const f = fixture({ supportsPut: true, schema });
     f.config.readRequests = {};
     assert.equal(
-      f.puts.describe(f.authorize, { path, source }).schemaStatus,
+      f.puts.describe(f.authorize, { path }).schemaStatus,
       "unsupported",
     );
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value: 1 }),
+      f.puts.execute(f.context, { path, value: 1 }),
       /UNSUPPORTED_PUT_SCHEMA/,
     );
     assert.equal(Object.keys(f.requests.schema().properties).length, 0);
@@ -500,14 +493,13 @@ test("explicit object enum and const constraints compare JSON values independent
       (
         await f.puts.execute(f.context, {
           path,
-          source,
           value: { b: false, a: 1 },
         })
       ).outcome,
       "completed",
     );
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value: { a: 1, b: true } }),
+      f.puts.execute(f.context, { path, value: { a: 1, b: true } }),
       /INVALID_PUT_VALUE/,
     );
   }
@@ -518,14 +510,14 @@ test("role and exact native put ACL precede approval queueing and dispatch", asy
   f.config.readRequests = {};
   f.state.allowed = false;
   await assert.rejects(
-    f.puts.execute(f.context, { path, source, value: 9 }),
+    f.puts.execute(f.context, { path, value: 9 }),
     /PERMISSION_DENIED/,
   );
   assert.equal(Object.keys(f.requests.schema().properties).length, 0);
   assert.equal(f.state.calls.length, 0);
   f.state.allowed = true;
   await assert.rejects(
-    f.puts.execute(f.context, { path, source, value: "secret input" }),
+    f.puts.execute(f.context, { path, value: "secret input" }),
     /APPROVAL_PENDING/,
   );
   assert.equal(
@@ -536,12 +528,12 @@ test("role and exact native put ACL precede approval queueing and dispatch", asy
   f.principal.permissions = "admin";
   f.state.allowed = false;
   await assert.rejects(
-    f.puts.execute(f.context, { path, source, value: 1 }),
+    f.puts.execute(f.context, { path, value: 1 }),
     /PERMISSION_DENIED/,
   );
 });
 
-test("approval changes, source changes and stale supportsPut cannot dispatch", async () => {
+test("approval changes and stale supportsPut cannot dispatch", async () => {
   for (const change of [
     (f) => {
       Object.values(f.config.readRequests)[0].decision = "rejected";
@@ -559,7 +551,7 @@ test("approval changes, source changes and stale supportsPut cannot dispatch", a
     const f = fixture();
     change(f);
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value: 1 }),
+      f.puts.execute(f.context, { path, value: 1 }),
       /APPROVAL_REJECTED|APPROVAL_PENDING|PUT_UNAVAILABLE/,
     );
     assert.equal(f.state.calls.length, 0);
@@ -574,7 +566,6 @@ test("native replies remain pending/completed, including completed action failur
   f.state.replies.set(reply.requestId, reply);
   const pending = await f.puts.execute(f.context, {
     path,
-    source,
     value: false,
   });
   assert.equal(pending.outcome, "pending");
@@ -588,7 +579,7 @@ test("native replies remain pending/completed, including completed action failur
   assert.equal(status.reply.statusCode, 502);
   assert.equal(status.reply.message, "synthetic failure");
   f.context.http.put = async () => f.nativeReply("FAILED", 502);
-  const failed = await f.puts.execute(f.context, { path, source, value: 0 });
+  const failed = await f.puts.execute(f.context, { path, value: 0 });
   assert.equal(failed.reply.state, "FAILED");
   assert.equal(failed.reply.statusCode, 502);
 });
@@ -599,7 +590,7 @@ test("a request cannot inherit another already-approved metadata variant", async
   const variant = { supportsPut: true, description: "variant B" };
   f.state.metadata = variant;
   const approved = {
-    ...putReview(f.puts.describe(f.authorize, { path, source })),
+    ...putReview(f.puts.describe(f.authorize, { path })),
     decision: "approved",
   };
   f.config.readRequests[reviewKey(approved)] = approved;
@@ -608,7 +599,7 @@ test("a request cannot inherit another already-approved metadata variant", async
     f.state.metadata = variant;
     return f.nativeReply();
   };
-  const changed = await f.puts.execute(f.context, { path, source, value: 0 });
+  const changed = await f.puts.execute(f.context, { path, value: 0 });
   assert.equal(changed.outcome, "unknown");
   assert.equal(changed.code, "AUTHORIZATION_CHANGED_AFTER_SUBMISSION");
   await assert.rejects(
@@ -619,7 +610,7 @@ test("a request cannot inherit another already-approved metadata variant", async
 
 test("request status is scoped to this gateway submission, principal, current ACL and saved approval", async () => {
   const f = fixture();
-  const result = await f.puts.execute(f.context, { path, source, value: 1 });
+  const result = await f.puts.execute(f.context, { path, value: 1 });
   await assert.rejects(
     f.puts.status(f.context, { requestId: randomUUID() }),
     /PUT_REQUEST_UNAVAILABLE/,
@@ -664,7 +655,6 @@ test("post-submission revocation and ambiguous transport outcomes preserve uncer
     };
     const result = await f.puts.execute(f.context, {
       path,
-      source,
       value: "must not persist",
     });
     assert.equal(result.outcome, "unknown", changed);
@@ -704,7 +694,7 @@ test("native user/ID/href mismatch or invalid output cannot disclose an uncorrel
       alter(reply);
       return reply;
     };
-    const result = await f.puts.execute(f.context, { path, source, value: 1 });
+    const result = await f.puts.execute(f.context, { path, value: 1 });
     assert.equal(result.outcome, "unknown");
     assert.equal(Object.hasOwn(result, "requestId"), false);
     assert.equal(Object.hasOwn(result, "reply"), false);
@@ -713,7 +703,7 @@ test("native user/ID/href mismatch or invalid output cannot disclose an uncorrel
 
 test("status rechecks authorization and native correlation after asynchronous polling", async () => {
   const f = fixture();
-  const submitted = await f.puts.execute(f.context, { path, source, value: 1 });
+  const submitted = await f.puts.execute(f.context, { path, value: 1 });
   f.context.http.getRequest = async (id) => {
     f.state.allowed = false;
     return f.state.replies.get(id);
@@ -736,18 +726,18 @@ test("bounded correlation reserves capacity before dispatch and never evicts an 
   f.context.http.put = () =>
     new Promise((resolve) => completions.push(resolve));
   const pending = Array.from({ length: 128 }, () =>
-    f.puts.execute(f.context, { path, source, value: 1 }),
+    f.puts.execute(f.context, { path, value: 1 }),
   );
   assert.equal(completions.length, 128);
   await assert.rejects(
-    f.puts.execute(f.context, { path, source, value: 2 }),
+    f.puts.execute(f.context, { path, value: 2 }),
     /PUT_REQUEST_CAPACITY/,
   );
   const now = Date.now;
   Date.now = () => now() + 3600001;
   try {
     await assert.rejects(
-      f.puts.execute(f.context, { path, source, value: 2 }),
+      f.puts.execute(f.context, { path, value: 2 }),
       /PUT_REQUEST_CAPACITY/,
     );
     for (const resolve of completions) resolve(f.nativeReply("PENDING", 202));
@@ -758,7 +748,7 @@ test("bounded correlation reserves capacity before dispatch and never evicts an 
     );
     f.context.http.put = async () => f.nativeReply();
     assert.equal(
-      (await f.puts.execute(f.context, { path, source, value: 3 })).outcome,
+      (await f.puts.execute(f.context, { path, value: 3 })).outcome,
       "completed",
     );
   } finally {
@@ -802,11 +792,11 @@ test("native local actions use only accepted socket destination, bearer header a
   );
   const route =
     "/signalk/v1/api/vessels/self/electrical/switches/fixture/state";
-  await actions.put(route, { value: false, source });
+  await actions.put(route, { value: false });
   const requestId = randomUUID();
   await actions.getRequest(requestId);
   assert.equal(received[0].method, "PUT");
-  assert.deepEqual(JSON.parse(received[0].body), { value: false, source });
+  assert.deepEqual(JSON.parse(received[0].body), { value: false });
   assert.equal(received[0].headers.authorization, "Bearer synthetic-token");
   assert.equal(received[0].headers.cookie, undefined);
   assert.equal(received[1].url, `/signalk/v1/requests/${requestId}`);
@@ -819,38 +809,91 @@ test("native local actions use only accepted socket destination, bearer header a
     "/signalk/v1/api/vessels/self/electrical/switches/fixture/state/meta/units",
   ])
     assert.throws(
-      () => actions.put(invalid, { value: 1, source }),
+      () => actions.put(invalid, { value: 1 }),
       /INVALID_LOCAL_ROUTE/,
     );
   for (const id of ["../plugins", "id?token=secret", "not-a-uuid"])
     assert.throws(() => actions.getRequest(id), /INVALID_LOCAL_ROUTE/);
   replies.push({ status: 302, location: "/plugins/unsafe", body: {} });
   await assert.rejects(
-    actions.put(route, { value: 1, source }),
+    actions.put(route, { value: 1 }),
     /NATIVE_PUT_REDIRECT_REFUSED/,
   );
   assert.equal(received.length, 3);
   replies.push({ status: 401, body: { error: "unauthorized" } });
   await assert.rejects(
-    actions.put(route, { value: 1, source }),
+    actions.put(route, { value: 1 }),
     (error) =>
       error instanceof NativeActionHttpError && error.httpStatus === 401,
   );
   const native = fixture().nativeReply("COMPLETED", 403);
   replies.push({ status: 403, body: native });
-  assert.deepEqual(await actions.put(route, { value: 1, source }), native);
+  assert.deepEqual(await actions.put(route, { value: 1 }), native);
   replies.push({
     status: 200,
     contentType: "text/html",
     body: "<html>not JSON</html>",
   });
-  await assert.rejects(
-    actions.put(route, { value: 1, source }),
-    /UPSTREAM_NOT_JSON/,
-  );
+  await assert.rejects(actions.put(route, { value: 1 }), /UPSTREAM_NOT_JSON/);
   replies.push({ status: 200, body: "invalid JSON" });
   await assert.rejects(
-    actions.put(route, { value: 1, source }),
+    actions.put(route, { value: 1 }),
     /UPSTREAM_INVALID_JSON/,
+  );
+});
+
+test("standing PUT rules cover future paths while enforcing current metadata, native permissions and revocation", async () => {
+  const f = fixture({ supportsPut: true, type: "boolean" });
+  const rule = {
+    kind: "put-rule",
+    context: "vessels.self",
+    path: "electrical.switches.**",
+    decision: "approved",
+  };
+  f.config.readRequests = { [reviewKey(rule)]: rule };
+  const future = "electrical.switches.newDevice.state";
+  f.app.getMetadata = (p) =>
+    p === `vessels.self.${future}` ? f.state.metadata : undefined;
+  f.app.securityStrategy.checkACL = (id, context, p, source, operation) =>
+    f.state.allowed &&
+    id === "writer" &&
+    context === "vessels.self" &&
+    p === future &&
+    source === null &&
+    operation === "put";
+  await f.puts.execute(f.context, { path: future, value: false });
+  assert.deepEqual(f.state.calls[0].body, { value: false });
+  assert.equal(Object.keys(f.requests.schema().properties).length, 0);
+  f.state.metadata.description = "New provider description";
+  await f.puts.execute(f.context, { path: future, value: true });
+  await assert.rejects(
+    f.puts.execute(f.context, { path: future, value: 1 }),
+    /INVALID_PUT_VALUE/,
+  );
+  f.state.allowed = false;
+  await assert.rejects(
+    f.puts.execute(f.context, { path: future, value: true }),
+    /PERMISSION_DENIED/,
+  );
+  f.state.allowed = true;
+  f.state.metadata.supportsPut = false;
+  await assert.rejects(
+    f.puts.execute(f.context, { path: future, value: true }),
+    /PUT_UNAVAILABLE/,
+  );
+  f.state.metadata.supportsPut = true;
+  rule.decision = "rejected";
+  await assert.rejects(
+    f.puts.execute(f.context, { path: future, value: true }),
+    /APPROVAL_REJECTED/,
+  );
+  assert.equal(f.state.calls.length, 2);
+  assert.equal(
+    putInput.safeParse({ path: "electrical.switches.*", value: 0 }).success,
+    false,
+  );
+  assert.equal(
+    putInput.safeParse({ path: future, source: "public", value: 0 }).success,
+    false,
   );
 });

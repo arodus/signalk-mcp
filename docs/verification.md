@@ -306,3 +306,43 @@ Native API checks fetch real server documents and compare representative native 
 The bounded native document cache has concurrency, failed-fetch and lifecycle invalidation coverage. Identity and saved approval changes during a read suppress the result. The embedded approval panel was visually inspected at desktop and 390-pixel mobile width using synthetic native GET/POST/PUT rows; native reads have a Read label and can be revoked through the same saved configuration flow.
 
 The packed artifact also passed `npm run verify:package`, including native API integration against its installed contents and the embedded admin assets. These are local checks. The native API audit counts supported schemas, not execution of every endpoint. Publication, deployment and physical operation remain separate. See [native API coverage](native-apis.md).
+
+## Operation catalogue and bulk approval (2026-11-12)
+
+The configuration panel discovers current plugin and supported native API operations before an MCP invocation. The admin-only catalogue endpoint uses the same OpenAPI parser and exact review records as execution. Metadata reads preserve the native administrator token; browser session support is confined to this endpoint and MCP remains bearer-only. Discovery neither executes provider operations nor queues or persists reviews. Disabled plugins, unavailable documents and unsupported contracts remain explicit.
+
+Per-plugin/API bulk read and write buttons stage exact current contracts. One native Plugin Config save applies selections across groups. Save rechecks selected plugin/API contracts, preserves concurrent requests and stricter saved access requirements, and rejects conflicting edits, disappeared contracts and capacity overflow. Native PUT and Resources rows retain exact source/provider binding and remain request-driven. The existing combined 64-review limit is unchanged.
+
+Node 24.22.1 with Signal K 2.34.0 passed `npm run check`, including Python MCP SDK interoperability. Optional installed Codex/Hermes product clients and the production InfluxDB History test were skipped because their separate opt-in environments were not supplied. Real-server regression tests cover native administrator bearer/cookie access, explicit bearer precedence, denial of ordinary users, unchanged bearer-only MCP, metadata-only discovery, exact native configuration saves, contract-change rejection and discovery while the gateway is disabled.
+
+The embedded panel was inspected in the real native Admin UI at 390, 1280 and 1920 pixels. Browser checks verified bulk reads/writes, discard, one save, refresh persistence, unsupported-operation exclusion and no provider invocation. The panel and table had no horizontal overflow at those widths. The [catalogue screenshot](images/operation-catalogue.png) uses synthetic fixtures. This is local verification, not deployment or physical-vessel evidence.
+
+## Telemetry PUT table and standing rules (2026-11-12)
+
+Telemetry PUTs now use a separate admin table with manual exact paths and standing wildcard rules. Commands contain only path and value; Signal K selects the handler. Existing source-bound approvals migrate without reapproval, preserving metadata/value contracts and decisions; rejection wins identical-contract collisions. Standing rules cover current and future matching paths while current metadata constraints, native identity and native path PUT permissions are checked for every invocation.
+
+Local `npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 152 portable tests, 69 native passes and three existing optional skips. Native tests cover admin-only metadata previews, no dispatch during review, handler ambiguity, registration of a new path after a rule was saved, invalid values, native permissions and saved rejection. `git diff --check` passed. These changes were not freshly tested across the entire Node 22/24 and Signal K 2.32.0/2.34.0 matrix.
+
+The real native Admin UI was checked at 390, 1280 and 1920 pixels without horizontal page overflow. A synthetic legacy approval appeared accepted automatically. Manual exact-path and wildcard entries plus an API read were staged across both tables and persisted in one native Save, then verified after navigation. The saved fixture contained four approvals and no legacy source fields. No provider command was invoked during UI review. The [telemetry screenshot](images/telemetry-put-approvals.jpg) contains only synthetic data.
+
+## Catalogue rebase onto custom Resources support (2026-11-12)
+
+Rebased the catalogue and telemetry approval work onto `41fe20e` from `main` (custom resource collections, PR #54). Conflict resolution retains both standing telemetry rules and the shared custom collection validation. Catalogue tests now include discovered custom collections and a real temporary native `wiringDevices` provider; existing native read/write permissions and sole-provider PUT restrictions remain intact.
+
+`npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 155 portable tests and 69 native tests, with four optional skips (production History, Codex, Hermes and the separately installed published Wiring package). The native custom-provider tests run with synthetic data. `git diff --check` passed. Remote CI and the complete compatibility matrix were not rerun locally.
+
+## Saved decisions without an entry cap (2026-11-12)
+
+Removed the 64-entry cap from saved reviews, bulk staging, native configuration validation and advanced manual read approvals. The shared request queue now counts only new unsaved pending requests and still rejects the 65th distinct request with `APPROVAL_QUEUE_FULL`. Existing saved entries, including pending and rejected decisions, do not consume that queue; duplicates do not consume additional slots. Native Save/restart resets the in-memory queue count. Contract validation, rejection precedence and native permissions remain unchanged.
+
+`npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 157 portable passes and 69 native passes, with four optional skips. Regression checks save 150 reviews and 100 manual approvals, retain rejection decisions, cap new requests independently of saved entries, and save/load 101 decisions through a real native administrator configuration endpoint. A separate native Admin UI fixture staged 80 plugin reads and saved them once; all 80 remained accepted after reload. The updated guidance rendered without horizontal overflow at 390 and 1280 pixels. Only synthetic providers were used. `git diff --check` passed.
+
+## Shorter settings guidance (2026-11-12)
+
+Simplified the catalogue, telemetry path, wildcard and advanced settings descriptions. Removed queue-size, migration and handler details from general help while retaining the wildcard scope and the information needed to review operations. This is a copy-only update. `npm run check` passed with 157 portable and 69 native tests (four optional skips) on Node 24.22.1 / Signal K 2.34.0. Synthetic native Admin UI checks at 390 and 1280 pixels verified readable copy without horizontal page overflow; catalogue and telemetry screenshots were refreshed.
+
+## Existing read grants in the catalogue (2026-11-12)
+
+Removed the separate manual approval editor. Matching legacy read grants now appear as accepted catalogue rows with their original access restrictions; existing rejections take precedence. Unavailable grants remain visible and removable. Stored grants are preserved without an automatic contract migration. Deleting a legacy-backed row removes both its grant and displayed review, with conflict checks for concurrent grant or review changes.
+
+`npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 160 portable and 69 native passes, with four optional skips. New UI regressions cover preserved storage, administrator-only access, pending/rejected precedence, changed and unsupported routes, missing providers, removal of both grant forms and concurrent edits. A disposable native Admin UI fixture verified initial preservation, Reject/Save, Delete/Save and retention of an unrelated unavailable grant in the actual saved file. The manual editor was absent. The [synthetic catalogue screenshot](images/legacy-read-approvals.jpg) shows the unavailable grant retained after another grant was removed. Responsive checks at 390 and 1280 pixels showed no horizontal page overflow. `git diff --check` passed.

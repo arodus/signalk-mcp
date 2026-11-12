@@ -200,3 +200,100 @@ test(
     assert.equal(submissions.length, 2);
   },
 );
+
+test(
+  "admin catalogue uses native bearer/cookie authorization and exact approvals saved through Plugin Config",
+  { timeout: 90000 },
+  async (t) => {
+    const f = await start();
+    t.after(async () => {
+      try {
+        await f.stop();
+      } finally {
+        f.remove();
+      }
+    });
+    t.diagnostic(
+      `Node ${process.version}; Signal K ${f.version}; synthetic providers only`,
+    );
+    const route = "/plugins/signalk-mcp/catalogue";
+    const pluginRoute = `${route}?id=plugin.put-fixture`;
+    for (const principal of [null, "reader", "writer"])
+      assert.ok(
+        [401, 403].includes((await f.http(pluginRoute, principal)).status),
+      );
+    const before = f.reviews();
+    const listing = await f.http(route, "admin");
+    assert.equal(listing.status, 200);
+    assert.ok(
+      listing.body.capabilities.some((c) => c.id === "plugin.put-fixture"),
+    );
+    const response = await f.http(pluginRoute, "admin");
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const op = response.body.operations.find((o) => o.id === "normal");
+    assert.equal(op.review.decision, "pending");
+    assert.equal(op.enabled, false);
+    assert.deepEqual(f.reviews(), before);
+    assert.deepEqual(f.provider.postCalls, []);
+    assert.deepEqual(f.provider.mutationCalls, []);
+    const session = await fetch(`${f.baseUrl}${pluginRoute}`, {
+      headers: { Cookie: `JAUTHENTICATION=${f.tokens.admin}` },
+    });
+    assert.equal(session.status, 200);
+    assert.equal(session.headers.get("cache-control"), "no-store");
+    const conflict = await fetch(`${f.baseUrl}${pluginRoute}`, {
+      headers: {
+        Cookie: `JAUTHENTICATION=${f.tokens.admin}`,
+        Authorization: `Bearer ${f.tokens.reader}`,
+      },
+    });
+    assert.equal(conflict.status, 403);
+    const mcpCookie = await fetch(`${f.baseUrl}/plugins/signalk-mcp/mcp`, {
+      method: "POST",
+      headers: {
+        Cookie: `JAUTHENTICATION=${f.tokens.admin}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+    });
+    assert.equal(mcpCookie.status, 401);
+    const settings = await f.readConfig();
+    settings.configuration.readRequests = {
+      [op.key]: { ...op.review, decision: "approved" },
+    };
+    await f.saveConfig(settings);
+    data(
+      await f.call("execute_mutation", {
+        id: "plugin.put-fixture",
+        operation: "normal",
+        arguments: { body: { value: true } },
+      }),
+    );
+    assert.equal(f.provider.postCalls.length, 1);
+    f.provider.postDocument.paths["/post-normal"].post.summary =
+      "Changed action meaning";
+    const changed = await f.http(pluginRoute, "admin");
+    assert.notEqual(
+      changed.body.operations.find((o) => o.id === "normal").key,
+      op.key,
+    );
+    error(
+      await f.call("execute_mutation", {
+        id: "plugin.put-fixture",
+        operation: "normal",
+        arguments: { body: { value: false } },
+      }),
+      "APPROVAL_PENDING",
+    );
+    assert.equal(f.provider.postCalls.length, 1);
+    const disabled = await f.readConfig();
+    disabled.enabled = false;
+    disabled.configuration.readRequests = f.reviews();
+    await f.saveConfig(disabled);
+    assert.equal(
+      (await f.http("/plugins/signalk-mcp/mcp", "admin", "POST", {})).status,
+      503,
+    );
+    assert.equal((await f.http(pluginRoute, "admin")).status, 200);
+  },
+);

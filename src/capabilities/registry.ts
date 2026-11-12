@@ -1,3 +1,4 @@
+import { putRuleSchema, putRuleMeaning } from "../put-rules.js";
 import { DiscoveryCache } from "./discovery-cache.js";
 import { nativeApiSchema, type NativeApi } from "./native-api.js";
 import { z } from "zod";
@@ -10,7 +11,13 @@ import {
 } from "../auth.js";
 import { getValues, listPaths, record } from "../data.js";
 import type { Config } from "../config.js";
-import { applyReviews, type ApprovalRequests } from "../approvals.js";
+import {
+  applyReviews,
+  operationReview,
+  putReview,
+  reviewKey,
+  type ApprovalRequests,
+} from "../approvals.js";
 import type {
   LocalGet,
   LocalPost,
@@ -28,6 +35,7 @@ import {
 } from "../puts.js";
 import {
   describeResource,
+  resourceCatalogue,
   describeResourceInput,
   mutateResource,
   isResourceMutation,
@@ -303,11 +311,11 @@ export class CapabilityRegistry {
       },
       "signalk.put": {
         description:
-          "Native self-context actions; every exact path/source needs saved administrator approval and native PUT permission",
+          "Native self-context actions; every exact path needs saved administrator approval or a standing path rule and native PUT permission",
         operations: {
           list_put_paths: {
             description:
-              "Discover metadata-advertised PUT path candidates for an explicit source; no current values or inferred handler sources",
+              "Discover metadata-advertised PUT path candidates with native default handler routing; no current values",
             input: putPathsInput,
             run: (args) =>
               this.nativePuts().list(
@@ -317,7 +325,7 @@ export class CapabilityRegistry {
           },
           describe_put: {
             description:
-              "Describe a native action's schema diagnostics and exact approval state using its metadata and explicit source; discovery does not approve or verify a registered handler",
+              "Describe a native action's schema diagnostics and exact approval state using its metadata; Signal K selects the handler and discovery does not approve execution",
             input: describePutInput,
             run: (args) =>
               this.nativePuts().describe(
@@ -509,7 +517,7 @@ export class CapabilityRegistry {
             reason: "PER_TARGET_APPROVAL_REQUIRED",
             executionTool: "put_value",
             description:
-              "Submit one approved path/source action. Never automatically retry an unknown outcome. Use put_value or execute_mutation; execute_capability only reads.",
+              "Submit one approved telemetry path action using native handler selection. Never automatically retry an unknown outcome. Use put_value or execute_mutation; execute_capability only reads.",
             inputSchema: toJsonSchema(putInput),
           },
         ],
@@ -642,6 +650,143 @@ export class CapabilityRegistry {
         operations: [],
       };
     }
+  }
+  // Admin catalogue discovery never invokes an operation or queues a request.
+  // Return the same exact review records used by execution, without granting them.
+  async catalogue(id: string, path?: string) {
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    if (id === "native.put") {
+      if (typeof path !== "string") throw new GatewayError("INVALID_ARGUMENTS");
+      const rule = putRuleSchema.safeParse({
+        kind: "put-rule",
+        context: "vessels.self",
+        path,
+      });
+      if (path.includes("*")) {
+        if (!rule.success) throw new GatewayError("INVALID_ARGUMENTS");
+        return {
+          id,
+          reason: null,
+          operations: [
+            {
+              id: path,
+              method: "PUT",
+              path,
+              description: putRuleMeaning,
+              review: rule.data,
+              key: reviewKey(rule.data),
+              enabled: false,
+            },
+          ],
+        };
+      }
+      const target = this.nativePuts().describe(
+        () => this.authorize(),
+        { path },
+        this.config.readRequests,
+        undefined,
+        true,
+      );
+      const review =
+        target.schemaStatus === "unsupported" ? null : putReview(target);
+      return {
+        id,
+        reason: null,
+        operations: [
+          {
+            id: path,
+            method: "PUT",
+            path,
+            description: target.metadata.description,
+            reason:
+              target.schemaStatus === "unsupported"
+                ? "UNSUPPORTED_PUT_SCHEMA"
+                : null,
+            schemaDiagnostics: target.schemaDiagnostics,
+            inputSchema: target.inputSchema,
+            review,
+            key: review ? reviewKey(review) : null,
+            enabled: target.enabled,
+          },
+        ],
+      };
+    }
+    if (id.startsWith("resource.")) {
+      const result = await resourceCatalogue(
+        { authorize: () => this.authorize(), get: this.get },
+        id.slice(9),
+      );
+      if (this.authorize().permissions !== "admin")
+        throw new GatewayError("PERMISSION_DENIED", 403);
+      return result;
+    }
+    const plugin = await this.plugin(id);
+    if (!plugin.enabled)
+      return { id, reason: "PLUGIN_DISABLED", operations: [] };
+    const operations = discoverOperations(
+      await this.document(plugin),
+      plugin.id,
+      this.config.pluginOperations,
+      this.authorize(),
+      plugin.api,
+    );
+    const result = operations.map((operation) => {
+      const description = operationDescription(operation);
+      if (![null, "NOT_ALLOWLISTED"].includes(operation.reason))
+        return { ...description, review: null, key: null };
+      const review = operationReview(plugin.id, operation);
+      const compatibleKeys =
+        !operation.api &&
+        operation.method !== "GET" &&
+        operation.legacyContractHash
+          ? [reviewKey(operationReview(plugin.id, operation, true))]
+          : [];
+      return { ...description, review, key: reviewKey(review), compatibleKeys };
+    });
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    const current = await this.plugin(id);
+    if (!current.enabled) throw new GatewayError("PLUGIN_DISABLED", 403);
+    return { id, reason: null, operations: result };
+  }
+  async catalogueIndex(offset = 0) {
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    // The feature inventory is bounded at 256 plugins and 64 APIs.
+    const listing = await this.list(0, 512);
+    const capabilities = listing.capabilities.filter(
+      (c) => (c as { id: string }).id !== "api.resources",
+    );
+    try {
+      const { collections } = await listResourceCollections(
+        () => this.authorize(),
+        this.get,
+      );
+      for (const collection of Object.keys(collections).sort())
+        capabilities.push({
+          id: `resource.${collection}`,
+          kind: "resource",
+          availability: "inspect-required",
+        });
+    } catch (error) {
+      capabilities.push({
+        id: "resource.unavailable",
+        kind: "resource",
+        availability: "unavailable",
+        reason:
+          error instanceof GatewayError
+            ? error.code
+            : "RESOURCE_DISCOVERY_UNAVAILABLE",
+      });
+    }
+    if (this.authorize().permissions !== "admin")
+      throw new GatewayError("PERMISSION_DENIED", 403);
+    return {
+      ...listing,
+      capabilities: capabilities.slice(offset, offset + 100),
+      nextOffset: offset + 100 < capabilities.length ? offset + 100 : null,
+    };
   }
   private async document(plugin: PluginInfo): Promise<unknown> {
     return plugin.api
