@@ -1,3 +1,4 @@
+import { resourceCollectionSchema } from "./capabilities/resource-schemas.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { GatewayError, type Principal } from "./auth.js";
@@ -158,14 +159,6 @@ const pluginReviewSchema = z
       return false;
     }
   });
-const resourceCollectionSchema = z.enum([
-  "routes",
-  "waypoints",
-  "regions",
-  "notes",
-  "charts",
-  "logentries",
-]);
 interface ResourceReviewTarget {
   collection: z.infer<typeof resourceCollectionSchema>;
   provider: string;

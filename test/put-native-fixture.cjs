@@ -13,7 +13,7 @@ const serverRequire = createRequire(
     : require.resolve("signalk-server/package.json"),
 );
 
-async function start() {
+async function start({ plugins = [] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "signalk-mcp-native-put-"));
   const socket = net.createServer();
   await new Promise((resolve) => socket.listen(0, "127.0.0.1", resolve));
@@ -28,6 +28,7 @@ async function start() {
       process.env.MCP_TEST_PLUGIN_DIR || path.resolve(__dirname, ".."),
     ],
     ["put-fixture", path.join(__dirname, "fixtures/put-fixture")],
+    ...plugins,
   ]) {
     dependencies[id] = "1.0.0";
     fs.symlinkSync(root, path.join(dir, "node_modules", id), "dir");

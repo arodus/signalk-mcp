@@ -49,6 +49,10 @@ jobs:
           echo "MCP_TEST_SERVER_DIR=$RUNNER_TEMP/signalk-runtime/node_modules/signalk-server" >> "$GITHUB_ENV"
         env:
           SIGNALK_VERSION: ${{ matrix.signalk }}
+      - name: Install Wiring compatibility fixture
+        run: |
+          npm install --prefix "$RUNNER_TEMP/wiring-provider" --ignore-scripts --no-audit --no-fund --package-lock=false signalk-wiring@0.7.0
+          echo "MCP_TEST_WIRING_DIR=$RUNNER_TEMP/wiring-provider/node_modules/signalk-wiring" >> "$GITHUB_ENV"
       - run: |
           python -m venv /tmp/signalk-mcp-python
           /tmp/signalk-mcp-python/bin/pip install -r test/python-requirements.txt

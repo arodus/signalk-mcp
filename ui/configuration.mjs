@@ -1,3 +1,4 @@
+import { resourceCollectionSchema } from "../dist/capabilities/resource-schemas.js";
 import { approvalSchema } from "../dist/capabilities/schemas.js";
 
 const CONFIG_URL = "/plugins/signalk-mcp/config";
@@ -61,14 +62,7 @@ export async function loadConfiguration(fetcher = nativeFetch) {
             "permission" in review
           : review.kind === "resource"
             ? !["POST", "PUT", "DELETE"].includes(review.method) ||
-              ![
-                "routes",
-                "waypoints",
-                "regions",
-                "notes",
-                "charts",
-                "logentries",
-              ].includes(review.collection) ||
+              !resourceCollectionSchema.safeParse(review.collection).success ||
               typeof review.provider !== "string" ||
               !review.provider ||
               review.path !==

@@ -173,6 +173,6 @@ Results include `statusCode`, unchanged provider `data`, `submitted: true` and `
 
 ## Resources
 
-`api.resources` supports routes, waypoints, regions, notes, chart metadata and logentries. Use `list_collections`, `list_resource_providers`, `list_resources`, `get_resource`, `list_logentries` and `list_logentry_dates` through `execute_capability`. Reads use native Resources permissions and return provider data unchanged.
+`api.resources` supports discovered standard and custom collections, including logentries and Wiring records. Custom lists accept an optional `query` object for provider-defined filters; standard filters and the dedicated logentry operations retain their existing contracts. Use `list_collections`, `list_resource_providers`, `list_resources`, `get_resource`, `list_logentries` and `list_logentry_dates` through `execute_capability`. Reads use native Resources permissions and return provider data unchanged.
 
 `describe_resource` takes an exact collection/provider pair and exposes the supported write contracts and approval state. `create_resource`, `put_resource` (upsert) and `delete_resource` use `execute_mutation`, each with its own saved administrator review. Reviews bind method, collection, provider, route and input contract; they never contain submitted values. Native Resources write permissions still apply. See [arguments, limits and examples](resources.md).

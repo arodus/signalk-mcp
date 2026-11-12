@@ -42,6 +42,7 @@ test(
       "notes",
       "charts",
       "logentries",
+      "custom",
     ]) {
       resourcesApi.register("resource-fixture", {
         type,
@@ -152,6 +153,16 @@ test(
         { name: collection },
       );
     }
+    await call("list_resources", {
+      collection: "custom",
+      query: { zone: "123", removed: false, tags: ["a", "b"] },
+    });
+    assert.deepEqual(calls.at(-1).query, {
+      zone: "123",
+      removed: false,
+      tags: ["a", "b"],
+      provider: "resource-fixture",
+    });
     await call("list_resources", { collection: "charts" });
     assert.deepEqual(calls.at(-1).query, { provider: "resource-fixture" });
     await call(
@@ -209,6 +220,7 @@ test(
     const calls = [];
     const stored = new Map();
     const resourceBodies = {
+      wiringDevices: { name: "Synthetic lamp", ratedPower: 0, spare: null },
       routes: {
         name: "route",
         feature: {
@@ -457,6 +469,245 @@ test(
     error(
       await mutate("create_resource", "logentries", resourceBodies.logentries),
       "APPROVAL_PENDING",
+    );
+  },
+);
+
+test(
+  "published Wiring plugin supports native resource CRUD through MCP with synthetic storage",
+  {
+    timeout: 90000,
+    skip:
+      !process.env.MCP_TEST_WIRING_DIR &&
+      "Set MCP_TEST_WIRING_DIR to unpacked signalk-wiring 0.7.0",
+  },
+  async (t) => {
+    const path = require("node:path");
+    const wiring = path.resolve(process.env.MCP_TEST_WIRING_DIR);
+    assert.equal(require(path.join(wiring, "package.json")).version, "0.7.0");
+    const f = await startWrites({ plugins: [["signalk-wiring", wiring]] });
+    t.after(async () => {
+      try {
+        await f.stop();
+      } finally {
+        f.remove();
+      }
+    });
+    t.diagnostic(
+      `Node ${process.version}; Signal K ${f.version}; published Wiring 0.7.0; temporary SQLite and synthetic devices only`,
+    );
+    const unpack = (result) => {
+      assert.equal(result.isError, undefined, JSON.stringify(result));
+      return result.structuredContent;
+    };
+    const read = async (operation, args) =>
+      unpack(
+        await f.call(
+          "execute_capability",
+          {
+            id: "api.resources",
+            operation,
+            arguments: args,
+          },
+          "reader",
+        ),
+      );
+    const collections = await read("list_collections", {});
+    for (const collection of [
+      "wiringDevices",
+      "wiringWireRuns",
+      "wiringCircuits",
+      "wiringPlans",
+      "wiringZones",
+      "wiringConduits",
+      "wiringSchematics",
+      "wiringSettings",
+    ]) {
+      assert.ok(collections.supportedCollections.includes(collection));
+      const listed = await read("list_resources", { collection });
+      assert.equal(listed.provider, "signalk-wiring");
+    }
+    const settings = await read("get_resource", {
+      collection: "wiringSettings",
+      id: "config",
+    });
+    assert.equal(settings.data.defaultLengthUnit, "m");
+    const mutate = (operation, collection, body, id, principal = "writer") =>
+      f.call(
+        "execute_mutation",
+        {
+          id: "api.resources",
+          operation,
+          arguments: {
+            collection,
+            provider: "signalk-wiring",
+            ...(body === undefined ? {} : { body }),
+            ...(id === undefined ? {} : { id }),
+          },
+        },
+        principal,
+      );
+    async function approve(collection, method) {
+      const config = await f.readConfig();
+      config.configuration.readRequests = f.reviews();
+      const review = Object.values(config.configuration.readRequests).find(
+        (r) =>
+          r.kind === "resource" &&
+          r.collection === collection &&
+          r.method === method,
+      );
+      assert.ok(review);
+      review.decision = "approved";
+      await f.saveConfig(config);
+    }
+    async function reviewed(operation, collection, body, id, method) {
+      const pending = await mutate(operation, collection, body, id);
+      assert.equal(pending.content[0].text, "APPROVAL_PENDING");
+      await approve(collection, method);
+      return unpack(await mutate(operation, collection, body, id));
+    }
+    const lamp = {
+      name: "Synthetic lamp",
+      type: "light",
+      role: "consumer",
+      ratedPowerW: 0,
+      notes: "fixture",
+      neverRemote: true,
+    };
+    assert.equal(
+      (
+        await mutate(
+          "create_resource",
+          "wiringDevices",
+          lamp,
+          undefined,
+          "reader",
+        )
+      ).content[0].text,
+      "PERMISSION_DENIED",
+    );
+    assert.equal(Object.keys(f.reviews()).length, 0);
+    const pending = await mutate("create_resource", "wiringDevices", lamp);
+    assert.equal(pending.content[0].text, "APPROVAL_PENDING");
+    await approve("wiringDevices", "POST");
+    // Saved gateway review does not replace the caller's native Resources ACL.
+    const denied = unpack(
+      await mutate("create_resource", "wiringDevices", lamp),
+    );
+    assert.equal(denied.statusCode, 403);
+    assert.equal(denied.outcome, "unknown");
+    f.server.app.securityStrategy.getConfiguration().acls[0].resources.unshift({
+      paths: ["resources"],
+      permissions: [{ subject: "writer", permission: "put" }],
+    });
+    const created = unpack(
+      await mutate("create_resource", "wiringDevices", lamp),
+    );
+    assert.equal(created.statusCode, 201);
+    const id = created.data.id;
+    const got = await read("get_resource", { collection: "wiringDevices", id });
+    assert.equal(got.data.name, lamp.name);
+    assert.equal(got.data.ratedPowerW, 0);
+    assert.equal(got.data.neverRemote, true);
+    const native = await f.http(
+      `${root}/wiringDevices/${id}?provider=signalk-wiring`,
+      "reader",
+    );
+    assert.deepEqual(got.data, native.body);
+    const updated = await reviewed(
+      "put_resource",
+      "wiringDevices",
+      { notes: "updated" },
+      id,
+      "PUT",
+    );
+    assert.equal(updated.outcome, "responded");
+    const preserved = await read("get_resource", {
+      collection: "wiringDevices",
+      id,
+    });
+    assert.equal(
+      preserved.data.name,
+      lamp.name,
+      "provider preserves omitted fields",
+    );
+    assert.equal(preserved.data.notes, "updated");
+    // Custom resource ids need not be UUIDs.
+    const supplyId = "synthetic-battery";
+    const supply = unpack(
+      await mutate(
+        "put_resource",
+        "wiringDevices",
+        {
+          name: "Synthetic battery",
+          type: "battery",
+          role: "storage",
+          nominalVoltage: 12,
+        },
+        supplyId,
+      ),
+    );
+    assert.equal(supply.outcome, "responded");
+    const cable = await reviewed(
+      "create_resource",
+      "wiringWireRuns",
+      {
+        fromDeviceId: supplyId,
+        toDeviceId: id,
+        gauge: 2.5,
+        gaugeUnit: "mm2",
+        length: 0,
+        lengthUnit: "m",
+      },
+      undefined,
+      "POST",
+    );
+    assert.equal(cable.outcome, "responded");
+    const circuits = await read("list_resources", {
+      collection: "wiringCircuits",
+    });
+    const nativeCircuits = await f.http(
+      `${root}/wiringCircuits?provider=signalk-wiring`,
+      "reader",
+    );
+    assert.deepEqual(
+      circuits.data,
+      nativeCircuits.body,
+      "derived provider data is forwarded unchanged",
+    );
+    assert.ok(Object.keys(circuits.data).length > 0);
+    const removed = await reviewed(
+      "delete_resource",
+      "wiringDevices",
+      undefined,
+      id,
+      "DELETE",
+    );
+    assert.equal(removed.outcome, "responded");
+    assert.equal(
+      (await read("get_resource", { collection: "wiringDevices", id })).data
+        .status,
+      "removed",
+    );
+    const settingsWrite = await reviewed(
+      "put_resource",
+      "wiringSettings",
+      {},
+      "config",
+      "PUT",
+    );
+    assert.equal(settingsWrite.outcome, "unknown");
+    assert.equal(settingsWrite.statusCode, 404);
+    assert.equal(settingsWrite.retrySafe, false);
+    assert.deepEqual(
+      (
+        await read("get_resource", {
+          collection: "wiringSettings",
+          id: "config",
+        })
+      ).data,
+      settings.data,
+      "the provider rejects configuration writes; collection names do not determine permissions",
     );
   },
 );

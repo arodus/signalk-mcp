@@ -1,5 +1,15 @@
 # Verification record
 
+## Generic resource collections and Wiring (2026-11-12)
+
+Custom collection discovery, reads and individually reviewed POST/PUT/DELETE now use the existing Resources HTTP boundary. No Wiring-specific adapter or name-based permission rule is used. Portable coverage verifies query encoding, exact collection/provider/method approvals, unchanged standard approval identities, input and result bounds, provider ambiguity, identity changes, and exclusion of native control routes.
+
+Local `npm run check` passes on Node **24.22.2** / Signal K **2.34.0**, with **138 portable tests** and **75 native passes**. The isolated Python client, disposable InfluxDB **1.8.10** and published **signalk-wiring 0.7.0** are enabled. Only the two optional product-client tests are skipped. The existing webpack size warning remains advisory.
+
+The unmodified Wiring npm tarball (shasum `d31bd63fd48405d9eaa3219f1f947b9370c21ff1`) is loaded as a native plugin in a temporary server with a fresh SQLite database. Tests discover all eight collections, create devices and a cable, use a non-UUID ID, preserve omitted fields, compare returned circuit data with the native response, and verify soft deletion. A readonly identity and native write ACL denial cannot be bypassed by gateway approval. Wiring's settings provider rejects writes; Signal K maps that exception to HTTP 404, which the gateway reports as an unknown outcome without retrying or inferring that the record is absent.
+
+The CI matrix installs the pinned Wiring fixture separately for Node **22/24** and Signal K **2.32.0/2.34.0**, including installed-package tests. CI results are recorded on the PR; this local result is not a claim that the matrix has passed. No dependency upgrade, release, deployment, switching/calibration call or physical-vessel validation is included.
+
 ## Signal K 2.34.0 compatibility (2026-11-03)
 
 PR [#53](https://github.com/arodus/signalk-mcp/pull/53) updates the pinned development server and API types to **2.34.0**, resolving resources provider **1.5.3**. The native CI matrix is now Signal K **2.32.0/2.34.0** on Node **22/24**. Use 2.34.0 as the recommended tested server; 2.32.0 remains isolated compatibility coverage and is affected by [GHSA-4xm8-rg9h-jhq2](https://github.com/advisories/GHSA-4xm8-rg9h-jhq2). The plugin does not upgrade its installed host.
