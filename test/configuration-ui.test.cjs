@@ -1095,3 +1095,151 @@ test("one save persists more than 64 reviews and advanced manual approvals", asy
   const { schema } = require("../dist/config.js");
   assert.equal(schema.properties.pluginOperations.maxItems, undefined);
 });
+
+const legacyRead = {
+  pluginId: "fixture",
+  operationId: "read",
+  method: "GET",
+  path: "/read",
+  readOnly: true,
+  permission: "admin",
+};
+async function manualCatalogue(reviews = {}, catalogue = catalogueFixture()) {
+  const list = inventory(reviews);
+  list[0].data.configuration.pluginOperations = [clone(legacyRead)];
+  const base = await snapshot(list);
+  base.catalogue = [catalogue];
+  return base;
+}
+
+test("legacy read grants appear accepted in the catalogue without changing storage or admin restrictions", async () => {
+  const { catalogueGroups, saveConfiguration, approveRows } = await ui();
+  const base = await manualCatalogue();
+  let draft = draftOf(base);
+  const row = catalogueGroups(base, draft)[0].rows.find(
+    (r) => r.item.operationId === "read",
+  );
+  assert.equal(row.status, "approved");
+  assert.equal(row.item.permission, "admin");
+  assert.deepEqual(row.manual, legacyRead);
+  assert.deepEqual(draft.reviews, {});
+  let saved;
+  const fetcher = async (url, options) => {
+    if (url === "/plugins") {
+      const list = inventory(base.reviews);
+      list[0].data.configuration.pluginOperations = [clone(legacyRead)];
+      return response(list);
+    }
+    if (url.includes("?id=")) return response(catalogueFixture());
+    if (options.method === "POST") {
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  };
+  await saveConfiguration(base, draft, fetcher);
+  assert.deepEqual(saved.configuration.pluginOperations, [legacyRead]);
+  assert.deepEqual(saved.configuration.readRequests, {});
+  draft = approveRows(draft, [row]);
+  draft.reviews[row.key].decision = "rejected";
+  const rejectedBase = await manualCatalogue(draft.reviews);
+  const rejected = catalogueGroups(
+    rejectedBase,
+    draftOf(rejectedBase),
+  )[0].rows.find((r) => r.key === row.key);
+  assert.equal(rejected.status, "rejected");
+  const accepted = approveRows(draftOf(rejectedBase), [rejected]);
+  assert.equal(accepted.reviews[row.key].permission, "admin");
+  const pending = await manualCatalogue({
+    [row.key]: { ...row.item, decision: "pending" },
+  });
+  assert.equal(
+    catalogueGroups(pending, draftOf(pending))[0].rows.find(
+      (r) => r.key === row.key,
+    ).status,
+    "approved",
+  );
+});
+
+test("removing a legacy catalogue row revokes both grants and detects concurrent edits", async () => {
+  const { catalogueGroups, removeApprovalRow, mergeChanges } = await ui();
+  const read = catalogueFixture().operations.find((op) => op.method === "GET");
+  const base = await manualCatalogue({
+    [read.key]: { ...read.review, decision: "approved" },
+  });
+  const row = catalogueGroups(base, draftOf(base))[0].rows.find(
+    (r) => r.key === read.key,
+  );
+  const draft = removeApprovalRow(draftOf(base), row);
+  const merged = mergeChanges(base, draft, base);
+  assert.deepEqual(merged.configuration.pluginOperations, []);
+  assert.deepEqual(merged.configuration.readRequests, {});
+  assert.equal(configSchema.safeParse(merged.configuration).success, true);
+  // The catalogue must not keep showing the old server's enabled state after removal.
+  base.catalogue[0].operations[0].enabled = true;
+  assert.equal(
+    catalogueGroups(base, draft)[0].rows.find((r) => r.key === read.key).status,
+    "available",
+  );
+  const concurrent = clone(base);
+  concurrent.settings.pluginOperations[0].permission = "readonly";
+  assert.throws(
+    () => mergeChanges(base, draft, concurrent),
+    /changed in another session/,
+  );
+  const manualOnly = await manualCatalogue();
+  const manualRow = catalogueGroups(manualOnly, draftOf(manualOnly))[0].rows[0];
+  const removed = removeApprovalRow(draftOf(manualOnly), manualRow);
+  const newReview = clone(manualOnly);
+  newReview.reviews[read.key] = { ...read.review, decision: "approved" };
+  assert.throws(
+    () => mergeChanges(manualOnly, removed, newReview),
+    /changed in another session/,
+  );
+});
+
+test("unavailable legacy grants stay visible and removable without approving a changed route", async () => {
+  const { catalogueGroups, removeApprovalRow, mergeChanges } = await ui();
+  for (const catalogue of [
+    { id: "plugin.fixture", reason: "PLUGIN_DISABLED", operations: [] },
+    {
+      ...catalogueFixture(),
+      operations: catalogueFixture().operations.map((op) => ({
+        ...op,
+        path: "/changed",
+      })),
+    },
+    {
+      ...catalogueFixture(),
+      operations: catalogueFixture().operations.map((op) => ({
+        ...op,
+        review: null,
+        key: null,
+        reason: "UNSUPPORTED_SCHEMA",
+      })),
+    },
+  ]) {
+    const base = await manualCatalogue({}, catalogue);
+    const rows = catalogueGroups(base, draftOf(base))[0].rows;
+    const saved = rows.filter((r) => r.manual);
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].eligible, false);
+    assert.notEqual(saved[0].status, "approved");
+    assert.equal(
+      rows.some((r) => r.item.path === "/changed" && r.status === "approved"),
+      false,
+    );
+    const next = removeApprovalRow(draftOf(base), saved[0]);
+    assert.deepEqual(
+      mergeChanges(base, next, base).configuration.pluginOperations,
+      [],
+    );
+  }
+  const base = await manualCatalogue();
+  base.catalogue = [];
+  base.installed = ["signalk-mcp"];
+  base.catalogueError = "Discovery failed";
+  const rows = catalogueGroups(base, draftOf(base));
+  assert.equal(rows[0].rows[0].item.path, "/read");
+  assert.equal(rows[0].rows[0].status, "unavailable");
+});

@@ -265,8 +265,36 @@ export function isWrite(review) {
   );
 }
 
+const manualMatches = (approval, item) =>
+  !item.kind &&
+  approval.pluginId === item.pluginId &&
+  approval.operationId === item.operationId &&
+  approval.method === (item.method ?? "GET") &&
+  approval.path === item.path;
+const manualKey = (approval) =>
+  `manual:${JSON.stringify([approval.pluginId, approval.operationId, approval.method, approval.path])}`;
+
+export function removeApprovalRow(draft, row) {
+  const reviews = { ...draft.reviews };
+  delete reviews[row.key];
+  return {
+    ...draft,
+    reviews,
+    settings: {
+      ...draft.settings,
+      pluginOperations: row.manual
+        ? draft.settings.pluginOperations.filter(
+            (entry) => !manualMatches(entry, row.manual),
+          )
+        : draft.settings.pluginOperations,
+    },
+  };
+}
+
 export function catalogueGroups(base, draft) {
   const seen = new Set();
+  const manualSeen = new Set();
+  const manuals = draft.settings.pluginOperations;
   const groups = (base.catalogue ?? []).map((group) => ({
     ...group,
     rows: group.operations.map((operation, index) => {
@@ -280,7 +308,7 @@ export function catalogueGroups(base, draft) {
         operation.key ??
         `unsupported:${group.id}:${index}`;
       keys.forEach((key) => seen.add(key));
-      const item = draft.reviews[key] ??
+      let item = draft.reviews[key] ??
         operation.review ?? {
           ...(group.id.startsWith("resource.")
             ? {
@@ -300,20 +328,44 @@ export function catalogueGroups(base, draft) {
           description: operation.description,
           inputSchema: operation.inputSchema,
         };
+      const manual = group.id.startsWith("plugin.")
+        ? manuals.find((approval) =>
+            manualMatches(approval, {
+              pluginId: group.id.slice(7),
+              operationId: operation.id,
+              method: operation.method,
+              path: operation.path,
+            }),
+          )
+        : undefined;
+      if (manual) {
+        manualSeen.add(manualKey(manual));
+        item = {
+          ...item,
+          permission:
+            item.permission === "admin" || manual.permission === "admin"
+              ? "admin"
+              : "readonly",
+        };
+      }
+      const decision = draft.reviews[key]?.decision;
       return {
         key,
         item,
+        manual,
         operation,
         eligible: Boolean(operation.review),
         status:
-          draft.reviews[key]?.decision ??
-          (operation.review
-            ? operation.enabled
-              ? "manual"
-              : "available"
-            : operation.approvalRequired === false
-              ? "native"
-              : "unsupported"),
+          decision === "rejected"
+            ? "rejected"
+            : operation.review && manual
+              ? "approved"
+              : (decision ??
+                (operation.review
+                  ? "available"
+                  : operation.approvalRequired === false
+                    ? "native"
+                    : "unsupported")),
       };
     }),
   }));
@@ -327,9 +379,18 @@ export function catalogueGroups(base, draft) {
     }
     // Old plugin/API contracts remain visible but cannot be bulk-approved.
     const eligible = ["put", "put-rule"].includes(item.kind);
+    const manual = manuals.find(
+      (entry) =>
+        !manualSeen.has(manualKey(entry)) && manualMatches(entry, item),
+    );
+    if (manual) manualSeen.add(manualKey(manual));
     group.rows.push({
       key,
-      item,
+      item:
+        manual?.permission === "admin"
+          ? { ...item, permission: "admin" }
+          : item,
+      manual,
       eligible,
       status:
         !eligible && item.decision === "approved"
@@ -338,6 +399,24 @@ export function catalogueGroups(base, draft) {
             : "invalidated"
           : item.decision,
       reason: eligible ? "" : unavailableReviewReason(item, group),
+    });
+  }
+  for (const manual of manuals) {
+    const key = manualKey(manual);
+    if (manualSeen.has(key)) continue;
+    const id = `plugin.${manual.pluginId}`;
+    let group = groups.find((entry) => entry.id === id);
+    if (!group) {
+      group = { id, operations: [], rows: [], reason: base.catalogueError };
+      groups.push(group);
+    }
+    group.rows.push({
+      key,
+      item: { ...manual, description: "Saved read approval." },
+      manual,
+      eligible: false,
+      status: "unavailable",
+      reason: "Saved approval kept. This operation is not currently available.",
     });
   }
   return groups;
@@ -442,6 +521,19 @@ export function mergeChanges(base, draft, current) {
       "These settings changed in another session. Refresh before saving your changes.",
     );
   };
+  const removedManuals = base.settings.pluginOperations.filter(
+    (entry) =>
+      !draft.settings.pluginOperations.some((current) =>
+        manualMatches(entry, current),
+      ),
+  );
+  for (const [key, review] of Object.entries(current.reviews)) {
+    if (
+      removedManuals.some((entry) => manualMatches(entry, review)) &&
+      !same(base.reviews[key], review)
+    )
+      conflict();
+  }
   for (const key of new Set([
     ...Object.keys(base.reviews),
     ...Object.keys(draft.reviews),
@@ -459,7 +551,15 @@ export function mergeChanges(base, draft, current) {
     if (!draft.reviews[key]) {
       if (
         !base.reviews[key].kind &&
-        current.installed.includes(base.reviews[key].pluginId)
+        current.installed.includes(base.reviews[key].pluginId) &&
+        !(
+          base.settings.pluginOperations.some((entry) =>
+            manualMatches(entry, base.reviews[key]),
+          ) &&
+          !draft.settings.pluginOperations.some((entry) =>
+            manualMatches(entry, base.reviews[key]),
+          )
+        )
       )
         throw new Error(
           "This plugin is installed again. Refresh before deleting its review.",

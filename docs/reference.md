@@ -62,39 +62,17 @@ All plugin operations start disabled. When a client attempts a discovered, suppo
 
 Catalogue discovery does not execute operations, queue requests or save approvals. Unsupported contracts, disabled plugins and missing discovery remain visible without approval controls. Resource collections list each registered provider, with read rows requiring only native permissions and write rows offering exact contract approvals. Telemetry PUTs have a separate table with manual exact paths and standing wildcard rules. Discovered custom resource collections use the same approval flow; chart tiles and binary attachments are not JSON resource operations. Bulk actions stage only current supported contracts, including explicitly rejected rows when selected; existing admin-only requirements remain intact. Save rechecks selected plugin/API/resource contracts and refuses changed or unavailable operations. Saved decisions and bulk selections have no entry-count limit. Only new unsaved pending requests are capped at 64.
 
-Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay visible and blocked without creating duplicates. To change a rejection later, click **Accept** and **Save Configuration**. The queue holds at most 64 new unsaved pending requests; when full, new requests return `APPROVAL_QUEUE_FULL`. Saved entries, including saved pending decisions, do not consume queue capacity. Native Save/restart starts a fresh in-memory queue. Rows for uninstalled plugins show **Not installed** and a **Delete** button. Click **Delete**, confirm **Delete row**, then **Save Configuration**. Disabled plugins still count as installed and cannot be deleted from this table. Other obsolete entries can be removed from `readRequests` in saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
+Unsaved requests live in memory and disappear on plugin/server restart, including a settings save from a stale page. Refresh before reviewing. Saved decisions survive restarts; rejected requests stay visible and blocked without creating duplicates. To change a rejection later, click **Accept** and **Save Configuration**. The queue holds at most 64 new unsaved pending requests; when full, new requests return `APPROVAL_QUEUE_FULL`. Saved entries, including saved pending decisions, do not consume queue capacity. Native Save/restart starts a fresh in-memory queue. Rows for uninstalled plugins show **Not installed** and a **Delete** button. Click **Delete**, confirm **Delete row**, then **Save Configuration**. Legacy read grants can also be removed while their plugins are installed or disabled. Other obsolete entries can be removed from `readRequests` in saved plugin configuration while the plugin is disabled. Removing a decision revokes that review's approval and allows a later request to be reviewed again. No arguments, tokens or data values are retained.
 
 Plugin GET reviews bind the exact plugin, operation, GET path, supported input schema and description. Changed metadata requires another review; unchanged metadata cannot prove an unchanged implementation, so review provider upgrades too. A matching rejected review also overrides a manual approval. Unsupported methods, ambiguous operations and unsupported schemas never enter the review queue. Eligible POST/PUT/PATCH/DELETE operations use separate Write reviews. Native PUTs use the same table with their own exact target binding; a GET approval never grants PUT access. There is no MCP approval/configuration-write tool.
 
-Existing manual approvals remain supported under the expandable **Manual approvals (advanced)** section. This illustrative entry assumes an installed plugin with that documented operation:
+### Existing read approvals
 
-```json
-{
-  "pluginId": "example-weather",
-  "operationId": "getForecast",
-  "method": "GET",
-  "path": "/forecast/{area}",
-  "readOnly": true,
-  "permission": "readonly"
-}
-```
+The separate manual approvals editor has been removed. Existing `pluginOperations` grants appear in the operation catalogue alongside other decisions. Matching supported reads show **Accepted**, with **Administrators only** when required. Existing rejections still block the operation; a pending review does not cancel a saved read grant. Unsupported or unavailable operations keep a visible saved row and cannot be bulk-approved.
 
-Put entries in `pluginOperations`. Only GET is supported; `readOnly: true` is an explicit assertion by the administrator who reviewed the operation, not a fact inferred from HTTP or OpenAPI. Use `permission: "admin"` to add an admin-only requirement. Review approvals again when providers change.
+Legacy grants retain their original storage, exact plugin/operation/method/path binding and access requirements. Simply opening or saving the page does not convert them to a different approval contract or require reapproval. New approvals use the catalogue's reviewed contracts. Signal K permissions, supported documentation and input validation still apply.
 
-### How table and manual approvals interact
-
-The table and manual approvals are separate lists; manual entries do not automatically create table rows. The following rules apply to saved entries matching the current supported operation:
-
-| Table decision                | Matching manual approval | Result                                                                                                    |
-| ----------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| Rejected                      | Present or absent        | Blocked; the table rejection wins.                                                                        |
-| Accepted                      | Absent                   | Allowed under the table's access requirement.                                                             |
-| Accepted                      | Present                  | Allowed under the stricter access requirement; if either requires administrators, the read is admin-only. |
-| Pending                       | Present                  | The manual approval applies; pending does not override it.                                                |
-| No matching review            | Present                  | The manual approval applies.                                                                              |
-| Pending or no matching review | Absent                   | Unapproved; a valid attempt remains blocked and queues a request if needed.                               |
-
-Removing a manual approval leaves the table decision unchanged: a rejection still blocks, and an acceptance still applies. Deleting a table row leaves any manual approval unchanged, so that manual approval may still allow the read when the plugin is available again. Save Configuration applies either change. Signal K and provider permissions, enabled-plugin checks and schema validation remain mandatory in every case.
+Use **Reject** and save to block an available operation. **Delete** on a row with an existing legacy grant removes that grant and the matching displayed review when saved, even while its plugin is installed. Unavailable legacy grants can also be deleted. Conflicting changes to the legacy list or a newly saved review for the same target require a refresh before removal, so a concurrent approval cannot silently survive it.
 
 The table uses Signal K’s embedded configurator, plugin inventory and existing admin configuration API. It preserves unrelated settings and newly queued requests, and checks for conflicting edits before saving. Signal K’s configuration API has no atomic compare-and-swap, so avoid simultaneous settings saves. Connection and staleness options remain available under **Connection and data settings**.
 

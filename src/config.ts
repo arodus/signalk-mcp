@@ -53,7 +53,7 @@ export const schema = {
   properties: {
     pluginOperations: {
       type: "array",
-      title: "Manual plugin read approvals (advanced)",
+      title: "Existing plugin read approvals",
       default: [],
       items: {
         type: "object",
@@ -95,15 +95,7 @@ export const schema = {
   },
 };
 
+// Retain legacy storage for compatibility; manage existing grants in the catalogue.
 export const uiSchema = {
-  pluginOperations: {
-    items: {
-      permission: {
-        "ui:widget": "hidden",
-        "ui:options": { label: false },
-      },
-    },
-    "ui:help":
-      "Add read access for operations missing from the catalogue. Rejected operations stay blocked.",
-  },
+  pluginOperations: { "ui:widget": "hidden" },
 };

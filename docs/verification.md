@@ -340,3 +340,9 @@ Removed the 64-entry cap from saved reviews, bulk staging, native configuration 
 ## Shorter settings guidance (2026-11-12)
 
 Simplified the catalogue, telemetry path, wildcard and advanced settings descriptions. Removed queue-size, migration and handler details from general help while retaining the wildcard scope and the information needed to review operations. This is a copy-only update. `npm run check` passed with 157 portable and 69 native tests (four optional skips) on Node 24.22.1 / Signal K 2.34.0. Synthetic native Admin UI checks at 390 and 1280 pixels verified readable copy without horizontal page overflow; catalogue and telemetry screenshots were refreshed.
+
+## Existing read grants in the catalogue (2026-11-12)
+
+Removed the separate manual approval editor. Matching legacy read grants now appear as accepted catalogue rows with their original access restrictions; existing rejections take precedence. Unavailable grants remain visible and removable. Stored grants are preserved without an automatic contract migration. Deleting a legacy-backed row removes both its grant and displayed review, with conflict checks for concurrent grant or review changes.
+
+`npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 160 portable and 69 native passes, with four optional skips. New UI regressions cover preserved storage, administrator-only access, pending/rejected precedence, changed and unsupported routes, missing providers, removal of both grant forms and concurrent edits. A disposable native Admin UI fixture verified initial preservation, Reject/Save, Delete/Save and retention of an unrelated unavailable grant in the actual saved file. The manual editor was absent. The [synthetic catalogue screenshot](images/legacy-read-approvals.jpg) shows the unavailable grant retained after another grant was removed. Responsive checks at 390 and 1280 pixels showed no horizontal page overflow. `git diff --check` passed.

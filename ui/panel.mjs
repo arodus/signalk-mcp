@@ -5,6 +5,7 @@ import {
   saveConfiguration,
   catalogueGroups,
   approveRows,
+  removeApprovalRow,
   isWrite,
   previewTelemetryPut,
 } from "./configuration.mjs";
@@ -22,7 +23,7 @@ const css = `
 .mcp-config tr:last-child td { border-bottom:0; }
 .mcp-config .mcp-group { background:#f5f7f9; overflow-wrap:anywhere; }
 .mcp-config .mcp-group .mcp-toolbar { margin:0; }
-.mcp-config .mcp-available, .mcp-config .mcp-manual { background:#eef4fa; color:#285680; }
+.mcp-config .mcp-available { background:#eef4fa; color:#285680; }
 .mcp-config .mcp-unsupported { background:#eee; color:#52606d; }
 .mcp-config .mcp-operation { min-width:180px; overflow-wrap:anywhere; }
 .mcp-config .mcp-operation strong, .mcp-config .mcp-operation small { display:block; }
@@ -44,7 +45,6 @@ const css = `
 .mcp-config label { display:block; margin-bottom:10px; }
 .mcp-config label > span { display:block; margin-bottom:5px; }
 .mcp-config input[type=text], .mcp-config input[type=number] { width:100%; padding:7px 9px; border:1px solid #c5ccd3; border-radius:4px; }
-.mcp-config .mcp-manual { border:1px solid #d8dee4; padding:12px; border-radius:4px; margin-bottom:12px; }
 .mcp-config .mcp-footer { display:flex; align-items:center; gap:12px; margin-top:18px; flex-wrap:wrap; }
 .mcp-config .mcp-notice { margin-top:12px; padding:10px 12px; background:#eef4fa; border-radius:4px; }
 .mcp-config .mcp-error { background:#fce8e6; color:#97332c; }
@@ -66,7 +66,6 @@ const css = `
 const status = {
   pending: "Pending request",
   available: "Not approved",
-  manual: "Manual approval",
   unsupported: "Unsupported",
   invalidated: "Needs review",
   unavailable: "Unavailable",
@@ -185,12 +184,8 @@ export default function Configuration() {
       settings: { ...current.settings, [key]: value },
     }));
   }
-  function remove(key) {
-    setDraft((current) => {
-      const reviews = { ...current.reviews };
-      delete reviews[key];
-      return { ...current, reviews };
-    });
+  function remove(row) {
+    setDraft((current) => removeApprovalRow(current, row));
     setDeleting(null);
     setMessage("");
   }
@@ -361,6 +356,9 @@ export default function Configuration() {
                             : `Plugin ${post || plugin ? item.method : "GET"} · ${item.pluginId}`,
                       absent ? " · Not installed" : "",
                     ),
+                    !item.kind && item.permission === "admin"
+                      ? h("small", null, "Administrators only")
+                      : null,
                     h(
                       "details",
                       null,
@@ -487,7 +485,7 @@ export default function Configuration() {
                               busy ||
                               absent ||
                               !row.eligible ||
-                              item.decision === "approved",
+                              row.status === "approved",
                             "aria-label": `Accept ${label}`,
                           }),
                       row.status === "native"
@@ -504,8 +502,8 @@ export default function Configuration() {
                               "aria-label": `Reject ${label}`,
                             },
                           ),
-                      draft.reviews[key] &&
-                        (write || api || absent) &&
+                      (draft.reviews[key] || row.manual) &&
+                        (write || api || absent || row.manual) &&
                         deleting !== key
                         ? button("Delete", () => setDeleting(key), {
                             disabled: busy,
@@ -526,7 +524,7 @@ export default function Configuration() {
                             h(
                               "div",
                               { className: "mcp-actions" },
-                              button("Delete row", () => remove(key), {
+                              button("Delete row", () => remove(row), {
                                 disabled: busy,
                                 className: "btn btn-sm btn-danger",
                               }),
@@ -763,94 +761,6 @@ export default function Configuration() {
               "p",
               { className: "mcp-help" },
               "Mark data as outdated after this many seconds.",
-            ),
-          ),
-          h(
-            "details",
-            { className: "mcp-section" },
-            h(
-              "summary",
-              null,
-              `Manual approvals (advanced) · ${draft.settings.pluginOperations.length}`,
-            ),
-            h(
-              "p",
-              { className: "mcp-help" },
-              "Add read access for operations missing from the catalogue. Rejected operations stay blocked.",
-            ),
-            ...draft.settings.pluginOperations.map((item, index) => {
-              const update = (changes) =>
-                setting(
-                  "pluginOperations",
-                  draft.settings.pluginOperations.map((entry, i) =>
-                    i === index ? { ...entry, ...changes } : entry,
-                  ),
-                );
-              return h(
-                "div",
-                { className: "mcp-manual", key: index },
-                h(
-                  "div",
-                  { className: "mcp-fields" },
-                  ...[
-                    ["Plugin ID", "pluginId"],
-                    ["Operation ID", "operationId"],
-                    ["GET endpoint path", "path"],
-                  ].map(([label, field]) =>
-                    input(
-                      label,
-                      field,
-                      item[field] ?? "",
-                      (value) => update({ [field]: value }),
-                      { required: true },
-                    ),
-                  ),
-                ),
-                h(
-                  "label",
-                  null,
-                  h("input", {
-                    type: "checkbox",
-                    checked: item.readOnly === true,
-                    disabled: busy,
-                    required: true,
-                    onChange: (event) =>
-                      update({ readOnly: event.target.checked }),
-                  }),
-                  " Confirmed read-only",
-                ),
-                h("span", { className: "mcp-badge mcp-read" }, "Read"),
-                " ",
-                button(
-                  "Remove manual approval",
-                  () =>
-                    setting(
-                      "pluginOperations",
-                      draft.settings.pluginOperations.filter(
-                        (_, i) => i !== index,
-                      ),
-                    ),
-                  { disabled: busy },
-                ),
-              );
-            }),
-            button(
-              "Add manual approval",
-              () =>
-                setting("pluginOperations", [
-                  ...draft.settings.pluginOperations,
-                  {
-                    pluginId: "",
-                    operationId: "",
-                    path: "",
-                    method: "GET",
-                    readOnly: false,
-                    permission: "readonly",
-                  },
-                ]),
-              {
-                disabled: busy,
-              },
             ),
           ),
           h(
