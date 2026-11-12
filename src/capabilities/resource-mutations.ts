@@ -1,3 +1,8 @@
+import {
+  resourceCollectionSchema as collectionSchema,
+  resourceIdSchema as idSchema,
+  isStandardResourceCollection,
+} from "./resource-schemas.js";
 import { z } from "zod";
 import { timestampSchema, toJsonSchema, uuidSchema } from "../schema.js";
 import { GatewayError, type Principal } from "../auth.js";
@@ -18,20 +23,6 @@ import type {
   ResourceMethod,
 } from "./http.js";
 
-const collectionSchema = z.enum([
-  "routes",
-  "waypoints",
-  "regions",
-  "notes",
-  "charts",
-  "logentries",
-]);
-const idSchema = z
-  .string()
-  .min(1)
-  .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
-  .refine((id) => !["constructor", "prototype"].includes(id));
 export const describeResourceInput = z
   .object({ collection: collectionSchema, provider: pluginIdSchema })
   .strict();
@@ -197,6 +188,12 @@ const bodySchemas = {
     })
     .passthrough(),
 };
+const customBodySchema = z.record(z.string(), z.unknown());
+function bodySchema(collection: string) {
+  return Object.hasOwn(bodySchemas, collection)
+    ? bodySchemas[collection as keyof typeof bodySchemas]
+    : customBodySchema;
+}
 function inputFor(
   collection: z.infer<typeof collectionSchema>,
   provider: string,
@@ -207,7 +204,7 @@ function inputFor(
     provider: z.literal(provider),
   });
   if (operation === "delete_resource") return input.extend({ id: idSchema });
-  const withBody = input.extend({ body: bodySchemas[collection] });
+  const withBody = input.extend({ body: bodySchema(collection) });
   return operation === "put_resource"
     ? withBody.extend({ id: idSchema })
     : withBody;
@@ -224,7 +221,10 @@ function candidate(
     provider,
     method,
     path: `/signalk/v2/api/resources/${collection}${method === "POST" ? "" : "/{id}"}`,
-    description,
+    description:
+      isStandardResourceCollection(collection) || collection === "logentries"
+        ? description
+        : `${method} ${collection} using ${provider}. ${operation === "create_resource" ? "Create with a server-generated ID; body.id is not accepted." : operation === "put_resource" ? "Upsert the supplied ID; requires a sole registered provider." : "Delete the supplied ID."} Provider-defined JSON object, forwarded unchanged. The provider validates fields and controls omitted-field, deletion and side-effect semantics; no field schema is advertised by native resource discovery. Review the provider's contract before approving. Input is limited to 48 KiB and 20 nesting levels.`,
     inputSchema: toJsonSchema(inputFor(collection, provider, operation)),
   });
 }
@@ -338,11 +338,11 @@ export async function mutateResource(
     return principal;
   };
   const principal = writeIdentity();
+  jsonInput(args);
+  boundedJson(args, 48 * 1024, "INPUT_LIMIT");
   const parsed = operations[operation].input.safeParse(args);
   if (!parsed.success) throw new GatewayError("INVALID_ARGUMENTS");
   const input = parsed.data;
-  jsonInput(input);
-  boundedJson(input, 48 * 1024, "INPUT_LIMIT");
   const { collection, provider } = input;
   const method = operations[operation].method;
   const id = "id" in input ? input.id : undefined;
@@ -353,14 +353,15 @@ export async function mutateResource(
       ? /^[A-Za-z0-9_-]{8,128}$/.test(id)
       : collection === "logentries"
         ? z.string().uuid().safeParse(id).success
-        : /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        : !isStandardResourceCollection(collection) ||
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
             id,
           ))
   )
     throw new GatewayError("INVALID_ARGUMENTS");
   if (body !== undefined) {
     if (
-      !bodySchemas[collection].safeParse(body).success ||
+      !bodySchema(collection).safeParse(body).success ||
       (operation === "create_resource" &&
         (Object.hasOwn(body, "id") ||
           (collection === "charts" && Object.hasOwn(body, "identifier")))) ||

@@ -15,7 +15,7 @@ The tested compatibility matrix is Signal K **2.32.0 and 2.34.0**, with Node.js 
 - Work with most plugins that describe their JSON APIs through Signal K's OpenAPI interface, without a separate adapter for each plugin.
 - Discover and call supported Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors API operations after individual approval; see [native API coverage](docs/native-apis.md).
 - Read notifications and historical data from an installed History API provider.
-- Read routes, waypoints, regions, notes, chart metadata and logbook entries through the [Resources API](docs/resources.md).
+- Read standard and custom collections, including logbook entries and Wiring records, through the [Resources API](docs/resources.md).
 - Create, save or delete resources, call plugin operations and send native Signal K PUT actions after an administrator approves each operation.
 
 The plugin fetches and forwards data. It does not calculate derived values or run agent-written code. Data availability depends on your sensors, installed providers and Signal K permissions.

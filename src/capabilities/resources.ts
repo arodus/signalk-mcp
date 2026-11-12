@@ -4,28 +4,15 @@ import { record } from "../data.js";
 import { boundedJson } from "../json.js";
 import type { LocalGet } from "./http.js";
 import { pluginIdSchema } from "./schemas.js";
+import {
+  resourceCollectionSchema,
+  resourceIdSchema as resourceId,
+  isStandardResourceCollection,
+} from "./resource-schemas.js";
 import { timestampSchema } from "../schema.js";
 
 const root = "/signalk/v2/api/resources";
-const standardCollections = [
-  "routes",
-  "waypoints",
-  "regions",
-  "notes",
-  "charts",
-] as const;
-const collection = z.enum([...standardCollections, "logentries"]);
-const collectionName = z
-  .string()
-  .max(64)
-  .regex(/^[A-Za-z][A-Za-z0-9_-]*$/)
-  .refine((name) => !["constructor", "prototype"].includes(name));
-const resourceId = z
-  .string()
-  .min(1)
-  .max(128)
-  .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/)
-  .refine((id) => !["constructor", "prototype"].includes(id));
+const collectionName = resourceCollectionSchema;
 const date = z.string().date();
 const datetime = timestampSchema;
 const longitude = z.number().finite().min(-180).max(180);
@@ -37,11 +24,39 @@ export const resourceProvidersInput = z
   .object({ collection: collectionName })
   .strict();
 export const resourceInput = z
-  .object({ collection, id: resourceId, provider })
+  .object({ collection: collectionName, id: resourceId, provider })
   .strict();
 export const resourcesInput = z
   .object({
-    collection: z.enum(standardCollections),
+    collection: collectionName,
+    query: z
+      .record(
+        z
+          .string()
+          .max(64)
+          .regex(/^[A-Za-z][A-Za-z0-9_]*$/)
+          .refine(
+            (key) =>
+              !["provider", "limit", "constructor", "prototype"].includes(key),
+          ),
+        z.union([
+          z.string().max(4096),
+          z.number().finite(),
+          z.boolean(),
+          z.null(),
+          z
+            .array(
+              z.union([
+                z.string().max(4096),
+                z.number().finite(),
+                z.boolean(),
+                z.null(),
+              ]),
+            )
+            .max(128),
+        ]),
+      )
+      .optional(),
     provider,
     limit: z.number().int().min(1).max(500).optional(),
     bbox: bbox.optional(),
@@ -109,9 +124,7 @@ export async function listResourceCollections(
     throw new GatewayError("INVALID_RESOURCE_COLLECTIONS");
   return {
     collections: data,
-    supportedCollections: Object.keys(data).filter(
-      (name) => collection.safeParse(name).success,
-    ),
+    supportedCollections: Object.keys(data),
   };
 }
 export async function listResourceProviders(
@@ -198,7 +211,25 @@ export async function listResources(
   get: LocalGet,
   input: z.infer<typeof resourcesInput>,
 ) {
-  const { collection: name, provider: selected, ...filters } = input;
+  const {
+    collection: name,
+    provider: selected,
+    query: customQuery,
+    ...filters
+  } = input;
+  const standard = isStandardResourceCollection(name);
+  if (
+    name === "logentries" ||
+    (standard && customQuery !== undefined) ||
+    (!standard &&
+      Object.entries(filters).some(
+        ([key, value]) => key !== "limit" && value !== undefined,
+      ))
+  )
+    throw new GatewayError("INVALID_ARGUMENTS");
+  if (customQuery && Object.keys(customQuery).length > 32)
+    throw new GatewayError("INPUT_LIMIT");
+  boundedJson(customQuery ?? {}, 8192, "INPUT_LIMIT");
   if (
     (name === "charts" &&
       Object.values(filters).some((v) => v !== undefined)) ||
@@ -212,9 +243,15 @@ export async function listResources(
   for (const [key, value] of Object.entries(filters))
     if (value !== undefined)
       query.set(key, typeof value === "string" ? value : JSON.stringify(value));
-  if (name !== "charts") query.set("limit", String(input.limit ?? 100));
+  for (const [key, value] of Object.entries(customQuery ?? {}))
+    query.set(key, JSON.stringify(value));
+  if (standard && name !== "charts")
+    query.set("limit", String(input.limit ?? 100));
   const result = await fetchResource(authorize, get, name, selected, query);
-  checkCollection(result.data, name === "charts" ? 500 : (input.limit ?? 100));
+  checkCollection(
+    result.data,
+    input.limit ?? (standard && name !== "charts" ? 100 : 500),
+  );
   return result;
 }
 function checkWindow(

@@ -141,7 +141,7 @@ export class CapabilityRegistry {
           },
           list_resources: {
             description:
-              "Read routes, waypoints, regions, notes or chart metadata. Standard lists default to limit 100 (maximum 500); charts accept no filters. No URL or chart-tile fetching. Provider filters and values are not recomputed.",
+              "Read a discovered resource collection. Standard lists default to limit 100; custom lists allow up to 500 results and optional provider-defined query filters. Use list_logentries for logbook entries. Charts accept no filters. Provider results are forwarded unchanged.",
             input: resourcesInput,
             run: (args) =>
               listResources(

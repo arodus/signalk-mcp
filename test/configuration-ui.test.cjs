@@ -371,13 +371,13 @@ test("POST reviews load, save decisions and can be revoked while provider remain
   );
 });
 
-test("resource write decisions save with existing approvals and preserve concurrent requests", async () => {
+test("custom resource write decisions save with existing approvals and preserve concurrent requests", async () => {
   const { saveConfiguration, mergeChanges } = await ui();
   const resource = resourceReview({
-    collection: "logentries",
+    collection: "wiringDevices",
     provider: "logbook-fixture",
     method: "PUT",
-    path: "/signalk/v2/api/resources/logentries/{id}",
+    path: "/signalk/v2/api/resources/wiringDevices/{id}",
     description: "Create or replace one log entry",
     inputSchema: { type: "object", required: ["id", "body"] },
   });

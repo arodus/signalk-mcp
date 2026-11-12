@@ -95,10 +95,10 @@ test("Resources replaces adapter-required discovery and retains unsupported API 
   );
   const collections = await call("list_collections");
   assert.ok(Object.hasOwn(collections.collections, "custom"));
-  assert.ok(!collections.supportedCollections.includes("custom"));
-  await assert.rejects(
-    call("get_resource", { collection: "custom", id: uuid }),
-    /INVALID_ARGUMENTS/,
+  assert.ok(collections.supportedCollections.includes("custom"));
+  assert.deepEqual(
+    (await call("get_resource", { collection: "custom", id: "device-1" })).data,
+    {},
   );
   await assert.rejects(
     registry.executeMutation("api.resources", "unsupported", {}),
@@ -368,6 +368,9 @@ function mutationFixture() {
             "notes",
             "charts",
             "logentries",
+            "custom",
+            "wiringDevices",
+            "wiringWireRuns",
           ].map((name) => [name, { description: name }]),
         );
       if (path.endsWith("/_providers")) return state.providers;
@@ -551,7 +554,7 @@ test("All supported resource body contracts preserve fields and validate before 
     ],
     [
       "delete_resource",
-      { collection: "custom", provider: "example", id: uuid },
+      { collection: "../custom", provider: "example", id: uuid },
     ],
     [
       "delete_resource",
@@ -625,4 +628,181 @@ test("Resource mutation failures remain submitted unknown outcomes and are never
   const result = await f.call("create_resource", args);
   assert.equal(result.outcome, "unknown");
   assert.equal(result.data, undefined);
+});
+
+test("Custom resource reads discover providers and preserve query values without standard defaults", async () => {
+  const f = fixture();
+  f.state.data = {
+    "device-1": { name: "Synthetic lamp", watts: 0, spare: null },
+  };
+  assert.deepEqual(
+    (
+      await f.call("list_resources", {
+        collection: "custom",
+        query: {
+          zone: "123",
+          removed: false,
+          tags: ["a", "b"],
+          after: "null",
+        },
+      })
+    ).data,
+    f.state.data,
+  );
+  const url = new URL(f.calls.at(-1), "http://example.invalid");
+  assert.equal(url.searchParams.get("provider"), "example");
+  assert.equal(url.searchParams.has("limit"), false);
+  assert.equal(JSON.parse(url.searchParams.get("zone")), "123");
+  assert.deepEqual(JSON.parse(url.searchParams.get("tags")), ["a", "b"]);
+  assert.equal(JSON.parse(url.searchParams.get("removed")), false);
+  for (const args of [
+    { collection: "custom", query: { provider: "other" } },
+    { collection: "custom", query: { constructor: "other" } },
+    { collection: "custom", query: { "x&provider": "other" } },
+    { collection: "custom", bbox: [0, 0, 1, 1] },
+    { collection: "routes", query: { filter: "anything" } },
+    { collection: "logentries", query: {} },
+    { collection: "custom/../notes" },
+  ])
+    await assert.rejects(f.call("list_resources", args), /INVALID_ARGUMENTS/);
+  await assert.rejects(
+    f.call("list_resources", { collection: "absent" }),
+    /RESOURCE_COLLECTION_UNAVAILABLE/,
+  );
+  f.state.providers.push("other");
+  await assert.rejects(
+    f.call("list_resources", { collection: "custom" }),
+    /RESOURCE_PROVIDER_REQUIRED/,
+  );
+  f.state.providers = ["example"];
+  f.state.data = { a: {}, b: {} };
+  await assert.rejects(
+    f.call("list_resources", { collection: "custom", limit: 1 }),
+    /RESOURCE_RESULT_LIMIT/,
+  );
+  f.state.after = f.changeIdentity;
+  await assert.rejects(
+    f.call("get_resource", { collection: "custom", id: "device-1" }),
+    /PERMISSION_DENIED/,
+  );
+});
+
+test("Custom resource writes bind exact collections/providers/methods and preserve provider-defined JSON", async () => {
+  const f = mutationFixture();
+  const args = {
+    collection: "wiringDevices",
+    provider: "example",
+    body: {
+      name: "Synthetic lamp",
+      ratedPower: 0,
+      spare: null,
+      terminals: ["positive", "negative"],
+    },
+  };
+  await assert.rejects(f.call("create_resource", args), /APPROVAL_PENDING/);
+  assert.equal(f.state.calls.length, 0);
+  assert.equal(f.reviews()[0].inputSchema.properties.body.type, "object");
+  assert.match(f.reviews()[0].description, /provider validates fields/i);
+  assert.ok(!JSON.stringify(f.reviews()).includes("Synthetic lamp"));
+  f.approve();
+  assert.ok(configSchema.safeParse(f.config).success);
+  assert.equal((await f.call("create_resource", args)).outcome, "responded");
+  assert.deepEqual(f.state.calls.at(-1).body, args.body);
+  await assert.rejects(
+    f.call("create_resource", { ...args, collection: "wiringWireRuns" }),
+    /APPROVAL_PENDING/,
+  );
+  f.state.providers.push("other");
+  await assert.rejects(
+    f.call("create_resource", { ...args, provider: "other" }),
+    /APPROVAL_PENDING/,
+  );
+  f.state.providers = ["example"];
+  const put = { ...args, id: "lamp-1" };
+  await assert.rejects(f.call("put_resource", put), /APPROVAL_PENDING/);
+  f.approve();
+  await f.call("put_resource", put);
+  assert.equal(
+    f.state.calls.at(-1).path,
+    `${root}/wiringDevices/lamp-1?provider=example`,
+  );
+  f.state.providers.push("other");
+  await assert.rejects(
+    f.call("put_resource", put),
+    /RESOURCE_PUT_PROVIDER_AMBIGUOUS/,
+  );
+  f.state.providers = ["example"];
+  await assert.rejects(
+    f.call("delete_resource", {
+      collection: args.collection,
+      provider: args.provider,
+      id: put.id,
+    }),
+    /APPROVAL_PENDING/,
+  );
+  f.approve();
+  f.state.permissions = "readonly";
+  await assert.rejects(f.call("put_resource", put), /PERMISSION_DENIED/);
+  f.state.permissions = "readwrite";
+  const count = f.reviews().length;
+  for (const collection of [
+    "wiringSettings",
+    "config",
+    "constructor",
+    "wiringDevices/_providers/_default",
+    "unknown",
+  ])
+    await assert.rejects(
+      f.call("create_resource", { ...args, collection }),
+      /INVALID_ARGUMENTS|RESOURCE_COLLECTION_UNAVAILABLE/,
+    );
+  for (const body of [
+    [],
+    null,
+    JSON.parse('{"__proto__":{}}'),
+    { x: Infinity },
+    { id: "unexpected" },
+  ])
+    await assert.rejects(
+      f.call("create_resource", { ...args, body }),
+      /INVALID_ARGUMENTS/,
+    );
+  await assert.rejects(
+    f.call("put_resource", { ...put, id: "_providers" }),
+    /INVALID_ARGUMENTS/,
+  );
+  await assert.rejects(
+    f.call("put_resource", { ...put, body: { id: "other" } }),
+    /INVALID_ARGUMENTS/,
+  );
+  assert.equal(f.reviews().length, count);
+  f.state.response = new GatewayError("RESOURCE_HTTP_ERROR", 500);
+  const before = f.state.calls.length;
+  const result = await f.call("put_resource", put);
+  assert.equal(result.outcome, "unknown");
+  assert.equal(result.retrySafe, false);
+  assert.equal(f.state.calls.length, before + 1);
+});
+
+test("Generic resource HTTP writes cannot reach native configuration or control routes", async () => {
+  const { localResourceMutation } = require("../dist/capabilities/http.js");
+  const send = localResourceMutation(
+    { socket: { localAddress: "127.0.0.1", localPort: 9 } },
+    "Bearer synthetic",
+    new AbortController().signal,
+  );
+  for (const [method, path, body] of [
+    ["POST", "/plugins/example/config?provider=example", {}],
+    ["PUT", `${root}/custom/_providers/_default?provider=example`, {}],
+    ["PUT", `${root}/custom/_providers?provider=example`, {}],
+    ["PUT", `${root}/custom/constructor?provider=example`, {}],
+    ["PUT", `${root}/constructor/id?provider=example`, {}],
+    ["PUT", `${root}/custom/../config?provider=example`, {}],
+    ["PUT", `${root}/custom/%2e%2e?provider=example`, {}],
+    ["POST", `${root}/custom/id?provider=example`, {}],
+    ["PATCH", `${root}/custom/id?provider=example`, {}],
+    ["DELETE", `${root}/custom/id?provider=example`, {}],
+    ["PUT", `${root}/custom/id?provider=example&provider=other`, {}],
+  ])
+    await assert.rejects(send(method, path, body), /INVALID_LOCAL_ROUTE/);
 });

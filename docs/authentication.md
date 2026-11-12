@@ -79,3 +79,7 @@ Individually reviewed plugin POST/PUT/PATCH/DELETE operations require native `re
 ## Generic native API operations
 
 Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors use the shared generic HTTP boundary. Each operation requires saved exact method/namespace/path/input/meaning approval; writes require a native write-capable identity. The caller's original bearer reaches native routes, whose authorization remains authoritative. No separate telemetry ACL gate is added for arbitrary API results. Static public OpenAPI metadata is cached; identities, approvals and provider responses are not. See [native API verification](native-apis.md).
+
+## Custom resource collections
+
+Registered custom collections use the same original-bearer native Resources routing as standard collections. Reads require native authorization; writes require a write-capable identity, an individually saved collection/provider/method/input contract and native `resources` PUT permission. The provider validates custom fields and determines supported behavior. No permission is inferred from a collection's name. Provider selection, single-provider upsert binding, response limits and uncertain-write handling apply equally to custom collections. The CI runtime and installed-artifact matrix includes published Wiring 0.7.0 with synthetic SQLite data; its plugin-only switching and calibration routes are not exercised.

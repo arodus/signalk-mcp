@@ -1,3 +1,7 @@
+import {
+  resourceCollectionSchema,
+  resourceIdSchema,
+} from "./resource-schemas.js";
 import { isNativeApiRoute, nativeApiSchema } from "./native-api.js";
 import http from "node:http";
 import https from "node:https";
@@ -353,11 +357,14 @@ export function localResourceMutation(
   );
   return async (method, path, body) => {
     const match =
-      /^\/signalk\/v2\/api\/resources\/(routes|waypoints|regions|notes|charts|logentries)(?:\/([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?\?provider=([^&]+)$/.exec(
+      /^\/signalk\/v2\/api\/resources\/([A-Za-z][A-Za-z0-9_-]{0,63})(?:\/([A-Za-z0-9][A-Za-z0-9_-]{0,127}))?\?provider=([^&]+)$/.exec(
         path,
       );
     if (
       !match ||
+      !resourceCollectionSchema.safeParse(match[1]).success ||
+      (match[2] !== undefined &&
+        !resourceIdSchema.safeParse(match[2]).success) ||
       !["POST", "PUT", "DELETE"].includes(method) ||
       /[\r\n\\#]/.test(path) ||
       (method === "POST") !== (match[2] === undefined) ||
