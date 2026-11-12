@@ -38,7 +38,7 @@ See the [plugin schema audit](docs/plugin-schema-audit.md), [Resources checks](d
 2. In your **Signal K configuration directory** (usually `~/.signalk`), run this command as the account that runs Signal K:
 
    ```sh
-   npm install --omit=dev --ignore-scripts signalk-mcp@0.3.1
+   npm install --omit=dev --ignore-scripts signalk-mcp@0.4.0
    ```
 
 3. Restart Signal K and open **Apps & Plugins → Configuration → Signal K MCP**.
@@ -147,9 +147,9 @@ If a submitted action times out or loses its connection, its outcome may be unkn
 
 ## Upgrading
 
-Back up your Signal K configuration and record the installed plugin version. Disable the plugin, install `signalk-mcp@0.3.1` with the command above, and restart the Signal K server process. Review the saved operation approvals and native permissions before re-enabling it. See the [upgrade and rollback procedure](docs/release-readiness.md#upgrade-rollback-and-removal).
+Back up your Signal K configuration and record the installed plugin version. Disable the plugin, install `signalk-mcp@0.4.0` with the command above, and restart the Signal K server process. Review the saved operation approvals and native permissions before re-enabling it. See the [upgrade and rollback procedure](docs/release-readiness.md#upgrade-rollback-and-removal).
 
-Version 0.3.1 fixes notification registry paths containing parentheses and migrates validation to patched Zod 4 with native JSON Schema conversion. Existing saved approval identities and accepted provider timestamp and GUID spellings are preserved. The version change does not grant any new permissions.
+Version 0.4.0 adds the operation catalogue, bulk approval, custom resource collections and standing telemetry PUT rules. Existing manual read grants remain in the catalogue. Telemetry PUT clients must refresh their tool definitions and omit the old `source` argument: Signal K now selects the handler normally. Existing source-bound decisions migrate to path approvals with the same metadata/value contract; handler source is no longer part of the approval boundary. See the [release notes](CHANGELOG.md#040---2026-11-12) for approval migration and rollback details.
 
 ## Compatibility and limits
 

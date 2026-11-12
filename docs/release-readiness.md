@@ -1,6 +1,6 @@
 # Release readiness
 
-Version `0.3.1` is being prepared from the merged notification sensor-path fix and Zod 4 migration. It replaces the gateway’s direct JSON Schema converter with native conversion while preserving saved approvals and accepted provider input spellings. The owner authorized this stable release on 2026-10-25. Publication requires the checks below on the final release commit; deployment and physical acceptance remain separate.
+Version `0.4.0` is being prepared from the merged operation catalogue, telemetry PUT rules and custom resource support. PR [#55](https://github.com/arodus/signalk-mcp/pull/55) passed both CI workflows, including the Node 22/24 and Signal K 2.32.0/2.34.0 matrix, before merging. This is feature-commit evidence; the release candidate still needs its own checks below. Preparation is authorized; tag creation, npm publication and a GitHub release require separate explicit authorization.
 
 Earlier releases `0.1.0` and `0.1.1` were published on 2026-10-20. Version `0.1.1` fixed release-test isolation from inherited `GITHUB_OUTPUT`. Its npm publication succeeded, but the workflow's registry-visibility check timed out; the GitHub release was completed after independently verifying the published artifact. Check npm metadata and the release assets for publication evidence rather than treating that workflow's final status as a failed publish.
 
@@ -47,7 +47,7 @@ The native Signal K 2.33.0 Plugin Config UI was exercised with a disposable synt
 
 Before changing an existing installation, save the current package version and the plugin's configuration through the host's normal backup process. Keep provider approvals for review; a provider upgrade can change a route's behavior or permissions.
 
-Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, Signal K’s browser-origin policy, security-enabled state and each individually reviewed plugin operation, native PUT and Resources write approval before enabling. There is no blanket approval; native permissions remain mandatory. Repeat one allowed read, one denied-path read and an unapproved-action refusal check using an isolated synthetic target. Live PUT acceptance requires separate authorization. The plugin stores no historical values or private account database to migrate.
+Disable the gateway in Plugin Config, install the reviewed tarball from the Signal K configuration directory as its service account, and restart the server process through its service manager. Confirm the loaded version, Signal K’s browser-origin policy, security-enabled state and each individually reviewed plugin operation, native PUT and Resources write approval before enabling. Review any explicitly saved standing telemetry PUT rules, which also cover future matching paths and metadata changes. Native permissions remain mandatory. Repeat one allowed read, one denied-path read and an unapproved-action refusal check using an isolated synthetic target. Live PUT acceptance requires separate authorization. The plugin stores no historical values or private account database to migrate.
 
 For rollback, disable the plugin, reinstall the previously retained tarball/version with scripts disabled, restore its compatible configuration and restart. Recheck permissions before enabling. Do not assume a changed schema or provider approval remains compatible.
 
@@ -67,11 +67,11 @@ The complete procedure remains a separate acceptance check; automated integratio
 
 ## Stable release checklist
 
-- [ ] Review and merge the `0.3.1` release PR, with dated changelog notes and current README/install instructions.
+- [ ] Review and merge the `0.4.0` release PR, with dated changelog notes and current README/install instructions.
 - [ ] Verify the final clean-commit tarball on supported runtimes; retain the exact artifact, checksum and receipt.
 - [ ] Pass both CI workflows on the final release commit and reassess production dependency advisories.
 - [ ] Recheck current registry requirements and run the registry preflight on the candidate; keep local scoring distinct from the public result.
-- [ ] Create the annotated `v0.3.1` tag on the reviewed `main` commit after passing checks; the owner has authorized publication.
+- [ ] Obtain publication authorization, then create the annotated `v0.4.0` tag on the reviewed `main` commit after passing checks.
 - [ ] After publication, verify npm `latest`, downloaded package integrity and `gitHead`, the GitHub release assets, and AppStore/registry indexing.
 
 ## Separate acceptance and known limits

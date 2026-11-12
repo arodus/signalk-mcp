@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0] - 2026-11-12
+
+- Add an operation catalogue for plugin, native API and resource operations. Review available operations before invoking them, approve current reads or writes per group, and save all selections together through native Plugin Config.
+- Move telemetry PUT approvals to a separate table with manually added exact paths and standing wildcard rules. Explicitly saved rules cover current and future matching paths, including metadata changes; each invocation still requires an exact path, current value validation and native permissions.
+- Remove the separate manual read approval editor. Existing grants remain visible and manageable in the catalogue, retaining administrator-only restrictions and saved rejection precedence.
+- Remove the entry-count limit on saved approvals and rejections. Only new unsaved pending requests remain bounded; browsing the catalogue does not consume that queue.
+- Preserve plugin mutation approvals when only response payload fields change, while continuing to bind method, route, inputs, security requirements, response status/media types and documented meaning. Explain invalidated approvals and upgrade matching legacy contracts on Save.
+- Support discovered custom resource collections and provider-specific catalogue entries for standard and custom resources, including Wiring records. Forward provider results unchanged and retain native resource permissions and individual write approval.
+- Update the tested Signal K matrix to 2.32.0 and 2.34.0 on Node.js 22 and 24, and refresh settings guidance and screenshots.
+
+### Upgrade notes
+
+Telemetry PUT calls no longer accept a `source` argument. Refresh client tool definitions and send only the exact self-context path and value; Signal K selects the default handler normally. Existing source-bound decisions migrate automatically to path approvals with the same reviewed metadata/value contract. Handler source is no longer part of the approval boundary; rejection wins identical-contract collisions.
+
+Existing manual read grants are preserved. Saving upgrades older plugin mutation approvals only when their complete old contract still matches; already-mismatched approvals need a new review. Wildcard rules are opt-in and do not bypass native permissions. Review saved decisions after upgrading; rollback requires configuration compatible with the older version.
+
 ## [0.3.1] - 2026-10-25
 
 - Fix notification registry reads and discovery for provider sensor names containing parentheses, while preserving telemetry path validation and native permissions.
