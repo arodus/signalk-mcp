@@ -21,7 +21,6 @@ const key = reviewKey(review);
 const put = putReview({
   context: "vessels.self",
   path: "steering.autopilot.target.headingTrue",
-  source: "fixture.autopilot",
   metadata: { description: "Desired heading", units: "rad" },
   inputSchema: { type: "number", minimum: 0, maximum: 6.28 },
 });
@@ -268,7 +267,7 @@ test("GET and PUT decisions save together through native configuration while con
   const draft = draftOf(base);
   draft.reviews[key].decision = "rejected";
   draft.reviews[putKey].decision = "approved";
-  const next = { ...put, source: "fixture.new" };
+  const next = { ...put, path: "steering.autopilot.target.headingMagnetic" };
   const nextKey = reviewKey(next);
   const current = inventory(mixed);
   current[0].schema.properties.readRequests.properties[nextKey] = {
@@ -324,7 +323,6 @@ test("invalid PUT metadata or gateway permission policy cannot enter the approva
     { permission: "readwrite" },
     { permission: "admin" },
     { context: "vessels.other" },
-    { source: undefined },
     { metadata: [] },
     { inputSchema: null },
     { kind: "post" },
@@ -977,4 +975,88 @@ test("resource reads need no approval and resource writes are revalidated per pr
     ),
     /RESOURCE_PUT_PROVIDER_AMBIGUOUS/,
   );
+});
+
+test("telemetry preview stages exact paths and standing rules in their own group and revalidates before saving", async () => {
+  const {
+    previewTelemetryPut,
+    catalogueGroups,
+    approveRows,
+    saveConfiguration,
+  } = await ui();
+  for (const review of [
+    put,
+    {
+      kind: "put-rule",
+      context: "vessels.self",
+      path: "electrical.switches.**",
+      decision: "pending",
+    },
+  ]) {
+    const key = reviewKey(review);
+    const operation = { path: review.path, key, review };
+    const group = { id: "native.put", operations: [operation] };
+    let saved;
+    let writes = 0;
+    const fetcher = async (url, options) => {
+      if (url.includes("?id=native.put&path=")) {
+        assert.ok(url.endsWith(encodeURIComponent(review.path)));
+        return response(group);
+      }
+      if (url === "/plugins") return response(inventory({}));
+      if (options.method === "POST") {
+        writes++;
+        saved = JSON.parse(options.body);
+        return response("saved");
+      }
+      return response(saved);
+    };
+    assert.deepEqual(
+      await previewTelemetryPut(review.path, fetcher),
+      operation,
+    );
+    const base = await snapshot(inventory({}));
+    base.catalogue = [];
+    const draft = approveRows(draftOf(base), [
+      { key, item: review, eligible: true },
+    ]);
+    assert.equal(catalogueGroups(base, draft)[0].id, "native.put");
+    assert.equal(writes, 0);
+    await saveConfiguration(base, draft, fetcher);
+    assert.equal(writes, 1);
+    assert.ok(configSchema.safeParse(saved.configuration).success);
+    await assert.rejects(
+      saveConfiguration(base, draft, async () =>
+        response({
+          id: "native.put",
+          operations: [{ ...operation, key: "changed" }],
+        }),
+      ),
+      /contract changed/,
+    );
+  }
+});
+
+test("UI migration preserves saved telemetry decisions and saves source-free approvals without reapproval", async () => {
+  const { loadConfiguration, saveConfiguration } = await ui();
+  const a = { ...put, source: "old-a", decision: "approved" };
+  const b = { ...put, source: "old-b", decision: "rejected" };
+  const migrated = { ...put, decision: "rejected" };
+  const list = inventory({ [putKey]: migrated });
+  list[0].data.configuration.readRequests = {
+    [reviewKey(a)]: a,
+    [reviewKey(b)]: b,
+  };
+  const base = await loadConfiguration(async () => response(list));
+  assert.deepEqual(base.reviews, { [putKey]: migrated });
+  let saved;
+  await saveConfiguration(base, draftOf(base), async (url, options) => {
+    if (url === "/plugins") return response(list);
+    if (options.method === "POST") {
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  });
+  assert.deepEqual(saved.configuration.readRequests, { [putKey]: migrated });
 });

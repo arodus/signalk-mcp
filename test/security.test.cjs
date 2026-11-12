@@ -402,10 +402,13 @@ test("mutation tools declare side effects, preserve uncertain outcomes and rejec
   );
   const args = {
     path: "electrical.switches.fixture.state",
-    source: "fixture",
     value: false,
   };
-  for (const extra of [{ context: "vessels.other" }, { requestId: "extra" }]) {
+  for (const extra of [
+    { context: "vessels.other" },
+    { requestId: "extra" },
+    { source: "fixture" },
+  ]) {
     const rejected = await client.callTool({
       name: "put_value",
       arguments: { ...args, ...extra },

@@ -15,7 +15,6 @@ const writer = { identifier: "writer", permissions: "readwrite" };
 const putTarget = {
   context: "vessels.self",
   path: "steering.autopilot.target.headingTrue",
-  source: "fixture.autopilot",
   metadata: { description: "Desired heading", units: "rad" },
   inputSchema: { type: "number", minimum: 0, maximum: 6.28 },
 };
@@ -238,7 +237,7 @@ test("legacy GET review keys and saved configuration remain unchanged alongside 
   assert.equal("kind" in parsed.readRequests[reviewKey(legacy)], false);
 });
 
-test("PUT approval binds exact source, path, meaning and value schema with canonical object keys", () => {
+test("PUT approval binds exact path, meaning and value schema with canonical object keys", () => {
   const accepted = { ...putReview(putTarget), decision: "approved" };
   const reviews = { [reviewKey(accepted)]: accepted };
   const allowed = applyPutReview(putTarget, reviews, writer);
@@ -258,7 +257,6 @@ test("PUT approval binds exact source, path, meaning and value schema with canon
     true,
   );
   for (const changes of [
-    { source: "fixture.other" },
     { path: "steering.autopilot.target.headingMagnetic" },
     {
       metadata: {
@@ -352,7 +350,6 @@ test("PUT requests queue only immutable administrative metadata and share the bo
       "kind",
       "context",
       "path",
-      "source",
       "metadata",
       "inputSchema",
       "schemaHash",
@@ -373,7 +370,7 @@ test("PUT requests queue only immutable administrative metadata and share the bo
     );
   assert.throws(() => requests.requestPut(putTarget), /APPROVAL_PENDING/);
   assert.throws(
-    () => requests.requestPut({ ...putTarget, source: "fixture.other" }),
+    () => requests.requestPut({ ...putTarget, path: "steering.other" }),
     /APPROVAL_QUEUE_FULL/,
   );
   assert.equal(Object.keys(queued(requests)).length, 64);
@@ -383,7 +380,7 @@ test("PUT requests queue only immutable administrative metadata and share the bo
   const schema = Object.values(requests.schema().properties)[0];
   assert.equal(Object.hasOwn(schema.properties, "permission"), false);
   assert.equal(Object.hasOwn(schema.default, "permission"), false);
-  assert.match(schema.description, /fixture.autopilot/);
+  assert.match(schema.description, /steering.autopilot.target.headingTrue/);
   assert.match(schema.description, /Desired heading/);
   assert.match(schema.description, /maximum/);
 });
@@ -685,4 +682,98 @@ test("queued reviews preserve scoped and dotted plugin prefixes without changing
     "https://outside/plugins/Plugin.name/items",
   ])
     assert.equal(pluginRouteSchema.safeParse(path).success, false, path);
+});
+
+test("legacy telemetry decisions migrate to native routing with rejection winning source collisions", () => {
+  const { migratePutReviews } = require("../dist/approvals.js");
+  const a = {
+    ...putReview({ ...putTarget, source: "old-a" }),
+    decision: "approved",
+  };
+  const b = {
+    ...putReview({ ...putTarget, source: "old-b" }),
+    decision: "rejected",
+  };
+  const saved = { [reviewKey(a)]: a, [reviewKey(b)]: b };
+  const current = configSchema.parse({ readRequests: saved }).readRequests;
+  const key = reviewKey(putReview(putTarget));
+  assert.deepEqual(Object.keys(current), [key]);
+  assert.equal(current[key].decision, "rejected");
+  assert.equal(Object.hasOwn(current[key], "source"), false);
+  assert.equal(
+    applyPutReview(putTarget, saved, writer).reason,
+    "APPROVAL_REJECTED",
+  );
+  assert.equal(
+    applyPutReview(putTarget, { [reviewKey(a)]: a }, writer).enabled,
+    true,
+  );
+  assert.deepEqual(migratePutReviews({ ["f".repeat(64)]: a }), {});
+});
+
+test("standing PUT rules match path segments, deny before allow, and cannot authorize other review kinds", () => {
+  const { putRuleSchema, matchesPutPattern } = require("../dist/put-rules.js");
+  const rule = putRuleSchema.parse({
+    kind: "put-rule",
+    context: "vessels.self",
+    path: "steering.autopilot.**",
+    decision: "approved",
+  });
+  const saved = { [reviewKey(rule)]: rule };
+  assert.ok(configSchema.safeParse({ readRequests: saved }).success);
+  assert.equal(applyPutReview(putTarget, saved, writer).enabled, true);
+  assert.equal(
+    applyPutReview(putTarget, saved, reader).reason,
+    "PERMISSION_DENIED",
+  );
+  assert.equal(
+    matchesPutPattern("steering.*.state", "steering.pilot.state"),
+    true,
+  );
+  assert.equal(
+    matchesPutPattern("steering.*.state", "steering.pilot.target.state"),
+    false,
+  );
+  assert.equal(
+    matchesPutPattern("steering.autopilot.**", "steering.autopilot2.state"),
+    false,
+  );
+  assert.equal(matchesPutPattern("steering.**", "steering.meta.value"), false);
+  for (const path of [
+    "**",
+    "*.*",
+    "steering.**.state",
+    "steering.foo*",
+    "steering..*",
+    "steering.constructor.*",
+    "steering.meta.*",
+  ])
+    assert.equal(putRuleSchema.safeParse({ ...rule, path }).success, false);
+  assert.equal(
+    putRuleSchema.safeParse({ ...rule, source: "anything" }).success,
+    false,
+  );
+  const rejected = { ...putReview(putTarget), decision: "rejected" };
+  assert.equal(
+    applyPutReview(
+      putTarget,
+      { ...saved, [reviewKey(rejected)]: rejected },
+      writer,
+    ).reason,
+    "APPROVAL_REJECTED",
+  );
+  const deny = { ...rule, path: "steering.*.target.*", decision: "rejected" };
+  assert.equal(
+    applyPutReview(putTarget, { ...saved, [reviewKey(deny)]: deny }, writer)
+      .reason,
+    "APPROVAL_REJECTED",
+  );
+  assert.equal(
+    applyPutReview(putTarget, { ["a".repeat(64)]: rule }, writer).enabled,
+    false,
+  );
+  assert.equal(
+    applyReviews(operations(), "fixture", saved, writer)[0].enabled,
+    false,
+  );
 });

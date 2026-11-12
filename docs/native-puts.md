@@ -1,18 +1,16 @@
-# Individually approved native PUTs
+# Telemetry PUT approvals and standing rules
 
-Every native PUT target starts blocked and requires its own explicit administrator approval saved in Signal K Plugin Config, in addition to the caller's native permissions. There is no allow-all switch, and discovery never enables execution. Version `0.1.0` includes this native PUT implementation and separately reviewed [plugin POST operations](plugin-posts.md).
+Telemetry PUTs use Signal K's normal handler selection. A command contains an exact `path` and `value`; no handler source is supplied. Signal K chooses the sole registered handler, rejects an ambiguous path with status 400, and reports unavailable handlers through its normal response. Discovery never invokes a handler.
 
 ## Discovery and meaning
 
-`list_put_paths` accepts an explicit handler `source`, optional `prefix`, `offset` and `limit`. It lists path candidates advertising `supportsPut: true` whose native `put` ACL permits that source. It does not expose telemetry values, grant approval, enumerate handler sources or prove the requested source has a registered handler.
+`list_put_paths` accepts optional `prefix`, `offset` and `limit`. It lists `supportsPut: true` path candidates allowed by the caller's native path `put` ACL. It does not expose current values or prove that a handler exists. The gateway combines model paths, bounded metadata path hints observed through the public delta-input hook, and successfully described paths. A metadata-only target advertised before startup may require an explicit `describe_put` first. Discovery is incomplete and is not a stable snapshot.
 
-The native public metadata getter supports direct lookup but does not enumerate all runtime metadata-only targets. The gateway therefore combines model paths, bounded metadata path hints observed through the public delta-input hook, and successfully described paths. A metadata-only target advertised before the gateway starts may require an explicit `describe_put` first. Discovery is incomplete and is not a stable snapshot. The observer retains paths only, always forwards the original delta and never changes telemetry or metadata.
+`describe_put` accepts only `path`. It returns native metadata, value constraints, `schemaSource`, `schemaDiagnostics`, `approvalStatus`, `approvalSaved`, and `handlerSelection: native-default`. `enabled` means the schema, saved exact approval or matching standing rule, and caller permissions permit submission. It does not prove physical operation or an unambiguous handler.
 
-`describe_put` accepts `path` and an explicit `source`. It returns the target's native metadata and supplied value constraints, with schema status and a statement that native handler validation still applies. Units, names, descriptions, enums and other metadata retain their native meaning. Display scale and alarm zones do not become command limits. Missing schema information is reported; current values are not used to invent a type, range, or handler source.
+`NO_INPUT_TYPE` means there is no declared type or explicit choice list; the path remains eligible for review and native handler validation. Unsupported types, keywords and malformed constraints block dispatch even when a standing rule matches. Current values, display scale and alarm zones never invent command types or limits. Description alone never queues a review.
 
-`describe_put` adds `schemaSource` and `schemaDiagnostics` (a code, field path and explanation). `NO_INPUT_TYPE` means no declared type or explicit choices; it remains eligible for exact review and native handler validation. Unsupported types, keywords and malformed constraints identify the offending field and block review queueing and dispatch. A diagnostic is the first detected issue, not an exhaustive validator report.
-
-`approvalStatus` is `required`, `pending`, `approved` or `rejected` for the exact current metadata/value contract. `approvalSaved` distinguishes a queued in-memory request from a saved pending decision. Description alone never queues a request. `enabled` means the current schema, saved approval and caller checks permit submission; `reason` explains a block. Neither an approval nor `enabled: true` verifies a handler or physical operation. Both discovery tools explicitly return `sourceVerified: false` and retain `sourceVerification: native-handler-on-dispatch`.
+![Separate telemetry PUT table with exact paths and a standing wildcard rule, using synthetic data](images/telemetry-put-approvals.jpg)
 
 ## Explicit native value choices
 
@@ -33,15 +31,19 @@ The reviewed input schema is `{"enum":["off","charger only"]}`. The native metad
 
 Existing supported type, range and other constraints are retained. Choices do not grant approval, bypass native permissions or validate handler registration. The complete native metadata and reviewed enum remain part of the exact approval binding; changed values or labels require fresh review. No type or command is inferred from telemetry, path names, units, display scales or alarm zones.
 
-Both tools require a native write-capable identity and exact-source `put` authorization. This does not grant access to current values; ordinary reads still need native read permission. Only `vessels.self` is supported. Metadata configuration paths are excluded.
+Both MCP discovery tools require a native write-capable identity and native path `put` authorization. The separate admin-only catalogue can inspect review metadata without granting the administrator execution permission. This does not grant access to current values; ordinary reads still need native read permission. Only `vessels.self` is supported. Metadata configuration paths are excluded.
 
 ## Review and execution
 
-Call `put_value` with one `path`, explicit `source` and bounded JSON `value`. The native HTTP handler is called only after input validation, fresh native authentication, exact-source PUT authorization and a matching saved review. There is no automatic unit conversion, batch mutation or arbitrary HTTP route.
+Call `put_value` with `{ "path": "electrical.switches.cabin.state", "value": false }`. Input validation, fresh native authentication, native path PUT permission and saved approval precede dispatch. There is no unit conversion, batch mutation or arbitrary HTTP route.
 
-An eligible unapproved target returns `APPROVAL_PENDING` without dispatch and adds a row to **Operation catalogue** in native Plugin Config. Refresh the panel, inspect the exact path/source, metadata and value contract, choose **Accept** or **Reject**, and **Save Configuration**. Draft actions do not enable execution. The table shows **Read** or **Write**, with no role selector or extra PUT role policy. Native Signal K permissions determine who may run an approved operation: a PUT requires a write-capable identity and exact-source `put` ACL permission. A read-only identity cannot write. No role, metadata marker or plugin GET approval grants PUT access by itself. There is no all-PUT option.
+**Telemetry PUTs** is a separate table below the operation catalogue. Add a path manually, inspect its metadata/value contract, select **Accept and add**, then **Save Configuration**. Exact approvals retain their metadata/value binding; changed meaning or constraints need a new review. Eligible blocked calls can still queue a pending row without submitting the command. Both tables share one native Save and the existing 64 saved-review/request limit.
 
-Reviews bind exact context/path/source and canonicalized metadata/value contract. A different source, changed meaning or changed schema requires a new review. Saved rejection remains blocked. Provider upgrades still need implementation review even if metadata is unchanged. The shared queue has at most 64 GET and PUT entries; it stores review metadata, never submitted values or bearer tokens. Unsaved entries disappear on restart. Legacy GET keys/decisions remain compatible.
+Administrators may instead enter a **standing wildcard rule**. `*` matches one complete dot-separated segment; a trailing `**` matches one or more descendant segments. A literal root is required: `electrical.switches.*.state` and `steering.autopilot.**` are valid; `**`, partial-segment globs and metadata paths are not. Rules apply to current and future matching paths, including future metadata changes. They do not require a currently discoverable match. Every invocation still has an exact path and is checked against current `supportsPut`, supported value constraints, caller identity and native PUT permission. Rules cannot authorize plugin HTTP operations, Resources writes or other vessel contexts.
+
+A matching saved rejection wins over an approval, whether exact or wildcard. Removing one grant does not revoke access if another approved rule still matches. No MCP tool can create or save a rule. The admin-only catalogue endpoint previews review candidates; only the existing native configuration save persists decisions.
+
+Existing source-specific approvals migrate automatically to path approvals, preserving metadata/value contracts and decisions. Entries with the same path and contract collapse, with rejection taking precedence. Migration is effective when configuration loads; the next native Save persists the source-free records. Reapproval is not required solely because the source field was removed. Existing clients must refresh their tool definitions and omit `source` in telemetry PUT calls; unknown input fields remain rejected.
 
 Delete a PUT review, confirm the removal and save to revoke it. Native PUT rows do not depend on plugin inventory, so revocation is possible while a provider remains installed. Existing GET-row deletion rules continue to apply. Native saves still lack atomic conditional writes; the panel checks for conflicting edits but cannot eliminate simultaneous-save races in the host API.
 
@@ -51,7 +53,7 @@ Delete a PUT review, confirm the removal and save to revoke it. Native PUT rows 
 
 Native `put` ACL permission is different from telemetry `write`. Both `readwrite` and `admin` identities require the applicable PUT grant; there is no admin ACL bypass.
 
-Signal K 2.32.0 and 2.34.0 dispatch HTTP PUTs after checking `shouldAllowPut` with a null source. This does not establish authorization for the source selected by the request body. The gateway separately requires a literal native ACL grant for the explicit source and keeps the native HTTP route's checks as well. Missing hooks and unknown results fail closed. Fixed-local requests carry only the original bearer identity, with certificate verification and redirects disabled. Public in-process PUT helpers are not used because they do not carry the authenticated request.
+Signal K 2.32.0 and 2.34.0 authorize HTTP PUT paths before default handler selection. The gateway uses the same null-source path `put` ACL check and forwards only the original bearer and `{ value }` through fixed-local HTTP. It does not impose an additional handler-specific authorization policy. Missing security hooks and unknown results fail closed. TLS verification and the native HTTP route checks remain active; redirects are refused. In-process PUT helpers are not used because they do not carry the authenticated request.
 
 Checks occur immediately before submission and again when returning results or checking status. These are not an atomic transaction with another plugin's handler or with administrator configuration changes. A later permission change cannot cancel an action already accepted by the native server.
 
@@ -67,6 +69,6 @@ Transport timeout, disconnect, invalid/oversized reply or authorization changes 
 
 ## Verification
 
-Portable tests cover approval binding, schema/input validation, role/ACL checks, correlation bounds, expiry and truthful outcomes. Native integration uses disposable Signal K servers and synthetic PUT handlers, including metadata-only targets, actual native admin saves, source-specific denials, pending ownership, failure replies and lifecycle changes. No live hardware, vessel credentials or notification service is involved.
+Portable tests cover approval binding, schema/input validation, role/ACL checks, correlation bounds, expiry and truthful outcomes. Native integration uses disposable Signal K servers and synthetic PUT handlers, including metadata-only targets, actual native admin saves, native default handler selection, ambiguous-handler refusal, standing rules for subsequently registered paths, preserved legacy decisions, pending ownership, failure replies and lifecycle changes. No live hardware, vessel credentials or notification service is involved.
 
 The supported matrix remains Signal K 2.32.0/2.34.0 on Node 22/24. Record actual runs and remaining limits in [verification](verification.md); implementation, local tests, CI, publication and deployment are separate evidence.

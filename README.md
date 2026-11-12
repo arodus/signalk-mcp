@@ -67,7 +67,7 @@ Use Signal K’s standard token-generation utility for a dedicated user account:
 
 3. Copy the printed token into your agent’s secret settings or password manager. Treat it like a password: do not paste it into a chat, commit it to a repository or include it in screenshots.
 
-The token uses that user’s current Signal K permissions. Start with **Read Only** for viewing data. For approved actions, the user needs **Read/Write** access as well as the individual operation approvals described below. Native PUT actions also require Signal K’s `put` permission for the exact target and source. An administrator token is not needed for ordinary data reads.
+The token uses that user’s current Signal K permissions. Start with **Read Only** for viewing data. For approved actions, the user needs **Read/Write** access as well as the individual operation approvals described below. Native PUT actions also require Signal K’s `put` permission for the exact target. An administrator token is not needed for ordinary data reads.
 
 Generate a replacement when the token expires. Remove the dedicated user under **Security → Users** to revoke its access. See Signal K’s [token-generation guide](https://demo.signalk.org/documentation/Security/Generating_Tokens.html) for details. Existing Signal K user or device tokens also work; there is no separate MCP token to create.
 
@@ -122,7 +122,7 @@ The agent discovers and calls the tools; you do not need to write JSON requests.
 
 ## Approve plugin operations and actions
 
-Built-in telemetry, history, notification and resource reads use your Signal K permissions immediately. **Every generic native API operation, plugin read, plugin mutation (POST, PUT, PATCH or DELETE), native PUT action and resource write needs its own saved administrator approval.** There is no allow-all setting, and an agent cannot approve itself.
+Built-in telemetry, history, notification and resource reads use your Signal K permissions immediately. **Every generic native API operation, plugin read, plugin mutation (POST, PUT, PATCH or DELETE), and resource write needs its own saved administrator approval. Telemetry PUTs require an exact approval or an explicitly saved standing path rule.** There is no allow-all setting, and an agent cannot approve itself.
 
 When an agent attempts an eligible operation that has not been approved, it receives `APPROVAL_PENDING`. The operation has not run.
 
@@ -135,11 +135,11 @@ When an agent attempts an eligible operation that has not been approved, it rece
 
 _The screenshot uses synthetic example operations, not live vessel data._
 
-Browsing does not queue requests or execute provider operations. Resources lists routes, waypoints, regions, notes, charts and logentries per registered provider. Reads use native permissions without a gateway approval; writes can be selected before any invocation. Custom collections are listed as unsupported. Native telemetry PUTs remain request-driven because an exact handler source must be supplied. The existing 64-entry limit covers saved reviews and pending requests; oversized bulk selections are refused without partially applying them. Selected plugin/API/resource contracts are checked again before saving.
+Browsing does not queue requests or execute provider operations. Resources lists routes, waypoints, regions, notes, charts and logentries per registered provider. Reads use native permissions without a gateway approval; writes can be selected before any invocation. Custom collections are listed as unsupported. Telemetry PUTs have a separate table with manual exact paths and standing wildcard rules; Signal K selects the handler normally. The existing 64-entry limit covers saved reviews and pending requests; oversized bulk selections are refused without partially applying them. Selected plugin/API/resource contracts are checked again before saving.
 
 The generic JSON executor supports GET, POST, PUT, PATCH and DELETE described by the plugin’s or supported native API’s OpenAPI. PATCH is for partial updates; PUT follows the endpoint’s documented save or replacement behavior. See the [cross-plugin schema audit and author guidance](docs/plugin-schema-audit.md) for supported contracts and remaining gaps.
 
-Native Signal K PUT actions remain supported for exact `vessels.self` paths and handler sources, with their own saved approvals and native `put` permissions. See [native control actions](docs/native-puts.md).
+Native Signal K PUT actions accept an exact `vessels.self` path and value. The separate **Telemetry PUTs** table supports exact approvals and standing wildcard rules for current and future paths. `*` matches one segment; trailing `**` matches descendants. Existing source-bound approvals migrate automatically; native `put` permissions still apply. See [native control actions](docs/native-puts.md).
 
 Saved approvals survive restarts and allow later calls while Signal K permissions still apply. The plugin does not ask for confirmation on every call; configure your agent to ask before changing state. Changed action contracts require a new review. Additional plugin response fields do not invalidate new-format approvals; response status, media types and documented meaning remain bound. Save upgrades older approvals only when their full old contract still matches. Already-mismatched legacy approvals need one review; the table explains known changes or missing discovery. Unsaved requests disappear on restart, so refresh the table before reviewing and saving.
 

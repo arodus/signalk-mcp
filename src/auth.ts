@@ -17,7 +17,7 @@ interface Security {
     id: string,
     context: string,
     path: string,
-    source: string,
+    source: string | null,
     operation: string,
   ): boolean;
 }
@@ -113,30 +113,17 @@ export function canRead(
   );
 }
 
-// Native HTTP authorizes a path before selecting its action source in the
-// supported servers. Check the exact, explicit source here as well; a path or
-// wildcard-source grant is not evidence of access to this action handler.
+// Use the same path authorization as native HTTP PUT before default routing.
 export function canPut(
   app: App,
   principal: Principal,
   path: string,
-  source: string,
   context = "vessels.self",
 ): boolean {
-  if (
-    !["readwrite", "admin"].includes(principal.permissions) ||
-    !source ||
-    /[*?[\]]/.test(source)
-  )
-    return false;
+  if (!["readwrite", "admin"].includes(principal.permissions)) return false;
   return (
-    security(app).checkACL(
-      principal.identifier,
-      context,
-      path,
-      source,
-      "put",
-    ) === true
+    security(app).checkACL(principal.identifier, context, path, null, "put") ===
+    true
   );
 }
 

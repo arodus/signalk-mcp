@@ -1,3 +1,4 @@
+import { putRuleSchema, putRuleMeaning } from "../put-rules.js";
 import { DiscoveryCache } from "./discovery-cache.js";
 import { nativeApiSchema, type NativeApi } from "./native-api.js";
 import { z } from "zod";
@@ -13,6 +14,7 @@ import type { Config } from "../config.js";
 import {
   applyReviews,
   operationReview,
+  putReview,
   reviewKey,
   type ApprovalRequests,
 } from "../approvals.js";
@@ -309,11 +311,11 @@ export class CapabilityRegistry {
       },
       "signalk.put": {
         description:
-          "Native self-context actions; every exact path/source needs saved administrator approval and native PUT permission",
+          "Native self-context actions; every exact path needs saved administrator approval or a standing path rule and native PUT permission",
         operations: {
           list_put_paths: {
             description:
-              "Discover metadata-advertised PUT path candidates for an explicit source; no current values or inferred handler sources",
+              "Discover metadata-advertised PUT path candidates with native default handler routing; no current values",
             input: putPathsInput,
             run: (args) =>
               this.nativePuts().list(
@@ -323,7 +325,7 @@ export class CapabilityRegistry {
           },
           describe_put: {
             description:
-              "Describe a native action's schema diagnostics and exact approval state using its metadata and explicit source; discovery does not approve or verify a registered handler",
+              "Describe a native action's schema diagnostics and exact approval state using its metadata; Signal K selects the handler and discovery does not approve execution",
             input: describePutInput,
             run: (args) =>
               this.nativePuts().describe(
@@ -651,9 +653,65 @@ export class CapabilityRegistry {
   }
   // Admin catalogue discovery never invokes an operation or queues a request.
   // Return the same exact review records used by execution, without granting them.
-  async catalogue(id: string) {
+  async catalogue(id: string, path?: string) {
     if (this.authorize().permissions !== "admin")
       throw new GatewayError("PERMISSION_DENIED", 403);
+    if (id === "native.put") {
+      if (typeof path !== "string") throw new GatewayError("INVALID_ARGUMENTS");
+      const rule = putRuleSchema.safeParse({
+        kind: "put-rule",
+        context: "vessels.self",
+        path,
+      });
+      if (path.includes("*")) {
+        if (!rule.success) throw new GatewayError("INVALID_ARGUMENTS");
+        return {
+          id,
+          reason: null,
+          operations: [
+            {
+              id: path,
+              method: "PUT",
+              path,
+              description: putRuleMeaning,
+              review: rule.data,
+              key: reviewKey(rule.data),
+              enabled: false,
+            },
+          ],
+        };
+      }
+      const target = this.nativePuts().describe(
+        () => this.authorize(),
+        { path },
+        this.config.readRequests,
+        undefined,
+        true,
+      );
+      const review =
+        target.schemaStatus === "unsupported" ? null : putReview(target);
+      return {
+        id,
+        reason: null,
+        operations: [
+          {
+            id: path,
+            method: "PUT",
+            path,
+            description: target.metadata.description,
+            reason:
+              target.schemaStatus === "unsupported"
+                ? "UNSUPPORTED_PUT_SCHEMA"
+                : null,
+            schemaDiagnostics: target.schemaDiagnostics,
+            inputSchema: target.inputSchema,
+            review,
+            key: review ? reviewKey(review) : null,
+            enabled: target.enabled,
+          },
+        ],
+      };
+    }
     if (id.startsWith("resource.")) {
       const result = await resourceCatalogue(
         { authorize: () => this.authorize(), get: this.get },

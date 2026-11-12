@@ -190,10 +190,7 @@ async function start({ plugins = [] } = {}) {
     const found = Object.entries(reviews())
       .reverse()
       .find(
-        ([, review]) =>
-          review.kind === "put" &&
-          review.path === target.path &&
-          review.source === target.source,
+        ([, review]) => review.kind === "put" && review.path === target.path,
       );
     assert.ok(
       found,

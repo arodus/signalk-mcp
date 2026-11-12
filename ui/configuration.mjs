@@ -1,4 +1,5 @@
 import { resourceCollectionSchema } from "../dist/capabilities/resource-schemas.js";
+import { putRuleSchema } from "../dist/put-rules.js";
 import { approvalSchema } from "../dist/capabilities/schemas.js";
 
 const CONFIG_URL = "/plugins/signalk-mcp/config";
@@ -57,65 +58,96 @@ export async function loadConfiguration(fetcher = nativeFetch) {
     Object.entries(properties).map(([key, schema]) => [key, schema.default]),
   );
   // Saves can precede the host's asynchronous restart.
-  Object.assign(reviews, configuration.readRequests ?? {});
+  // The server exposes migrated path approvals in schema defaults. Overlay
+  // saved decisions after collapsing legacy source-specific entries to those keys.
+  const saved = {};
+  const rank = { pending: 0, approved: 1, rejected: 2 };
+  for (const [key, raw] of Object.entries(configuration.readRequests ?? {})) {
+    let currentKey = key;
+    const review = { ...raw };
+    if (review.kind === "put" && review.source !== undefined) {
+      const match = Object.entries(reviews).find(
+        ([, candidate]) =>
+          candidate.kind === "put" &&
+          candidate.source === undefined &&
+          candidate.context === review.context &&
+          candidate.path === review.path &&
+          candidate.schemaHash === review.schemaHash,
+      );
+      if (!match)
+        throw new Error(
+          "Telemetry approval migration is not ready. Refresh after the plugin restarts.",
+        );
+      currentKey = match[0];
+      delete review.source;
+    }
+    if (
+      !saved[currentKey] ||
+      rank[review.decision] > rank[saved[currentKey].decision]
+    )
+      saved[currentKey] = review;
+  }
+  Object.assign(reviews, saved);
   if (
     Object.values(reviews).some(
       (review) =>
         !object(review) ||
-        (review.kind === "put"
-          ? review.context !== "vessels.self" ||
-            typeof review.path !== "string" ||
-            typeof review.source !== "string" ||
-            !object(review.metadata) ||
-            !object(review.inputSchema) ||
-            "permission" in review
-          : review.kind === "resource"
-            ? !["POST", "PUT", "DELETE"].includes(review.method) ||
-              !resourceCollectionSchema.safeParse(review.collection).success ||
-              typeof review.provider !== "string" ||
-              !review.provider ||
-              review.path !==
-                `/signalk/v2/api/resources/${review.collection}${review.method === "POST" ? "" : "/{id}"}` ||
-              typeof review.description !== "string" ||
+        (review.kind === "put-rule"
+          ? !putRuleSchema.safeParse(review).success
+          : review.kind === "put"
+            ? review.context !== "vessels.self" ||
+              typeof review.path !== "string" ||
+              review.source !== undefined ||
+              !object(review.metadata) ||
               !object(review.inputSchema) ||
-              typeof review.contractHash !== "string" ||
-              !/^[a-f0-9]{64}$/.test(review.contractHash) ||
               "permission" in review
-            : review.kind === "api"
-              ? !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(
-                  review.method,
-                ) ||
-                ![
-                  "course",
-                  "weather",
-                  "autopilot",
-                  "radar",
-                  "ble",
-                  "tracks",
-                  "sensors",
-                ].includes(review.api) ||
-                typeof review.operationId !== "string" ||
-                typeof review.path !== "string" ||
-                !review.path.startsWith("/signalk/v2/api/") ||
+            : review.kind === "resource"
+              ? !["POST", "PUT", "DELETE"].includes(review.method) ||
+                !resourceCollectionSchema.safeParse(review.collection).success ||
+                typeof review.provider !== "string" ||
+                !review.provider ||
+                review.path !==
+                  `/signalk/v2/api/resources/${review.collection}${review.method === "POST" ? "" : "/{id}"}` ||
                 typeof review.description !== "string" ||
                 !object(review.inputSchema) ||
                 typeof review.contractHash !== "string" ||
                 !/^[a-f0-9]{64}$/.test(review.contractHash) ||
                 "permission" in review
-              : review.kind === "post" || review.kind === "plugin"
-                ? (review.kind === "post"
-                    ? review.method !== "POST"
-                    : !["PUT", "PATCH", "DELETE"].includes(review.method)) ||
-                  typeof review.pluginId !== "string" ||
-                  review.pluginId === "signalk-mcp" ||
+              : review.kind === "api"
+                ? !["GET", "POST", "PUT", "PATCH", "DELETE"].includes(
+                    review.method,
+                  ) ||
+                  ![
+                    "course",
+                    "weather",
+                    "autopilot",
+                    "radar",
+                    "ble",
+                    "tracks",
+                    "sensors",
+                  ].includes(review.api) ||
                   typeof review.operationId !== "string" ||
                   typeof review.path !== "string" ||
+                  !review.path.startsWith("/signalk/v2/api/") ||
                   typeof review.description !== "string" ||
                   !object(review.inputSchema) ||
                   typeof review.contractHash !== "string" ||
                   !/^[a-f0-9]{64}$/.test(review.contractHash) ||
                   "permission" in review
-                : "kind" in review || typeof review.pluginId !== "string"),
+                : review.kind === "post" || review.kind === "plugin"
+                  ? (review.kind === "post"
+                      ? review.method !== "POST"
+                      : !["PUT", "PATCH", "DELETE"].includes(review.method)) ||
+                    typeof review.pluginId !== "string" ||
+                    review.pluginId === "signalk-mcp" ||
+                    typeof review.operationId !== "string" ||
+                    typeof review.path !== "string" ||
+                    typeof review.description !== "string" ||
+                    !object(review.inputSchema) ||
+                    typeof review.contractHash !== "string" ||
+                    !/^[a-f0-9]{64}$/.test(review.contractHash) ||
+                    "permission" in review
+                  : "kind" in review || typeof review.pluginId !== "string"),
     )
   )
     throw new Error(
@@ -218,7 +250,7 @@ export async function loadEditorConfiguration(fetcher = nativeFetch) {
 export function reviewGroup(review) {
   return review.kind === "api"
     ? `api.${review.api}`
-    : review.kind === "put"
+    : ["put", "put-rule"].includes(review.kind)
       ? "native.put"
       : review.kind === "resource"
         ? `resource.${review.collection}`
@@ -227,7 +259,7 @@ export function reviewGroup(review) {
 
 export function isWrite(review) {
   return (
-    review.kind === "put" ||
+    ["put", "put-rule"].includes(review.kind) ||
     (review.method !== undefined && review.method !== "GET")
   );
 }
@@ -293,7 +325,7 @@ export function catalogueGroups(base, draft) {
       groups.push(group);
     }
     // Old plugin/API contracts remain visible but cannot be bulk-approved.
-    const eligible = item.kind === "put";
+    const eligible = ["put", "put-rule"].includes(item.kind);
     group.rows.push({
       key,
       item,
@@ -463,12 +495,16 @@ export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
   const groups = new Map();
   if (base.catalogue) {
     for (const [key, review] of Object.entries(draft.reviews)) {
-      if (
-        same(base.reviews[key], review) ||
-        review.decision !== "approved" ||
-        review.kind === "put"
-      )
+      if (same(base.reviews[key], review) || review.decision !== "approved")
         continue;
+      if (["put", "put-rule"].includes(review.kind)) {
+        const current = await previewTelemetryPut(review.path, fetcher);
+        if (!current.review || current.key !== key)
+          throw new Error(
+            `${review.path}: telemetry contract changed or is unavailable. Inspect it again before saving.`,
+          );
+        continue;
+      }
       const id = reviewGroup(review);
       if (!groups.has(id)) groups.set(id, await loadGroup(id, fetcher));
       const latest = groups.get(id);
@@ -552,4 +588,19 @@ export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
       pluginOperations: options.configuration.pluginOperations ?? [],
     },
   };
+}
+
+export async function previewTelemetryPut(path, fetcher = nativeFetch) {
+  const group = await request(
+    fetcher,
+    `${CATALOGUE_URL}?id=native.put&path=${encodeURIComponent(path)}`,
+  );
+  const operation = group?.operations?.[0];
+  if (group?.id !== "native.put" || !operation || operation.path !== path)
+    throw new Error("Invalid telemetry approval preview.");
+  if (!operation.review)
+    throw new Error(
+      `${operation.reason ?? "PUT_UNAVAILABLE"}: this path cannot be approved. Check its native PUT metadata and value constraints.`,
+    );
+  return operation;
 }

@@ -1,3 +1,4 @@
+import { putRuleMeaning } from "../dist/put-rules.js";
 import React, { useEffect, useState } from "react";
 import {
   loadEditorConfiguration,
@@ -5,6 +6,7 @@ import {
   catalogueGroups,
   approveRows,
   isWrite,
+  previewTelemetryPut,
 } from "./configuration.mjs";
 
 const h = React.createElement;
@@ -92,6 +94,21 @@ export default function Configuration() {
   const [error, setError] = useState("");
   const [deleting, setDeleting] = useState(null);
   const [groupFilter, setGroupFilter] = useState("");
+  const [putPath, setPutPath] = useState("");
+  const [putPreview, setPutPreview] = useState(null);
+  const [putError, setPutError] = useState("");
+  async function inspectPut() {
+    setBusy(true);
+    setPutError("");
+    setPutPreview(null);
+    try {
+      setPutPreview(await previewTelemetryPut(putPath.trim()));
+    } catch (err) {
+      setPutError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
   const dirty =
     base &&
     JSON.stringify({ reviews: base.reviews, settings: base.settings }) !==
@@ -191,7 +208,10 @@ export default function Configuration() {
       }),
     );
   }
-  const groups = draft ? catalogueGroups(base, draft) : [];
+  const allGroups = draft ? catalogueGroups(base, draft) : [];
+  const groups = allGroups.filter((group) => group.id !== "native.put");
+  const telemetryRows =
+    allGroups.find((group) => group.id === "native.put")?.rows ?? [];
   const rows = groups
     .filter((group) => !groupFilter || group.id === groupFilter)
     .flatMap((group) => [{ group }, ...group.rows]);
@@ -199,6 +219,331 @@ export default function Configuration() {
     (count, group) => count + group.rows.length,
     0,
   );
+  const approvalTable = (rows, tableLabel, emptyMessage) =>
+    h(
+      "div",
+      {
+        className: "mcp-table-wrap",
+        tabIndex: 0,
+        role: "region",
+        "aria-label": tableLabel,
+      },
+      h(
+        "table",
+        null,
+        h(
+          "thead",
+          null,
+          h(
+            "tr",
+            null,
+            ...["Operation", "Status", "Type", "Actions"].map((title) =>
+              h("th", { key: title, scope: "col" }, title),
+            ),
+          ),
+        ),
+        h(
+          "tbody",
+          null,
+          rows.length
+            ? rows.map((row) => {
+                if (row.group) {
+                  const group = row.group;
+                  const reads = group.rows.filter(
+                    (row) =>
+                      row.eligible &&
+                      !isWrite(row.item) &&
+                      row.status !== "approved",
+                  );
+                  const writes = group.rows.filter(
+                    (row) =>
+                      row.eligible &&
+                      isWrite(row.item) &&
+                      row.status !== "approved",
+                  );
+                  const label = group.id.startsWith("plugin.")
+                    ? group.id.slice(7)
+                    : group.id;
+                  return h(
+                    "tr",
+                    { key: `group:${group.id}` },
+                    h(
+                      "td",
+                      { colSpan: 4, className: "mcp-group" },
+                      h(
+                        "div",
+                        { className: "mcp-toolbar" },
+                        h("strong", null, label),
+                        h(
+                          "div",
+                          { className: "mcp-actions" },
+                          button(
+                            `Approve all current reads (${reads.length})`,
+                            () => stage(reads),
+                            {
+                              disabled: busy || !reads.length,
+                              "aria-label": `Approve all current reads for ${label}`,
+                            },
+                          ),
+                          button(
+                            `Approve all current writes (${writes.length})`,
+                            () => stage(writes),
+                            {
+                              disabled: busy || !writes.length,
+                              "aria-label": `Approve all current writes for ${label}`,
+                            },
+                          ),
+                        ),
+                      ),
+                      group.reason
+                        ? h(
+                            "p",
+                            {
+                              className: "mcp-help",
+                              style: { margin: "8px 0 0" },
+                            },
+                            group.reason,
+                          )
+                        : null,
+                      !group.rows.length && !group.reason
+                        ? h("p", null, "No discoverable operations.")
+                        : null,
+                    ),
+                  );
+                }
+                const { key, item } = row;
+                const put = ["put", "put-rule"].includes(item.kind);
+                const rule = item.kind === "put-rule";
+                const post = item.kind === "post";
+                const plugin = item.kind === "plugin";
+                const resource = item.kind === "resource";
+                const api = item.kind === "api";
+                const write = isWrite(item);
+                const absent =
+                  !put &&
+                  !resource &&
+                  !api &&
+                  !base.installed.includes(item.pluginId);
+                const label = resource
+                  ? `${item.method} ${item.collection} provider ${item.provider}`
+                  : put
+                    ? `PUT ${item.context}:${item.path}`
+                    : `${api ? item.api : item.pluginId}: ${item.operationId}`;
+                const description = rule
+                  ? putRuleMeaning
+                  : put
+                    ? item.metadata.description
+                    : item.description;
+                return h(
+                  "tr",
+                  { key },
+                  h(
+                    "td",
+                    { className: "mcp-operation" },
+                    h(
+                      "strong",
+                      null,
+                      resource
+                        ? `${item.method} ${item.collection}`
+                        : put
+                          ? item.path
+                          : item.operationId,
+                    ),
+                    h(
+                      "small",
+                      null,
+                      resource
+                        ? `Resources · ${item.provider}`
+                        : put
+                          ? `${rule ? "Standing rule" : "Native PUT"} · ${item.context}`
+                          : api
+                            ? `Native API ${item.method} · ${item.api}`
+                            : `Plugin ${post || plugin ? item.method : "GET"} · ${item.pluginId}`,
+                      absent ? " · Not installed" : "",
+                    ),
+                    h(
+                      "details",
+                      null,
+                      h(
+                        "summary",
+                        null,
+                        put
+                          ? "Meaning and value constraints"
+                          : `${resource || post || plugin || api ? item.method : "GET"} ${item.path}`,
+                      ),
+                      h(
+                        "p",
+                        null,
+                        typeof description === "string" && description
+                          ? description
+                          : "No description provided.",
+                      ),
+                      item.inputSchema || row.operation?.inputSchema
+                        ? h(
+                            React.Fragment,
+                            null,
+                            put ? h("p", null, "Provider metadata") : null,
+                            h(
+                              "pre",
+                              null,
+                              JSON.stringify(
+                                put
+                                  ? item.metadata
+                                  : {
+                                      method: item.method,
+                                      path: item.path,
+                                      ...(resource
+                                        ? { provider: item.provider }
+                                        : {}),
+                                    },
+                                null,
+                                2,
+                              ),
+                            ),
+                            h(
+                              "p",
+                              null,
+                              resource && item.method === "DELETE"
+                                ? "Accepted target schema"
+                                : post || plugin || resource || api
+                                  ? "Accepted input schema (body is sent as JSON)"
+                                  : "Accepted value schema",
+                            ),
+                            h(
+                              "pre",
+                              null,
+                              JSON.stringify(
+                                item.inputSchema ?? row.operation?.inputSchema,
+                                null,
+                                2,
+                              ),
+                            ),
+                          )
+                        : null,
+                      h(
+                        "p",
+                        null,
+                        put
+                          ? rule
+                            ? putRuleMeaning
+                            : "Approval binds this exact path and its metadata/value constraints. Signal K selects the handler normally."
+                          : row.status === "native"
+                            ? "Native route and provider permissions apply; no gateway approval is required."
+                            : resource
+                              ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
+                              : post || plugin || api
+                                ? "Approval applies to this exact method and route. Changes to the input schema or meaning require a new review. Check the provider's side effects and data permissions."
+                                : "Check the provider's implementation for side effects and data permissions.",
+                      ),
+                    ),
+                  ),
+                  h(
+                    "td",
+                    null,
+                    h(
+                      "span",
+                      { className: `mcp-badge mcp-${row.status}` },
+                      status[row.status],
+                    ),
+                    row.reason || (!row.eligible && row.operation?.reason)
+                      ? h(
+                          "small",
+                          {
+                            style: {
+                              display: "block",
+                              overflowWrap: "anywhere",
+                            },
+                          },
+                          row.reason || row.operation.reason,
+                        )
+                      : null,
+                  ),
+                  h(
+                    "td",
+                    null,
+                    h(
+                      "span",
+                      {
+                        className: `mcp-badge mcp-${write ? "write" : "read"}`,
+                        title: put
+                          ? "Requires native Signal K PUT permission"
+                          : write
+                            ? "Requires a write-capable Signal K identity and provider permission"
+                            : "Requires native Signal K read permission",
+                      },
+                      write ? "Write" : "Read",
+                    ),
+                  ),
+                  h(
+                    "td",
+                    null,
+                    h(
+                      "div",
+                      { className: "mcp-actions" },
+                      row.status === "native"
+                        ? h("small", null, "No approval needed")
+                        : button("Accept", () => stage([row]), {
+                            disabled:
+                              busy ||
+                              absent ||
+                              !row.eligible ||
+                              item.decision === "approved",
+                            "aria-label": `Accept ${label}`,
+                          }),
+                      row.status === "native"
+                        ? null
+                        : button(
+                            "Reject",
+                            () =>
+                              stage([{ ...row, eligible: true }], "rejected"),
+                            {
+                              disabled:
+                                busy ||
+                                (!row.eligible && !draft.reviews[key]) ||
+                                item.decision === "rejected",
+                              "aria-label": `Reject ${label}`,
+                            },
+                          ),
+                      draft.reviews[key] &&
+                        (write || api || absent) &&
+                        deleting !== key
+                        ? button("Delete", () => setDeleting(key), {
+                            disabled: busy,
+                            "aria-label": `Delete ${label}`,
+                          })
+                        : null,
+                      deleting === key
+                        ? h(
+                            "div",
+                            null,
+                            h(
+                              "small",
+                              null,
+                              write || api
+                                ? "Remove this review and revoke its approval when you save? A later request will need a new review."
+                                : "Remove this saved review?",
+                            ),
+                            h(
+                              "div",
+                              { className: "mcp-actions" },
+                              button("Delete row", () => remove(key), {
+                                disabled: busy,
+                                className: "btn btn-sm btn-danger",
+                              }),
+                              button("Cancel", () => setDeleting(null), {
+                                disabled: busy,
+                              }),
+                            ),
+                          )
+                        : null,
+                    ),
+                  ),
+                );
+              })
+            : h("tr", null, h("td", { colSpan: 4 }, emptyMessage)),
+        ),
+      ),
+    );
   return h(
     "form",
     { className: "mcp-config", onSubmit: save },
@@ -269,342 +614,114 @@ export default function Configuration() {
           h(
             "p",
             { className: "mcp-help" },
-            "Built-in data reads use Signal K permissions without approval. Resources lists each collection and provider. Native telemetry PUTs appear when requested, with an explicit path and handler source. Up to 64 reviews can be saved; browsing does not use review slots.",
+            "Built-in data reads use Signal K permissions without approval. Resources lists each collection and provider. Telemetry PUTs have their own table below. Up to 64 reviews can be saved; browsing does not use review slots.",
+          ),
+          approvalTable(
+            rows,
+            "Operation approvals",
+            "No discoverable operations or pending requests. Refresh after enabling a plugin with OpenAPI documentation.",
           ),
           h(
-            "div",
+            "section",
             {
-              className: "mcp-table-wrap",
-              tabIndex: 0,
-              role: "region",
-              "aria-label": "Operation approvals",
+              className: "mcp-section",
+              "aria-label": "Telemetry PUT approvals",
             },
+            h("h3", null, `Telemetry PUTs (${telemetryRows.length})`),
             h(
-              "table",
-              null,
-              h(
-                "thead",
-                null,
-                h(
-                  "tr",
-                  null,
-                  ...["Operation", "Status", "Type", "Actions"].map((title) =>
-                    h("th", { key: title, scope: "col" }, title),
+              "p",
+              { className: "mcp-help" },
+              "Approve exact telemetry paths or standing wildcard rules. Signal K selects the handler normally and rejects ambiguous paths. Native write permissions and current value constraints always apply.",
+            ),
+            input(
+              "Path or wildcard",
+              "put-path",
+              putPath,
+              (value) => {
+                setPutPath(value);
+                setPutPreview(null);
+                setPutError("");
+              },
+              { placeholder: "electrical.switches.*.state", maxLength: 256 },
+            ),
+            h(
+              "p",
+              { className: "mcp-help" },
+              "Use * for one path segment, or trailing ** for all descendants, for example electrical.switches.**. Wildcard rules also approve future matching paths and remain valid when their metadata changes.",
+            ),
+            button("Inspect path or rule", inspectPut, {
+              disabled: busy || !putPath.trim(),
+            }),
+            putError
+              ? h(
+                  "p",
+                  { role: "alert", className: "mcp-notice mcp-error" },
+                  putError,
+                )
+              : null,
+            putPreview
+              ? h(
+                  "div",
+                  { className: "mcp-notice" },
+                  h("strong", null, putPreview.path),
+                  h(
+                    "p",
+                    null,
+                    putPreview.review.kind === "put-rule"
+                      ? putRuleMeaning
+                      : (putPreview.review.metadata.description ??
+                          "No description provided."),
                   ),
-                ),
-              ),
-              h(
-                "tbody",
-                null,
-                rows.length
-                  ? rows.map((row) => {
-                      if (row.group) {
-                        const group = row.group;
-                        const reads = group.rows.filter(
-                          (row) =>
-                            row.eligible &&
-                            !isWrite(row.item) &&
-                            row.status !== "approved",
-                        );
-                        const writes = group.rows.filter(
-                          (row) =>
-                            row.eligible &&
-                            isWrite(row.item) &&
-                            row.status !== "approved",
-                        );
-                        const label = group.id.startsWith("plugin.")
-                          ? group.id.slice(7)
-                          : group.id;
-                        return h(
-                          "tr",
-                          { key: `group:${group.id}` },
-                          h(
-                            "td",
-                            { colSpan: 4, className: "mcp-group" },
-                            h(
-                              "div",
-                              { className: "mcp-toolbar" },
-                              h("strong", null, label),
-                              h(
-                                "div",
-                                { className: "mcp-actions" },
-                                button(
-                                  `Approve all current reads (${reads.length})`,
-                                  () => stage(reads),
-                                  {
-                                    disabled: busy || !reads.length,
-                                    "aria-label": `Approve all current reads for ${label}`,
-                                  },
-                                ),
-                                button(
-                                  `Approve all current writes (${writes.length})`,
-                                  () => stage(writes),
-                                  {
-                                    disabled: busy || !writes.length,
-                                    "aria-label": `Approve all current writes for ${label}`,
-                                  },
-                                ),
-                              ),
-                            ),
-                            group.reason
-                              ? h(
-                                  "p",
-                                  {
-                                    className: "mcp-help",
-                                    style: { margin: "8px 0 0" },
-                                  },
-                                  group.reason,
-                                )
-                              : null,
-                            !group.rows.length && !group.reason
-                              ? h("p", null, "No discoverable operations.")
-                              : null,
-                          ),
-                        );
-                      }
-                      const { key, item } = row;
-                      const put = item.kind === "put";
-                      const post = item.kind === "post";
-                      const plugin = item.kind === "plugin";
-                      const resource = item.kind === "resource";
-                      const api = item.kind === "api";
-                      const write = isWrite(item);
-                      const absent =
-                        !put &&
-                        !resource &&
-                        !api &&
-                        !base.installed.includes(item.pluginId);
-                      const label = resource
-                        ? `${item.method} ${item.collection} provider ${item.provider}`
-                        : put
-                          ? `PUT ${item.context}:${item.path} source ${item.source}`
-                          : `${api ? item.api : item.pluginId}: ${item.operationId}`;
-                      const description = put
-                        ? item.metadata.description
-                        : item.description;
-                      return h(
-                        "tr",
-                        { key },
+                  putPreview.review.kind === "put"
+                    ? h(
+                        "details",
+                        null,
+                        h("summary", null, "Meaning and value constraints"),
                         h(
-                          "td",
-                          { className: "mcp-operation" },
-                          h(
-                            "strong",
-                            null,
-                            resource
-                              ? `${item.method} ${item.collection}`
-                              : put
-                                ? item.path
-                                : item.operationId,
-                          ),
-                          h(
-                            "small",
-                            null,
-                            resource
-                              ? `Resources · ${item.provider}`
-                              : put
-                                ? `Native PUT · ${item.context}`
-                                : api
-                                  ? `Native API ${item.method} · ${item.api}`
-                                  : `Plugin ${post || plugin ? item.method : "GET"} · ${item.pluginId}`,
-                            absent ? " · Not installed" : "",
-                          ),
-                          put
-                            ? h("small", null, `Source: ${item.source}`)
-                            : null,
-                          h(
-                            "details",
-                            null,
-                            h(
-                              "summary",
-                              null,
-                              put
-                                ? "Meaning and value constraints"
-                                : `${resource || post || plugin || api ? item.method : "GET"} ${item.path}`,
-                            ),
-                            h(
-                              "p",
-                              null,
-                              typeof description === "string" && description
-                                ? description
-                                : "No description provided.",
-                            ),
-                            item.inputSchema || row.operation?.inputSchema
-                              ? h(
-                                  React.Fragment,
-                                  null,
-                                  put
-                                    ? h("p", null, "Provider metadata")
-                                    : null,
-                                  h(
-                                    "pre",
-                                    null,
-                                    JSON.stringify(
-                                      put
-                                        ? item.metadata
-                                        : {
-                                            method: item.method,
-                                            path: item.path,
-                                            ...(resource
-                                              ? { provider: item.provider }
-                                              : {}),
-                                          },
-                                      null,
-                                      2,
-                                    ),
-                                  ),
-                                  h(
-                                    "p",
-                                    null,
-                                    resource && item.method === "DELETE"
-                                      ? "Accepted target schema"
-                                      : post || plugin || resource || api
-                                        ? "Accepted input schema (body is sent as JSON)"
-                                        : "Accepted value schema",
-                                  ),
-                                  h(
-                                    "pre",
-                                    null,
-                                    JSON.stringify(
-                                      item.inputSchema ??
-                                        row.operation?.inputSchema,
-                                      null,
-                                      2,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                            h(
-                              "p",
-                              null,
-                              put
-                                ? "Accept only this exact path and source after checking what it controls. Metadata and schema changes require a new review."
-                                : row.status === "native"
-                                  ? "Native route and provider permissions apply; no gateway approval is required."
-                                  : resource
-                                    ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
-                                    : post || plugin || api
-                                      ? "Approval applies to this exact method and route. Changes to the input schema or meaning require a new review. Check the provider's side effects and data permissions."
-                                      : "Check the provider's implementation for side effects and data permissions.",
-                            ),
-                          ),
-                        ),
-                        h(
-                          "td",
-                          null,
-                          h(
-                            "span",
-                            { className: `mcp-badge mcp-${row.status}` },
-                            status[row.status],
-                          ),
-                          row.reason || (!row.eligible && row.operation?.reason)
-                            ? h(
-                                "small",
-                                {
-                                  style: {
-                                    display: "block",
-                                    overflowWrap: "anywhere",
-                                  },
-                                },
-                                row.reason || row.operation.reason,
-                              )
-                            : null,
-                        ),
-                        h(
-                          "td",
-                          null,
-                          h(
-                            "span",
-                            {
-                              className: `mcp-badge mcp-${write ? "write" : "read"}`,
-                              title: put
-                                ? "Requires native Signal K PUT permission"
-                                : write
-                                  ? "Requires a write-capable Signal K identity and provider permission"
-                                  : "Requires native Signal K read permission",
+                          "pre",
+                          {
+                            style: {
+                              whiteSpace: "pre-wrap",
+                              overflowWrap: "anywhere",
                             },
-                            write ? "Write" : "Read",
+                          },
+                          JSON.stringify(
+                            {
+                              metadata: putPreview.review.metadata,
+                              inputSchema: putPreview.review.inputSchema,
+                            },
+                            null,
+                            2,
                           ),
                         ),
-                        h(
-                          "td",
-                          null,
-                          h(
-                            "div",
-                            { className: "mcp-actions" },
-                            row.status === "native"
-                              ? h("small", null, "No approval needed")
-                              : button("Accept", () => stage([row]), {
-                                  disabled:
-                                    busy ||
-                                    absent ||
-                                    !row.eligible ||
-                                    item.decision === "approved",
-                                  "aria-label": `Accept ${label}`,
-                                }),
-                            row.status === "native"
-                              ? null
-                              : button(
-                                  "Reject",
-                                  () =>
-                                    stage(
-                                      [{ ...row, eligible: true }],
-                                      "rejected",
-                                    ),
-                                  {
-                                    disabled:
-                                      busy ||
-                                      (!row.eligible && !draft.reviews[key]) ||
-                                      item.decision === "rejected",
-                                    "aria-label": `Reject ${label}`,
-                                  },
-                                ),
-                            draft.reviews[key] &&
-                              (write || api || absent) &&
-                              deleting !== key
-                              ? button("Delete", () => setDeleting(key), {
-                                  disabled: busy,
-                                  "aria-label": `Delete ${label}`,
-                                })
-                              : null,
-                            deleting === key
-                              ? h(
-                                  "div",
-                                  null,
-                                  h(
-                                    "small",
-                                    null,
-                                    write || api
-                                      ? "Remove this review and revoke its approval when you save? A later request will need a new review."
-                                      : "Remove this saved review?",
-                                  ),
-                                  h(
-                                    "div",
-                                    { className: "mcp-actions" },
-                                    button("Delete row", () => remove(key), {
-                                      disabled: busy,
-                                      className: "btn btn-sm btn-danger",
-                                    }),
-                                    button("Cancel", () => setDeleting(null), {
-                                      disabled: busy,
-                                    }),
-                                  ),
-                                )
-                              : null,
-                          ),
-                        ),
-                      );
-                    })
-                  : h(
-                      "tr",
-                      null,
-                      h(
-                        "td",
-                        { colSpan: 4 },
-                        "No discoverable operations or pending requests. Refresh after enabling a plugin with OpenAPI documentation.",
-                      ),
-                    ),
-              ),
+                      )
+                    : null,
+                  button(
+                    "Accept and add",
+                    () => {
+                      stage([
+                        {
+                          key: putPreview.key,
+                          item: putPreview.review,
+                          eligible: true,
+                        },
+                      ]);
+                      setPutPreview(null);
+                      setPutPath("");
+                    },
+                    { disabled: busy },
+                  ),
+                  h(
+                    "p",
+                    null,
+                    "Staged only; click Save Configuration to apply.",
+                  ),
+                )
+              : null,
+            approvalTable(
+              telemetryRows,
+              "Telemetry PUT table",
+              "No telemetry PUT approvals or pending requests. Add a path or wildcard above.",
             ),
           ),
           h(

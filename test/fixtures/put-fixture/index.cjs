@@ -97,6 +97,7 @@ module.exports = (app) => {
   const prefix = "electrical.switches.mcpTest";
   const paths = {
     state: `${prefix}.state`,
+    ambiguous: `${prefix}.ambiguous`,
     pending: `${prefix}.pending`,
     failure: `${prefix}.failure`,
     held: `${prefix}.held`,
@@ -141,6 +142,8 @@ module.exports = (app) => {
     description: "Commands never leave the isolated integration test server",
     schema: { type: "object", properties: {} },
     testCalls: calls,
+    registerTestPut: (path, handler, source) =>
+      app.registerPutHandler("vessels.self", path, handler, source),
     postCalls,
     mutationCalls,
     postDocument: document,
@@ -215,7 +218,9 @@ module.exports = (app) => {
       lifecycle.starts++;
       for (const [key, path] of Object.entries(paths)) {
         if (key === "missing") continue;
-        for (const source of ["public", "private"])
+        for (const source of key === "ambiguous"
+          ? ["public", "private"]
+          : ["public"])
           app.registerPutHandler(
             "vessels.self",
             path,

@@ -60,14 +60,21 @@ function pluginFactory(app: App): Plugin {
         config ??
         configSchema.parse(record(stored) ? (stored.configuration ?? {}) : {});
       const id = req.query.id;
+      const path = req.query.path;
       const offset =
         req.query.offset === undefined ? 0 : Number(req.query.offset);
       if (
         (id !== undefined && (typeof id !== "string" || id.length > 160)) ||
+        (path !== undefined &&
+          (id !== "native.put" ||
+            typeof path !== "string" ||
+            path.length > 256)) ||
         !Number.isInteger(offset) ||
         offset < 0 ||
         offset > 512 ||
-        Object.keys(req.query).some((key) => !["id", "offset"].includes(key))
+        Object.keys(req.query).some(
+          (key) => !["id", "offset", "path"].includes(key),
+        )
       )
         throw new GatewayError("INVALID_ARGUMENTS");
       timer = setTimeout(() => controller.abort(), 15000);
@@ -79,10 +86,15 @@ function pluginFactory(app: App): Plugin {
         settings,
         () => generation === metadataGeneration && !controller.signal.aborted,
         localGet(req, bearer, controller.signal, settings.localTlsServerName),
+        undefined,
+        puts,
       );
       const result =
         typeof id === "string"
-          ? await registry.catalogue(id)
+          ? await registry.catalogue(
+              id,
+              typeof path === "string" ? path : undefined,
+            )
           : await registry.catalogueIndex(offset);
       if (registry.authorize().permissions !== "admin")
         throw new GatewayError("PERMISSION_DENIED", 403);
