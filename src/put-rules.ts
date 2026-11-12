@@ -32,7 +32,7 @@ export const putRuleSchema = z
   })
   .strict();
 export const putRuleMeaning =
-  "Standing approval for current and future matching telemetry paths. Signal K selects the handler. Current native permissions, supportsPut metadata and value constraints apply on every call; metadata changes do not invalidate this rule.";
+  "Approves matching paths now and in the future, even if their settings change. Signal K permissions and current value limits still apply.";
 export function matchesPutPattern(pattern: string, path: string): boolean {
   if (
     !putPatternSchema.safeParse(pattern).success ||

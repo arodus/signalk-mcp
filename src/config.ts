@@ -81,14 +81,13 @@ export const schema = {
       type: "string",
       title: "HTTPS certificate hostname (optional)",
       description:
-        "Used to verify the plugin’s requests back to Signal K when Signal K itself serves HTTPS. Enter the hostname on its certificate, for example boat.example, if the certificate does not cover the local IP address. Leave blank for HTTP or HTTPS handled by a reverse proxy. Do not enter https://, a port or a certificate file path.",
+        "Usually leave this blank. If Signal K serves HTTPS directly, enter its certificate hostname, such as boat.example, without https:// or a port.",
       maxLength: 253,
     },
     staleAfterSeconds: {
       type: "integer",
       title: "Stale after (seconds)",
-      description:
-        "Mark measurements older than this as stale. Values are forwarded unchanged.",
+      description: "Mark data as outdated after this many seconds.",
       default: 300,
       minimum: 1,
       maximum: 86400,
@@ -105,6 +104,6 @@ export const uiSchema = {
       },
     },
     "ui:help":
-      "Normally use the Operation catalogue above. This advanced list approves GET reads only. Existing manual approvals are preserved. A matching rejected request blocks a manual approval too.",
+      "Add read access for operations missing from the catalogue. Rejected operations stay blocked.",
   },
 };

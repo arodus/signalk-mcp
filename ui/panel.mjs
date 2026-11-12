@@ -355,7 +355,7 @@ export default function Configuration() {
                       resource
                         ? `Resources · ${item.provider}`
                         : put
-                          ? `${rule ? "Standing rule" : "Native PUT"} · ${item.context}`
+                          ? `${rule ? "Wildcard rule" : "Native PUT"} · ${item.context}`
                           : api
                             ? `Native API ${item.method} · ${item.api}`
                             : `Plugin ${post || plugin ? item.method : "GET"} · ${item.pluginId}`,
@@ -368,7 +368,7 @@ export default function Configuration() {
                         "summary",
                         null,
                         put
-                          ? "Meaning and value constraints"
+                          ? "Details and allowed values"
                           : `${resource || post || plugin || api ? item.method : "GET"} ${item.path}`,
                       ),
                       h(
@@ -382,7 +382,7 @@ export default function Configuration() {
                         ? h(
                             React.Fragment,
                             null,
-                            put ? h("p", null, "Provider metadata") : null,
+                            put ? h("p", null, "Path details") : null,
                             h(
                               "pre",
                               null,
@@ -404,10 +404,10 @@ export default function Configuration() {
                               "p",
                               null,
                               resource && item.method === "DELETE"
-                                ? "Accepted target schema"
+                                ? "Target details"
                                 : post || plugin || resource || api
-                                  ? "Accepted input schema (body is sent as JSON)"
-                                  : "Accepted value schema",
+                                  ? "Allowed inputs (JSON)"
+                                  : "Allowed values",
                             ),
                             h(
                               "pre",
@@ -426,14 +426,14 @@ export default function Configuration() {
                         put
                           ? rule
                             ? putRuleMeaning
-                            : "Approval binds this exact path and its metadata/value constraints. Signal K selects the handler normally."
+                            : "Allows updates to this path. Changes to its meaning or allowed values need a new review."
                           : row.status === "native"
-                            ? "Native route and provider permissions apply; no gateway approval is required."
+                            ? "Uses your Signal K permissions. No extra approval needed."
                             : resource
-                              ? "Approval applies to this method, collection and provider. Changes to the input schema or meaning require a new review."
+                              ? "Approves this operation for this collection and provider. Changed inputs or meaning need a new review."
                               : post || plugin || api
-                                ? "Approval applies to this exact method and route. Changes to the input schema or meaning require a new review. Check the provider's side effects and data permissions."
-                                : "Check the provider's implementation for side effects and data permissions.",
+                                ? "Approves this operation only. Changed inputs or meaning need a new review."
+                                : "Check what this operation does before approving it.",
                       ),
                     ),
                   ),
@@ -520,7 +520,7 @@ export default function Configuration() {
                               "small",
                               null,
                               write || api
-                                ? "Remove this review and revoke its approval when you save? A later request will need a new review."
+                                ? "Remove this decision when you save? Other matching approvals may still allow access."
                                 : "Remove this saved review?",
                             ),
                             h(
@@ -565,13 +565,13 @@ export default function Configuration() {
         disabled: busy || Boolean(dirty),
         title: dirty
           ? "Save or discard your changes before refreshing"
-          : "Discover current operations and requests",
+          : "Check for new operations and requests",
       }),
     ),
     h(
       "p",
       { className: "mcp-help" },
-      "Browse current plugin, native API and resource operations. Approve reads or writes together for each plugin, or review them individually. All selections are staged until Save Configuration. New or changed actions need review; additional response fields do not. Save also upgrades verified legacy approvals. Signal K permissions still apply.",
+      "Choose what MCP can access. Approve operations individually or by group, then save your changes.",
     ),
     error
       ? h("div", { role: "alert", className: "mcp-notice mcp-error" }, error)
@@ -614,12 +614,12 @@ export default function Configuration() {
           h(
             "p",
             { className: "mcp-help" },
-            "Built-in data reads use Signal K permissions without approval. Resources lists each collection and provider. Telemetry PUTs have their own table below. Saved approvals and rejections have no entry limit. Only new unsaved pending requests are capped at 64.",
+            "Read operations view data. Write operations can change it. Your Signal K permissions still apply.",
           ),
           approvalTable(
             rows,
             "Operation approvals",
-            "No discoverable operations or pending requests. Refresh after enabling a plugin with OpenAPI documentation.",
+            "No operations found. Enable a plugin, then refresh.",
           ),
           h(
             "section",
@@ -631,7 +631,7 @@ export default function Configuration() {
             h(
               "p",
               { className: "mcp-help" },
-              "Approve exact telemetry paths or standing wildcard rules. Signal K selects the handler normally and rejects ambiguous paths. Native write permissions and current value constraints always apply.",
+              "Allow updates to a Signal K path, or use a wildcard to cover several paths.",
             ),
             input(
               "Path or wildcard",
@@ -647,9 +647,9 @@ export default function Configuration() {
             h(
               "p",
               { className: "mcp-help" },
-              "Use * for one path segment, or trailing ** for all descendants, for example electrical.switches.**. Wildcard rules also approve future matching paths and remain valid when their metadata changes.",
+              "Use * for one part of a path, or end with ** for everything below it. Wildcards also cover new matching paths.",
             ),
-            button("Inspect path or rule", inspectPut, {
+            button("Preview", inspectPut, {
               disabled: busy || !putPath.trim(),
             }),
             putError
@@ -676,7 +676,7 @@ export default function Configuration() {
                     ? h(
                         "details",
                         null,
-                        h("summary", null, "Meaning and value constraints"),
+                        h("summary", null, "Details and allowed values"),
                         h(
                           "pre",
                           {
@@ -711,17 +711,13 @@ export default function Configuration() {
                     },
                     { disabled: busy },
                   ),
-                  h(
-                    "p",
-                    null,
-                    "Staged only; click Save Configuration to apply.",
-                  ),
+                  h("p", null, "Save Configuration applies your changes."),
                 )
               : null,
             approvalTable(
               telemetryRows,
               "Telemetry PUT table",
-              "No telemetry PUT approvals or pending requests. Add a path or wildcard above.",
+              "No paths added yet. Enter a path or wildcard above.",
             ),
           ),
           h(
@@ -730,7 +726,7 @@ export default function Configuration() {
               className: "mcp-help",
               style: { marginTop: 10, marginBottom: 0 },
             },
-            "Rejected requests stay in this list. Delete a write or native API review to revoke its approval; plugin GET reviews can be deleted when the plugin is no longer installed. Save to apply changes.",
+            "Reject blocks an operation. Changes take effect when you save.",
           ),
           h(
             "details",
@@ -761,12 +757,12 @@ export default function Configuration() {
             h(
               "p",
               { className: "mcp-help" },
-              "Certificate hostname: used to verify requests back to Signal K when Signal K serves HTTPS. Enter the hostname on its certificate, such as boat.example, if it does not cover the local IP. Leave blank for HTTP or a reverse proxy. No scheme, port or certificate file path.",
+              "Usually leave this blank. If Signal K serves HTTPS directly, enter its certificate hostname, such as boat.example, without https:// or a port.",
             ),
             h(
               "p",
               { className: "mcp-help" },
-              "Stale after marks older measurements as stale. Values are forwarded unchanged.",
+              "Mark data as outdated after this many seconds.",
             ),
           ),
           h(
@@ -780,7 +776,7 @@ export default function Configuration() {
             h(
               "p",
               { className: "mcp-help" },
-              "Existing manual approvals are preserved. Use the catalogue above for new reviews. A matching rejection overrides a manual approval.",
+              "Add read access for operations missing from the catalogue. Rejected operations stay blocked.",
             ),
             ...draft.settings.pluginOperations.map((item, index) => {
               const update = (changes) =>

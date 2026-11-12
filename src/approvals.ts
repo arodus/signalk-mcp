@@ -468,7 +468,7 @@ export class ApprovalRequests {
       title: "Operation requests",
       additionalProperties: false,
       description:
-        "Refresh this page after a blocked MCP request. Review each plugin operation, exact native PUT target or resource write, select Accept or Reject, then Save Configuration. Check the target, provider, meaning and input constraints. Signal K permissions still apply. Unsaved requests are lost when the plugin restarts. Up to 64 new unsaved pending requests are retained. Saved decisions do not count toward this limit.",
+        "Review requested operations, choose Accept or Reject, then save your changes. Refresh to see new requests.",
       properties: Object.fromEntries(
         Object.entries(this.reviews).map(([key, review]) => [
           key,
