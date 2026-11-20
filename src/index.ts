@@ -146,10 +146,17 @@ function pluginFactory(app: App): Plugin {
       if (req.body !== undefined)
         boundedJson(req.body, 64 * 1024, "REQUEST_TOO_LARGE", 413);
       pending.set(controller, res);
-      timer = setTimeout(() => {
-        controller.abort();
-        res.destroy();
-      }, 15000);
+      timer = setTimeout(
+        () => {
+          controller.abort();
+          res.destroy();
+        },
+        settings.experimentalExecution.enabled &&
+          req.body?.method === "tools/call" &&
+          req.body?.params?.name === "execute_code"
+          ? 25000
+          : 15000,
+      );
       timer.unref();
       server = createMcpServer(
         app,
@@ -189,6 +196,7 @@ function pluginFactory(app: App): Plugin {
           settings.localTlsServerName,
         ),
         discovery,
+        controller.signal,
       );
       active.add(server);
       const transport = new StreamableHTTPServerTransport({
@@ -257,7 +265,7 @@ function pluginFactory(app: App): Plugin {
       const parsed = configSchema.safeParse(options);
       if (!parsed.success) {
         app.setPluginError(
-          "Invalid MCP configuration: check pluginOperations (unique reviewed GET approvals), readRequests, localTlsServerName and staleAfterSeconds",
+          "Invalid MCP configuration: check pluginOperations (unique reviewed GET approvals), readRequests, experimentalExecution, localTlsServerName and staleAfterSeconds",
         );
         return;
       }

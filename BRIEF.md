@@ -2,11 +2,11 @@
 
 **Project:** `signalk-mcp`
 
-**Scope updated:** 2026-10-19, following the owner's explicit direction in issue #30
+**Scope updated:** 2026-11-20: optional execution accepted inside signalk-mcp, following issue #39.
 
 **Purpose:** Discover, fetch and forward authorized Signal K data and individually approved native PUT actions for MCP clients.
 
-This brief supersedes the original proposals for calculations and sandboxed data processing. The gateway does not perform calculations, mathematical analysis, aggregation, integration, inference or other domain transformations on fetched data. It does not provide `execute_code` or a computation worker. These are outside the project scope, not deferred features.
+Ordinary gateway tools fetch and forward data without domain transformations. An optional experimental `execute_code` tool may perform offline calculations inside a disposable Container Manager worker. It is disabled by default and requires explicit administrator configuration and native administrator identity. See [the execution decision](docs/decisions/003-isolated-execution.md).
 
 Authorization, input/response validation, bounded selection, pagination and MCP response formatting remain necessary gateway responsibilities. They must not become a place to add derived data or application-specific calculations. Provider-supplied results may be fetched and forwarded with their provenance; the gateway must not calculate missing results or recompute provider values.
 
@@ -64,7 +64,7 @@ Bounded, validated MCP responses preserving provider data
 
 Transport, identity, telemetry access, discovery and capability execution remain separate. Dedicated tools and generic capability calls use the same authorization and data-access implementation.
 
-The gateway must not expose unreviewed controls, arbitrary configuration writes or HTTP requests, host files, shell commands or JavaScript execution. Native PUT actions need one exact saved review each. Container Manager integration and sandbox lifecycle management are outside this gateway's scope.
+The gateway must not expose unreviewed controls, arbitrary configuration writes or HTTP requests, host files, shell commands or in-process JavaScript execution. Native PUT actions need one exact saved review each. Optional execution delegates isolation and container lifecycle to the strict Container Manager runSandboxJob API. The gateway owns caller authorization, snapshot preparation and result delivery.
 
 ## 4. Authentication and authorization
 
@@ -173,7 +173,7 @@ CI success, package installation, AppStore indexing, live retrieval and physical
 
 An authenticated MCP client can discover and fetch authorized Signal K measurements and supported plugin/provider responses through a native plugin, with data provenance intact and the original Signal K permissions enforced.
 
-The plugin's responsibility ends at reliable, permission-aware data access and forwarding, including individually approved native actions. Calculations and other data processing are outside this project.
+The gateway owns permission-aware data access, forwarding and individually approved native actions. Optional offline calculation runs only through the separately enabled isolated worker; it does not broaden any read or write permission.
 
 ## 10. Individually approved native actions
 

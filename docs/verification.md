@@ -151,7 +151,7 @@ All test data is synthetic. The unchanged published History provider and Alert C
 
 There is no npm publication, AppStore indexing, vessel deployment, Raspberry Pi benchmark, or production security-review claim. Product UI compatibility, OAuth, non-TCP hosting and upstream in-process shutdown remain open. Full server process replacement is covered by the later issue #7 checkpoint. Local resource/load evidence is recorded in the issue #7 follow-up below; Raspberry Pi and production-duration acceptance remain open; the later checkpoint records a ten-minute local run. TLS/proxy evidence is recorded in the issue #5 follow-up below. Certificate failures remain closed for HTTP-backed capabilities.
 
-The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History accepts optional response source metadata, checks explicit source filters against native ACLs, permits unfiltered reads only with confirmed absence of telemetry ACLs, and rejects identifiers the tested server's HTTP parser would alter. Read-only v2 notification registry coverage is described in the issue #9 checkpoint below. Notification mutations, calculations, Container Manager integration and sandbox execution are outside the current scope, not deferred work.
+The security bridge is version-sensitive. OpenAPI discovery supports only the documented subset; reviewed providers must enforce their own endpoint data authorization. History accepts optional response source metadata, checks explicit source filters against native ACLs, permits unfiltered reads only with confirmed absence of telemetry ACLs, and rejects identifiers the tested server's HTTP parser would alter. Read-only v2 notification registry coverage is described in the issue #9 checkpoint below. Notification mutations remain outside scope. Optional isolated execution was accepted on 2026-11-20; see [ADR 003](decisions/003-isolated-execution.md).
 
 ## Authentication compatibility follow-up (issue #2)
 
@@ -346,3 +346,35 @@ Simplified the catalogue, telemetry path, wildcard and advanced settings descrip
 Removed the separate manual approval editor. Matching legacy read grants now appear as accepted catalogue rows with their original access restrictions; existing rejections take precedence. Unavailable grants remain visible and removable. Stored grants are preserved without an automatic contract migration. Deleting a legacy-backed row removes both its grant and displayed review, with conflict checks for concurrent grant or review changes.
 
 `npm run check` passed on Node 24.22.1 / Signal K 2.34.0: 160 portable and 69 native passes, with four optional skips. New UI regressions cover preserved storage, administrator-only access, pending/rejected precedence, changed and unsupported routes, missing providers, removal of both grant forms and concurrent edits. A disposable native Admin UI fixture verified initial preservation, Reject/Save, Delete/Save and retention of an unrelated unavailable grant in the actual saved file. The manual editor was absent. The [synthetic catalogue screenshot](images/legacy-read-approvals.jpg) shows the unavailable grant retained after another grant was removed. Responsive checks at 390 and 1280 pixels showed no horizontal page overflow. `git diff --check` passed.
+
+## Experimental isolated execution — 2026-11-20
+
+The owner accepted optional execution inside signalk-mcp; see [ADR 003](decisions/003-isolated-execution.md).
+The tool is disabled by default and restricted to native administrators with
+telemetry read grants. Current snapshots only; no history integration or result
+store. No release or deployment is included.
+
+Portable regressions cover absent/old manager APIs, disabled configuration,
+unauthorized identities/paths, policy overrides, oversized input, revocation and
+identity replacement, bounded output and sanitized uncertain outcomes. Native
+Signal K tests exercise configuration saving and native authorization with
+synthetic data. The live opt-in test uses Node 24.22.3, Signal K 2.34.0 and Docker
+29.8.0 on the local Linux ARM64/cgroup-v2 VM, with Container Manager executor from
+PR #344 (`6ff701cc1391e4b465e82d728c96bb5e5ad2f2c9`). A small test bridge exposes
+that real executor; native Container Manager plugin loading is not established.
+
+The live test verified calculation output, denied caller/no dispatch, worker
+failure, output overflow, supervisor termination of a CPU loop (exit 137), HTTP
+disconnect cancellation and confirmed removal. Ordinary reads remained usable.
+The worker image built locally was
+`docker.io/library/signalk-mcp-execution-test@sha256:f198eeb4c6846add115b9e2f55d305d688e5014e6569e76dcdf4745a0159b08c`.
+This is a local test artifact, not a published image or proof of runtime portability.
+
+The actual configuration panel was rendered against a temporary native server in
+a browser harness at desktop and 390px mobile widths. The new controls were
+visible and had no horizontal page overflow. The installed server fixture lacks
+the bundled native admin webapp, so this is panel verification, not a complete
+native admin shell check. Podman, physical Pi, x86-64 live execution and full
+installed-manager lifecycle validation remain outstanding.
+
+Validation: `npm run check` passed under Node 24.22.3: 167 portable tests passed; 69 native tests passed and six optional tests skipped. The separate opt-in execution run passed both tests, including real Docker scenarios. `git diff --check` passed, and `npm pack` included the compiled execution module, worker Dockerfile/runner and admin remote entry. The existing webpack chunk-size warning remains.

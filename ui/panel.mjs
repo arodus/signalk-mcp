@@ -731,6 +731,37 @@ export default function Configuration() {
             { className: "mcp-section" },
             h("summary", null, "Connection and data settings"),
             h(
+              "label",
+              null,
+              h("input", {
+                type: "checkbox",
+                disabled: busy,
+                checked: draft.settings.experimentalExecution?.enabled === true,
+                onChange: (event) =>
+                  setting("experimentalExecution", {
+                    ...draft.settings.experimentalExecution,
+                    enabled: event.target.checked,
+                  }),
+              }),
+              " Enable experimental isolated execution (administrators only)",
+            ),
+            input(
+              "Reviewed worker image with sha256 digest",
+              "execution-image",
+              draft.settings.experimentalExecution?.image ?? "",
+              (value) =>
+                setting("experimentalExecution", {
+                  ...draft.settings.experimentalExecution,
+                  image: value || undefined,
+                }),
+              { maxLength: 512 },
+            ),
+            h(
+              "p",
+              { className: "mcp-help" },
+              "Requires the experimental Container Manager API and a locally installed reviewed worker. Submitted code receives only an authorized current-data copy. Disabled by default; no vessel actions.",
+            ),
+            h(
               "div",
               { className: "mcp-fields" },
               input(

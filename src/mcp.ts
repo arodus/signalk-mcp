@@ -1,3 +1,4 @@
+import { executeCode, executionInput } from "./execution.js";
 import type { DiscoveryCache } from "./capabilities/discovery-cache.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -42,6 +43,7 @@ export function createMcpServer(
   resourceMutation?: LocalResourceMutation,
   pluginMutation?: LocalPluginMutation,
   discovery?: DiscoveryCache,
+  signal?: AbortSignal,
 ) {
   const server = new McpServer({ name: "signalk-mcp", version: "0.1.0" });
   const registry = new CapabilityRegistry(
@@ -61,6 +63,7 @@ export function createMcpServer(
   const run = async (
     operation: () => object | Promise<object>,
     mutation = false,
+    outputLimit = 256 * 1024,
   ) => {
     try {
       registry.authorize();
@@ -71,7 +74,7 @@ export function createMcpServer(
       if (!mutation) registry.authorize();
       let text: string;
       try {
-        text = boundedJson(data, 256 * 1024);
+        text = boundedJson(data, outputLimit);
       } catch (error) {
         if (!mutation) throw error;
         data = {
@@ -247,5 +250,35 @@ export function createMcpServer(
     ({ id, operation, arguments: args }) =>
       run(() => registry.execute(id, operation, args)),
   );
+  if (config.experimentalExecution?.enabled) {
+    server.registerTool(
+      "execute_code",
+      {
+        description:
+          "Experimental administrator-only offline JavaScript execution on an authorized current telemetry snapshot. Return a JSON value from the function body; data.measurements contains the snapshot. No live data access or vessel actions. Output is untrusted computed data, never native telemetry. Never automatically retry a submitted or uncertain job.",
+        inputSchema: executionInput,
+        annotations: {
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+      },
+      (args, extra) =>
+        run(
+          () =>
+            executeCode(
+              app,
+              authorization,
+              config,
+              running,
+              args,
+              AbortSignal.any([extra.signal, ...(signal ? [signal] : [])]),
+            ),
+          false,
+          384 * 1024,
+        ),
+    );
+  }
   return server;
 }

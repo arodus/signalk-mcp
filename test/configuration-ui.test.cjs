@@ -90,6 +90,7 @@ test("first configuration saves without edits and preserves the host enable and 
       configuration: { readRequests: {} },
     });
     assert.deepEqual(result.settings, {
+      experimentalExecution: { enabled: false },
       localTlsServerName: "",
       staleAfterSeconds: 300,
       pluginOperations: [],
@@ -1242,4 +1243,28 @@ test("unavailable legacy grants stay visible and removable without approving a c
   const rows = catalogueGroups(base, draftOf(base));
   assert.equal(rows[0].rows[0].item.path, "/read");
   assert.equal(rows[0].rows[0].status, "unavailable");
+});
+
+test("experimental execution is explicitly saved without approving operations", async () => {
+  const { saveConfiguration, validateSettings } = await ui();
+  const base = await snapshot();
+  const draft = draftOf(base);
+  draft.settings.experimentalExecution = { enabled: true };
+  assert.throws(() => validateSettings(draft.settings), /sha256/);
+  draft.settings.experimentalExecution.image = `docker.io/library/worker@sha256:${"a".repeat(64)}`;
+  let saved;
+  const result = await saveConfiguration(base, draft, async (url, options) => {
+    if (url === "/plugins") return response(inventory());
+    if (options.method === "POST") {
+      saved = JSON.parse(options.body);
+      return response("saved");
+    }
+    return response(saved);
+  });
+  assert.deepEqual(
+    result.settings.experimentalExecution,
+    draft.settings.experimentalExecution,
+  );
+  assert.equal(result.reviews[key].decision, "pending");
+  assert.equal(configSchema.safeParse(saved.configuration).success, true);
 });

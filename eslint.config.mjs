@@ -21,7 +21,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ["test/**/*.cjs", "webpack.config.cjs"],
+    files: ["test/**/*.cjs", "worker/**/*.cjs", "webpack.config.cjs"],
     languageOptions: {
       globals: {
         __dirname: "readonly",
