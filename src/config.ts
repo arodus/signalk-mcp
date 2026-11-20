@@ -17,6 +17,21 @@ export const configSchema = z.preprocess(
   },
   z
     .object({
+      experimentalExecution: z
+        .object({
+          enabled: z.boolean().default(false),
+          image: z
+            .string()
+            .max(512)
+            .regex(/^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$/)
+            .optional(),
+        })
+        .strict()
+        .refine(
+          (value) => !value.enabled || !!value.image,
+          "Execution requires a reviewed digest-pinned image",
+        )
+        .default({ enabled: false }),
       pluginOperations: z.array(approvalSchema).default([]),
       readRequests: reviewsSchema.default({}),
       localTlsServerName: z
@@ -51,6 +66,21 @@ export type Config = z.infer<typeof configSchema>;
 export const schema = {
   type: "object",
   properties: {
+    experimentalExecution: {
+      type: "object",
+      title: "Experimental isolated execution",
+      properties: {
+        enabled: {
+          type: "boolean",
+          default: false,
+          title: "Enable experimental execution (administrators only)",
+        },
+        image: {
+          type: "string",
+          title: "Reviewed worker image with sha256 digest",
+        },
+      },
+    },
     pluginOperations: {
       type: "array",
       title: "Existing plugin read approvals",

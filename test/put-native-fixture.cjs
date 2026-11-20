@@ -13,7 +13,7 @@ const serverRequire = createRequire(
     : require.resolve("signalk-server/package.json"),
 );
 
-async function start({ plugins = [] } = {}) {
+async function start({ plugins = [], telemetryReaders = ["writer"] } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "signalk-mcp-native-put-"));
   const socket = net.createServer();
   await new Promise((resolve) => socket.listen(0, "127.0.0.1", resolve));
@@ -92,7 +92,10 @@ async function start({ plugins = [] } = {}) {
           },
           {
             paths: ["navigation.*"],
-            permissions: [{ subject: "writer", permission: "read" }],
+            permissions: telemetryReaders.map((subject) => ({
+              subject,
+              permission: "read",
+            })),
           },
         ],
       },

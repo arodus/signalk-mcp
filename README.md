@@ -18,7 +18,7 @@ The tested compatibility matrix is Signal K **2.32.0 and 2.34.0**, with Node.js 
 - Read standard and custom collections, including logbook entries and Wiring records, through the [Resources API](docs/resources.md).
 - Create, save or delete resources, call plugin operations and send native Signal K PUT actions after an administrator approves each operation.
 
-The plugin fetches and forwards data. It does not calculate derived values or run agent-written code. Data availability depends on your sensors, installed providers and Signal K permissions.
+Ordinary tools fetch and forward data. An [experimental isolated execution tool](docs/decisions/003-isolated-execution.md) is disabled by default and available only to native administrators after explicit setup. It requires the unreleased Container Manager `runSandboxJob` implementation and a reviewed local worker image; ordinary installations need no containers. Data availability depends on your sensors, installed providers and Signal K permissions.
 
 ## Recommended plugins
 

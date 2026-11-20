@@ -188,6 +188,7 @@ test("exclusive numeric and formatted filters preserve saved contract spelling a
 
 test("configuration defaults, strictness and provider timestamp spellings stay compatible", () => {
   assert.deepEqual(configSchema.parse({}), {
+    experimentalExecution: { enabled: false },
     pluginOperations: [],
     readRequests: {},
     staleAfterSeconds: 300,

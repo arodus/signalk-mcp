@@ -4,7 +4,7 @@ For installation, token creation and everyday agent use, start with the [README]
 
 ## Connect and discover
 
-Configure a Streamable HTTP client with your endpoint, for example `https://boat.example/plugins/signalk-mcp/mcp`, and the bearer header. The fourteen tools keep discovery separate from execution:
+Configure a Streamable HTTP client with your endpoint, for example `https://boat.example/plugins/signalk-mcp/mcp`, and the bearer header. The fourteen default tools keep discovery separate from execution. Explicitly enabling the experimental feature adds `execute_code`; see [its protocol and setup](decisions/003-isolated-execution.md). The default tools are:
 
 | Tool                  | Purpose                                                              |
 | --------------------- | -------------------------------------------------------------------- |
@@ -127,7 +127,7 @@ The MCP endpoint is stateless: GET/DELETE return 405, each POST has an independe
 
 Provider requests derive their destination from the accepted local server socket, never client input or proxy headers. TLS certificate verification remains enabled. Native HTTPS can use `localTlsServerName` to verify a DNS certificate while retaining that fixed destination; private CAs require process-level trust configuration. See [tested TLS/proxy topologies and setup](hosting.md). Non-TCP hosting remains unsupported. Core telemetry remains independent of provider HTTP calls.
 
-Authentication/read/PUT authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; the supported release set is Signal K 2.32.0 and 2.34.0 on Node 22 and 24; see the [authentication compatibility record](authentication.md). OAuth interoperability remains future work. Calculations, sandbox execution, Container Manager integration, arbitrary configuration writes and unreviewed controls are outside scope. Plugin mutation constraints and outcome handling are described below.
+Authentication/read/PUT authorization uses version-sensitive Signal K internals isolated in `src/auth.ts`. Missing hooks fail closed; the supported release set is Signal K 2.32.0 and 2.34.0 on Node 22 and 24; see the [authentication compatibility record](authentication.md). OAuth interoperability remains future work. Arbitrary configuration writes and unreviewed controls remain outside scope. Optional isolated execution is experimental and disabled by default; see [ADR 003](decisions/003-isolated-execution.md). Plugin mutation constraints and outcome handling are described below.
 
 ## Individually approved plugin HTTP mutations
 

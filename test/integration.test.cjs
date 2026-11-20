@@ -1601,6 +1601,7 @@ test(
           assert.equal(saved.options.enableDebug, true);
           assert.deepEqual(saved.options.configuration, { readRequests: {} });
           assert.deepEqual(saved.settings, {
+            experimentalExecution: { enabled: false },
             localTlsServerName: "",
             staleAfterSeconds: 300,
             pluginOperations: [],

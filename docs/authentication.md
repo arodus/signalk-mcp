@@ -85,3 +85,11 @@ Course, Weather, Autopilot, Radar, BLE, Tracks and Sensors use the shared generi
 ## Custom resource collections
 
 Registered custom collections use the same original-bearer native Resources routing as standard collections. Reads require native authorization; writes require a write-capable identity, an individually saved collection/provider/method/input contract and native `resources` PUT permission. The provider validates custom fields and determines supported behavior. No permission is inferred from a collection's name. Provider selection, single-provider upsert binding, response limits and uncertain-write handling apply equally to custom collections. The CI runtime and installed-artifact matrix includes published Wiring 0.7.0 with synthetic SQLite data; its plugin-only switching and calibration routes are not exercised.
+
+## Experimental execution
+
+Optional `execute_code` requires native administrator identity plus exact
+path/source read permission for every snapshot measurement. It rechecks the same
+identity and permissions before dispatch and result release; it creates no second
+authentication system. No tokens enter the worker. See [ADR 003](decisions/003-isolated-execution.md)
+for revocation, cancellation and the experimental compatibility boundary.

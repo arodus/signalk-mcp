@@ -53,7 +53,7 @@ Source inspection: Signal K master `340d5bb62c17ec58d2a3497dbbf081cd87af2a96`; i
 
 Tests include a synthetic installed native plugin with OpenAPI, readonly/admin/write routes and a registered History API provider. They exercise actual feature discovery, OpenAPI loading, route authentication, caller identity, source ACLs, unapproved/write refusal, external-reference rejection, redirects, schema changes, provider disappearance and conflicting history provenance. Focused tests cover partial discovery, notification filtering, schema ambiguity, traversal, output bounds and revocation during an asynchronous response. These are real integration tests with synthetic providers. A separate [production-plugin compatibility test](plugin-compatibility.md) covers the published `signalk-alert-center@0.4.1` package; neither establishes compatibility with arbitrary production plugins.
 
-The project remains independent; contributing to or depending on another MCP plugin is not part of the current direction. Calculations, Container Manager integration and execution workers are outside the owner-defined fetch-and-forward scope. ADR 001 retains the historical investigation, marked superseded.
+The project remains independent; contributing to or depending on another MCP plugin is not part of the current direction. Optional offline execution was accepted on 2026-11-20; see [ADR 003](decisions/003-isolated-execution.md). ADR 001 retains the historical investigation, marked superseded.
 
 ## Native approval requests
 

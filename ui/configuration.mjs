@@ -162,6 +162,9 @@ export async function loadConfiguration(fetcher = nativeFetch) {
       localTlsServerName: configuration.localTlsServerName ?? "",
       staleAfterSeconds: configuration.staleAfterSeconds ?? 300,
       pluginOperations: configuration.pluginOperations ?? [],
+      experimentalExecution: configuration.experimentalExecution ?? {
+        enabled: false,
+      },
     },
   };
 }
@@ -475,6 +478,14 @@ export function approveRows(draft, rows) {
 }
 
 export function validateSettings(settings) {
+  const execution = settings.experimentalExecution;
+  if (
+    execution?.enabled &&
+    !/^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$/.test(execution.image ?? "")
+  )
+    throw new Error(
+      "Execution requires a reviewed worker image with a sha256 digest.",
+    );
   const seconds = settings.staleAfterSeconds;
   if (!Number.isInteger(seconds) || seconds < 1 || seconds > 86400)
     throw new Error(
@@ -678,6 +689,9 @@ export async function saveConfiguration(base, draft, fetcher = nativeFetch) {
       localTlsServerName: options.configuration.localTlsServerName ?? "",
       staleAfterSeconds: options.configuration.staleAfterSeconds ?? 300,
       pluginOperations: options.configuration.pluginOperations ?? [],
+      experimentalExecution: options.configuration.experimentalExecution ?? {
+        enabled: false,
+      },
     },
   };
 }
